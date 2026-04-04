@@ -1,0 +1,421 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Enums ────────────────────────────────────────────────────────
+
+enum UserRole {
+  INDIVIDUAL
+  CYBER_CAFE
+  CBT_CENTER
+  SUPER_ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  DISPUTED
+  RESOLVED
+  CANCELLED
+  REFUNDED
+}
+
+enum TransactionType {
+  WALLET_FUNDING
+  ESCROW_LOCK
+  ESCROW_RELEASE
+  PLATFORM_COMMISSION
+  CBT_COMMISSION
+  WITHDRAWAL
+  REFUND
+  PENALTY
+}
+
+enum TransactionStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REVERSED
+}
+
+enum FulfillmentType {
+  MANUAL
+  AUTOMATED
+}
+
+enum CbtApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED_FOR_REQUESTER
+  RESOLVED_FOR_CBT
+  REDO_REQUESTED
+}
+
+enum WithdrawalStatus {
+  PENDING
+  APPROVED
+  PROCESSING
+  COMPLETED
+  REJECTED
+}
+
+enum NotificationType {
+  ORDER_PLACED
+  ORDER_ASSIGNED
+  ORDER_COMPLETED
+  DISPUTE_RAISED
+  DISPUTE_RESOLVED
+  WITHDRAWAL_APPROVED
+  WITHDRAWAL_REJECTED
+  WALLET_FUNDED
+  CBT_APPROVED
+  CBT_REJECTED
+  JOB_AVAILABLE
+}
+
+enum PaymentGateway {
+  FINTAVAPAY
+  PAYSTACK
+  FLUTTERWAVE
+}
+
+enum OtpType {
+  EMAIL_VERIFY
+  PHONE_VERIFY
+  PASSWORD_RESET
+  LOGIN_2FA
+}
+
+// ── Models ───────────────────────────────────────────────────────
+
+model User {
+  id               String    @id @default(uuid())
+  firstName        String
+  lastName         String
+  email            String    @unique
+  phone            String    @unique
+  passwordHash     String
+  walletPin        String?
+  role             UserRole
+  isEmailVerified  Boolean   @default(false)
+  isPhoneVerified  Boolean   @default(false)
+  isActive         Boolean   @default(true)
+  lastLoginAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  wallet            Wallet?
+  cbtProfile        CbtProfile?
+  cyberCafeProfile  CyberCafeProfile?
+  ordersPlaced      Order[]            @relation("OrderRequester")
+  ordersAssigned    Order[]            @relation("OrderCbt")
+  transactions      Transaction[]
+  disputesRaised    Dispute[]          @relation("DisputeRaiser")
+  disputesResolved  Dispute[]          @relation("DisputeResolver")
+  withdrawals       WithdrawalRequest[]
+  notifications     Notification[]
+  auditLogs         AuditLog[]
+  otpTokens         OtpToken[]
+  passwordResets    PasswordReset[]
+
+  @@index([email])
+  @@index([phone])
+  @@index([role])
+  @@index([isActive])
+}
+
+model Wallet {
+  id               String   @id @default(uuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  availableBalance BigInt   @default(0)
+  escrowBalance    BigInt   @default(0)
+  totalEarned      BigInt   @default(0)
+  totalWithdrawn   BigInt   @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  transactions Transaction[]
+
+  @@index([userId])
+}
+
+model Transaction {
+  id            String            @id @default(uuid())
+  walletId      String
+  wallet        Wallet            @relation(fields: [walletId], references: [id])
+  userId        String
+  user          User              @relation(fields: [userId], references: [id])
+  type          TransactionType
+  status        TransactionStatus @default(PENDING)
+  amount        BigInt
+  balanceBefore BigInt
+  balanceAfter  BigInt
+  reference     String            @unique
+  gatewayRef    String?
+  gateway       PaymentGateway?
+  description   String
+  metadata      Json?
+  orderId       String?
+  order         Order?            @relation(fields: [orderId], references: [id])
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([walletId])
+  @@index([userId])
+  @@index([reference])
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model CbtProfile {
+  id               String            @id @default(uuid())
+  userId           String            @unique
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  centerName       String
+  licenseNumber    String            @unique
+  licenseDocUrl    String
+  address          String
+  state            String
+  lga              String
+  approvalStatus   CbtApprovalStatus @default(PENDING)
+  approvedAt       DateTime?
+  approvedById     String?
+  rejectionReason  String?
+  isOnline         Boolean           @default(false)
+  lastSeenAt       DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([approvalStatus])
+  @@index([licenseNumber])
+}
+
+model CyberCafeProfile {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  businessName String
+  address      String
+  state        String
+  cacNumber    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model ServiceCategoryModel {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  slug        String    @unique
+  description String?
+  iconUrl     String?
+  isActive    Boolean   @default(true)
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  services    Service[]
+
+  @@map("service_categories")
+}
+
+model Service {
+  id                  String               @id @default(uuid())
+  categoryId          String
+  category            ServiceCategoryModel @relation(fields: [categoryId], references: [id])
+  name                String
+  slug                String               @unique
+  description         String?
+  requiredDocuments   Json                 @default("[]")
+  requiredFields      Json                 @default("[]")
+  fulfillmentType     FulfillmentType
+  providerCost        BigInt               @default(0)
+  platformFee         BigInt
+  totalPrice          BigInt
+  cbtCommission       BigInt               @default(0)
+  providerKey         String?
+  providerServiceCode String?
+  isActive            Boolean              @default(true)
+  sortOrder           Int                  @default(0)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  orders              Order[]
+
+  @@index([categoryId])
+  @@index([slug])
+  @@index([fulfillmentType])
+  @@index([isActive])
+}
+
+model Order {
+  id                     String      @id @default(uuid())
+  orderNumber            String      @unique
+  requesterId            String
+  requester              User        @relation("OrderRequester", fields: [requesterId], references: [id])
+  serviceId              String
+  service                Service     @relation(fields: [serviceId], references: [id])
+  status                 OrderStatus @default(PENDING)
+  fulfillmentType        FulfillmentType
+  submittedData          Json
+  requesterDocUrls       Json        @default("[]")
+  resultFileUrl          String?
+  resultUploadedAt       DateTime?
+  totalAmount            BigInt
+  platformFee            BigInt
+  cbtCommission          BigInt
+  escrowReleasedAt       DateTime?
+  disputeWindowExpiresAt DateTime?
+  assignedCbtId          String?
+  assignedCbt            User?       @relation("OrderCbt", fields: [assignedCbtId], references: [id])
+  assignedAt             DateTime?
+  completedAt            DateTime?
+  providerReference      String?
+  providerResponse       Json?
+  cbtNotes               String?
+  adminNotes             String?
+  createdAt              DateTime    @default(now())
+  updatedAt              DateTime    @updatedAt
+
+  transactions  Transaction[]
+  dispute       Dispute?
+  notifications Notification[]
+
+  @@index([requesterId])
+  @@index([assignedCbtId])
+  @@index([status])
+  @@index([orderNumber])
+  @@index([createdAt])
+}
+
+model Dispute {
+  id             String        @id @default(uuid())
+  orderId        String        @unique
+  order          Order         @relation(fields: [orderId], references: [id])
+  raisedById     String
+  raisedBy       User          @relation("DisputeRaiser", fields: [raisedById], references: [id])
+  reason         String        @db.Text
+  evidenceUrls   Json          @default("[]")
+  status         DisputeStatus @default(OPEN)
+  resolvedById   String?
+  resolvedBy     User?         @relation("DisputeResolver", fields: [resolvedById], references: [id])
+  resolutionNote String?       @db.Text
+  resolvedAt     DateTime?
+  redoDeadline   DateTime?
+  redoCompletedAt DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([status])
+  @@index([raisedById])
+}
+
+model WithdrawalRequest {
+  id            String           @id @default(uuid())
+  userId        String
+  user          User             @relation(fields: [userId], references: [id])
+  amount        BigInt
+  bankName      String
+  bankCode      String
+  accountNumber String
+  accountName   String
+  status        WithdrawalStatus @default(PENDING)
+  processedById String?
+  processorNote String?
+  gatewayRef    String?
+  processedAt   DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  message   String           @db.Text
+  isRead    Boolean          @default(false)
+  readAt    DateTime?
+  metadata  Json?
+  orderId   String?
+  order     Order?           @relation(fields: [orderId], references: [id])
+  createdAt DateTime         @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+model OtpToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String
+  type      OtpType
+  expiresAt DateTime
+  usedAt    DateTime?
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([type])
+}
+
+model PasswordReset {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String
+  expiresAt DateTime
+  usedAt    DateTime?
+  ipAddress String?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String
+  entity    String
+  entityId  String?
+  oldValues Json?
+  newValues Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([entity])
+  @@index([createdAt])
+}
+
+model SystemConfig {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String   @db.Text
+  description String?
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
