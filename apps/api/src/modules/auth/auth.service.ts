@@ -9,7 +9,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
-import { createHash, randomInt } from 'crypto';
+import { createHash, randomInt, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { UserRole, OtpType, JwtUser } from '@zentry/types';
@@ -334,6 +334,7 @@ export class AuthService {
         email: true,
         phone: true,
         role: true,
+        walletPin: true,
         isEmailVerified: true,
         isPhoneVerified: true,
         lastLoginAt: true,
@@ -357,7 +358,14 @@ export class AuthService {
     });
 
     if (!user) throw new NotFoundException('User not found');
-    return { message: 'Profile retrieved', data: user };
+    const { walletPin, ...safeUser } = user;
+    return {
+      message: 'Profile retrieved',
+      data: {
+        ...safeUser,
+        hasWalletPin: Boolean(walletPin),
+      },
+    };
   }
 
   // ── Password reset ────────────────────────────────────────────
@@ -566,10 +574,12 @@ export class AuthService {
       this.jwtService.signAsync(payload, {
         secret: this.config.getOrThrow('JWT_ACCESS_SECRET'),
         expiresIn: this.config.get('JWT_ACCESS_EXPIRES_IN', '15m'),
+        keyid: randomUUID(),
       }),
       this.jwtService.signAsync(payload, {
         secret: this.config.getOrThrow('JWT_REFRESH_SECRET'),
         expiresIn: this.config.get('JWT_REFRESH_EXPIRES_IN', '7d'),
+        keyid: randomUUID(),
       }),
     ]);
 

@@ -5,11 +5,14 @@ import {
   MaxLength,
   Matches,
 } from 'class-validator';
+import { RegisterIndividualSchema } from '@zentry/validators';
 
 const nigerianPhoneRegex = /^(\+234|0)[789][01]\d{8}$/;
 const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
 
 export class RegisterIndividualDto {
+  static schema = RegisterIndividualSchema;
+
   @IsString()
   @MinLength(2)
   @MaxLength(50)

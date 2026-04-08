@@ -1,7 +1,10 @@
 import { IsString, MinLength, MaxLength } from 'class-validator';
+import { RegisterCbtSchema } from '@zentry/validators';
 import { RegisterIndividualDto } from './register-individual.dto';
 
 export class RegisterCbtDto extends RegisterIndividualDto {
+  static schema = RegisterCbtSchema;
+
   @IsString()
   @MinLength(2)
   @MaxLength(100)

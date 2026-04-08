@@ -15,6 +15,7 @@ import { AuthService } from './auth.service';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { Audit } from '../../common/decorators/audit.decorator';
 import type { JwtUser } from '@zentry/types';
 import { UserRole } from '@zentry/types';
 import {
@@ -111,18 +112,39 @@ export class AuthController {
 
   @Public()
   @Post('register/individual')
+  @Audit({
+    action: 'USER_REGISTERED',
+    entity: 'User',
+    lookup: 'response_user',
+    mergeExisting: true,
+    captureRequestFields: ['email'],
+  })
   registerIndividual(@Body() dto: RegisterIndividualDto) {
     return this.authService.registerIndividual(dto);
   }
 
   @Public()
   @Post('register/cyber-cafe')
+  @Audit({
+    action: 'USER_REGISTERED',
+    entity: 'User',
+    lookup: 'response_user',
+    mergeExisting: true,
+    captureRequestFields: ['email'],
+  })
   registerCyberCafe(@Body() dto: RegisterCyberCafeDto) {
     return this.authService.registerCyberCafe(dto);
   }
 
   @Public()
   @Post('register/cbt')
+  @Audit({
+    action: 'USER_REGISTERED',
+    entity: 'User',
+    lookup: 'response_user',
+    mergeExisting: true,
+    captureRequestFields: ['email'],
+  })
   registerCbt(@Body() dto: RegisterCbtDto) {
     return this.authService.registerCbt(dto);
   }
@@ -132,6 +154,13 @@ export class AuthController {
   @Public()
   @Post('verify-email')
   @HttpCode(HttpStatus.OK)
+  @Audit({
+    action: 'EMAIL_VERIFIED',
+    entity: 'User',
+    lookup: 'body_email',
+    mergeExisting: true,
+    captureRequestFields: ['email'],
+  })
   async verifyEmail(
     @Body() dto: VerifyOtpDto,
     @Res({ passthrough: true }) response: Response,
@@ -152,6 +181,12 @@ export class AuthController {
   @Post('resend-otp')
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 3, ttl: 3600000 } }) // 3 per hour
+  @Audit({
+    action: 'OTP_RESENT',
+    entity: 'User',
+    lookup: 'body_email',
+    captureRequestFields: ['email'],
+  })
   resendOtp(@Body() dto: ResendOtpDto) {
     return this.authService.resendOtp(dto.email);
   }
@@ -161,6 +196,13 @@ export class AuthController {
   @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @Audit({
+    action: 'USER_LOGIN',
+    entity: 'User',
+    lookup: 'response_user',
+    mergeExisting: true,
+    captureRequestFields: ['email'],
+  })
   async login(
     @Body() dto: LoginDto,
     @Req() req: Request,
@@ -181,6 +223,12 @@ export class AuthController {
 
   @Post('logout')
   @HttpCode(HttpStatus.OK)
+  @Audit({
+    action: 'USER_LOGOUT',
+    entity: 'User',
+    lookup: 'current_user',
+    mergeExisting: true,
+  })
   async logout(
     @CurrentUser() user: JwtUser,
     @Res({ passthrough: true }) response: Response,
@@ -224,6 +272,12 @@ export class AuthController {
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 3, ttl: 3600000 } }) // 3 per hour
+  @Audit({
+    action: 'PASSWORD_RESET_REQUESTED',
+    entity: 'User',
+    lookup: 'body_email',
+    captureRequestFields: ['email'],
+  })
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto.email);
   }
@@ -244,6 +298,12 @@ export class AuthController {
   @Post('set-pin')
   @HttpCode(HttpStatus.OK)
   @Roles(UserRole.INDIVIDUAL, UserRole.CYBER_CAFE, UserRole.CBT_CENTER)
+  @Audit({
+    action: 'PIN_SET',
+    entity: 'User',
+    lookup: 'current_user',
+    mergeExisting: true,
+  })
   setPin(@CurrentUser() user: JwtUser, @Body() dto: SetPinDto) {
     return this.authService.setPin(user.sub, dto.pin, dto.confirmPin);
   }
@@ -251,6 +311,12 @@ export class AuthController {
   @Post('change-pin')
   @HttpCode(HttpStatus.OK)
   @Roles(UserRole.INDIVIDUAL, UserRole.CYBER_CAFE, UserRole.CBT_CENTER)
+  @Audit({
+    action: 'PIN_CHANGED',
+    entity: 'User',
+    lookup: 'current_user',
+    mergeExisting: true,
+  })
   changePin(@CurrentUser() user: JwtUser, @Body() dto: ChangePinDto) {
     return this.authService.changePin(
       user.sub,

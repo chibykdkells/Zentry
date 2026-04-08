@@ -1,6 +1,6 @@
 # DECISIONS.md — Architecture Decision Records (ADR)
 
-> Last updated: 2026-04-03
+> Last updated: 2026-04-05
 > Every significant technical decision is recorded here with its rationale.
 > Before proposing to change a core technology choice, read the relevant ADR.
 > If you make a new architectural decision during a session, add it here.
@@ -127,18 +127,21 @@ logic only ever calls the interface, never the concrete adapter.
 
 ---
 
-## ADR-005: Next.js 15 App Router for frontend
+## ADR-005: Next.js App Router for frontend
 
 **Date:** 2026-04-03
 **Status:** ACCEPTED
 
-**Decision:** Frontend built with Next.js 15 using the App Router (not Pages Router).
+**Decision:** Frontend built with Next.js App Router (currently Next.js 16, not Pages Router).
 
 **Reason:**
 - Server Components enable faster initial page load (critical for mobile users in Nigeria)
 - App Router route groups (`(auth)`, `(dashboard)`, `(cbt)`, `(admin)`) provide
   clean layout isolation per role
-- Built-in PWA support via next-pwa
+- App Router route groups (`(auth)`, `(dashboard)`, `(cbt)`, `(admin)`) provide
+  clean layout isolation per role
+- Current framework version is Next.js 16, which fits the same architectural
+  decision while updating the implementation to the actively used release line
 - Vercel deployment is first-class and handles edge cases automatically
 - TypeScript support is excellent
 
@@ -282,3 +285,50 @@ app is planned for launch.
 - Bottom navigation (not sidebar) is primary nav on mobile
 - PWA offline support required for poor network conditions (common in Nigeria)
 - Push notifications via Web Push API (PWA) — slightly different from native push
+
+---
+
+## ADR-011: White-label expansion will be a multi-tenant Phase 2/3 track
+
+**Date:** 2026-04-05
+**Status:** ACCEPTED
+
+**Decision:** Zentry will support a future white-label offering as a proper
+platform-first multi-tenant expansion after the core product is stabilized.
+Zentry is the infrastructure/platform layer. The launch business will become a
+first-party tenant operating under the same tenant model as every other tenant,
+not a privileged special case. Each tenant will have isolated users, staff,
+orders, wallet views, disputes, reports, branding, and tenant admin controls.
+Tenant users will exist only inside their tenant portal. Initial tenant
+launches will use Zentry-managed providers only, with tenant-managed providers
+considered later for VTU and NIN services.
+
+**Reason:**
+- White-labeling materially expands the business from a direct platform into a
+  B2B SaaS platform
+- Treating the launch business as a normal tenant produces a cleaner long-term
+  architecture and avoids special-case product logic
+- Tenant isolation, domain routing, provider resolution, and settlement rules
+  affect the database, auth, permissions, billing, and frontend architecture
+- Treating this as a cosmetic branding feature would create expensive rework and
+  weak data-isolation boundaries
+- Deferring it until after core stabilization reduces delivery risk
+
+**Alternatives considered:**
+- Add branding only with no tenant isolation — rejected (not enough for the
+  business model)
+- Build white-label in Phase 1 immediately — rejected (too disruptive while the
+  core platform is still stabilizing)
+- Allow tenant-owned providers from day one — rejected (too much operational and
+  security complexity for the first white-label release)
+
+**Consequences:**
+- A dedicated roadmap is required before coding the expansion
+- Future schema work must introduce `Tenant` as a first-class concept
+- The first live operating business must eventually run through the tenant model
+- Auth, routing, provider resolution, and billing will become tenant-aware in a
+  later expansion track
+- PWA behavior and security requirements must remain first-class constraints in
+  the expansion, not cleanup work added later
+- Current Phase 1 work must not quietly introduce partial multi-tenancy without
+  following the roadmap

@@ -14,7 +14,7 @@
 
 Zentry is a **multi-role, wallet-based government services escrow marketplace**
 built as a Progressive Web Application (PWA). It operates in Nigeria and
-connects students/cyber cafes (service requesters) with licensed CBT centers
+connects individuals/cyber cafes (service requesters) with licensed CBT centers
 (service fulfillers) for government document services (JAMB, NIMC, NECO) and
 automated VTU services (Airtime, Data, Cable TV, Electricity).
 
@@ -44,8 +44,8 @@ admin only.
 
 | Role | Constant | Description |
 |---|---|---|
-| Student | `STUDENT` | Individual requesting government services |
-| Cyber Cafe | `CYBER_CAFE` | Business submitting jobs on behalf of students |
+| Individual | `INDIVIDUAL` | Individual requesting government services |
+| Cyber Cafe | `CYBER_CAFE` | Business submitting jobs on behalf of customers |
 | CBT Center | `CBT_CENTER` | Licensed fulfiller — picks jobs, uploads results |
 | Super Admin | `SUPER_ADMIN` | Platform owner — full control |
 
@@ -56,7 +56,7 @@ admin only.
 ```
 zentry/
 ├── apps/
-│   ├── web/          # Next.js 15 PWA — mobile-first, installable
+│   ├── web/          # Next.js 16 PWA — mobile-first, installable
 │   └── api/          # NestJS — REST + WebSocket
 ├── packages/
 │   ├── types/        # Shared enums & TypeScript interfaces
@@ -93,7 +93,7 @@ zentry/
 
 | Layer | Choice |
 |---|---|
-| Frontend | Next.js 15, TypeScript, Tailwind CSS, shadcn/ui, Framer Motion |
+| Frontend | Next.js 16, TypeScript, Tailwind CSS v4, repo-native components, Framer Motion |
 | State | Zustand (global) + TanStack Query (server state) |
 | Backend | NestJS, TypeScript, Prisma |
 | Database | PostgreSQL (all money in KOBO as BigInt) |

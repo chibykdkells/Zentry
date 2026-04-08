@@ -1,6 +1,6 @@
 # CONVENTIONS.md — Zentry Code Conventions
 
-> Last updated: 2026-04-03
+> Last updated: 2026-04-06
 > These conventions are non-negotiable. Consistent code is maintainable code.
 > Read this before writing any TypeScript, React, or NestJS code.
 
@@ -140,7 +140,6 @@ export class CreateOrderDto {
 // 1. Imports (external → internal → types)
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Button } from '@/components/ui/button'
 import { formatNaira } from '@/lib/format'
 import type { Order } from '@zentry/types'
 
@@ -228,12 +227,14 @@ Wrap route groups in error boundaries. Never let an unhandled error crash the wh
 
 ### Styling
 - Tailwind CSS only — no inline `style` props except for dynamic values
-- Use `cn()` utility (from shadcn) to merge class names:
+- Use `cn()` utility (repo-native utility in `@/lib/utils`) to merge class names:
   ```typescript
   cn('base-class', condition && 'conditional-class', className)
   ```
 - No `!important` — if you need it, restructure the component
 - Mobile-first: write base styles for mobile, then `md:` for desktop
+- Shared brand values should come from the Tailwind 4 theme tokens defined in
+  `apps/web/src/app/globals.css` instead of repeated raw hex values
 
 ### Zustand Stores
 One file per concern. Keep stores small and focused:

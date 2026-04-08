@@ -50,6 +50,12 @@ enum FulfillmentType {
   AUTOMATED
 }
 
+enum ServiceDeliveryMode {
+  CBT_MANUAL
+  API_AUTOMATED
+  PIN_STOCK
+}
+
 enum CbtApprovalStatus {
   PENDING
   APPROVED
@@ -242,6 +248,7 @@ model Service {
   description         String?
   requiredDocuments   Json                 @default("[]")
   requiredFields      Json                 @default("[]")
+  deliveryMode        ServiceDeliveryMode
   fulfillmentType     FulfillmentType
   providerCost        BigInt               @default(0)
   platformFee         BigInt
@@ -257,6 +264,7 @@ model Service {
 
   @@index([categoryId])
   @@index([slug])
+  @@index([deliveryMode])
   @@index([fulfillmentType])
   @@index([isActive])
 }
@@ -269,6 +277,7 @@ model Order {
   serviceId              String
   service                Service     @relation(fields: [serviceId], references: [id])
   status                 OrderStatus @default(PENDING)
+  deliveryMode           ServiceDeliveryMode
   fulfillmentType        FulfillmentType
   submittedData          Json
   requesterDocUrls       Json        @default("[]")
@@ -297,6 +306,7 @@ model Order {
   @@index([requesterId])
   @@index([assignedCbtId])
   @@index([status])
+  @@index([deliveryMode])
   @@index([orderNumber])
   @@index([createdAt])
 }

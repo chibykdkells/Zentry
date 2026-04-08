@@ -1,6 +1,6 @@
 # PHASES.md — Zentry Build Phase Tracker
 
-> Last updated: 2026-04-04
+> Last updated: 2026-04-07
 > This file tracks exactly what has been built and what has not.
 > AI assistants MUST check this before writing any code to avoid
 > building things out of phase or duplicating completed work.
@@ -11,9 +11,9 @@
 ## Current Status
 
 ```
-Active Phase  : PHASE 1 — In progress
-Last Session  : 2026-04-04 (Role migration + dashboard/auth cleanup completed and verified)
-Next Action   : User review and browser testing of the migration slice before prompting the next feature
+Active Phase  : PHASE 6 — In progress
+Last Session  : 2026-04-08 (Phase 6 batch 3 requester refund execution + CBT penalty review groundwork completed)
+Next Action   : Continue Phase 6 with deeper dispute-finance operations, including penalty execution and manual reconciliation follow-up for already released orders
 ```
 
 ---
@@ -23,11 +23,11 @@ Next Action   : User review and browser testing of the migration slice before pr
 | Phase | Title | Status |
 |---|---|---|
 | 1 | Foundation & Authentication | IN PROGRESS |
-| 2 | Wallet & Payment Integration | NOT STARTED |
-| 3 | Service Catalog & Order System | NOT STARTED |
-| 4 | CBT Job Pool & Fulfillment | NOT STARTED |
-| 5 | Escrow Release & Commission Engine | NOT STARTED |
-| 6 | Dispute & Resolution System | NOT STARTED |
+| 2 | Wallet & Payment Integration | COMPLETED |
+| 3 | Service Catalog & Order System | IN PROGRESS |
+| 4 | CBT Job Pool & Fulfillment | IN PROGRESS |
+| 5 | Escrow Release & Commission Engine | IN PROGRESS |
+| 6 | Dispute & Resolution System | IN PROGRESS |
 | 7 | VTU Automated Services | NOT STARTED |
 | 8 | Withdrawal System | NOT STARTED |
 | 9 | Real-time & Push Notifications | NOT STARTED |
@@ -66,33 +66,33 @@ PWA installable, Provider Abstraction Layer interfaces defined.
 - [x] @Public() decorator implemented
 - [x] @CurrentUser() decorator implemented
 - [x] @Roles() decorator implemented
-- [ ] Global ZodValidationPipe configured
+- [x] Global ZodValidationPipe configured
 - [x] Global HttpExceptionFilter (no stack traces in production)
 - [x] TransformInterceptor (standard API response shape)
-- [ ] AuditLogInterceptor (logs auth events)
+- [x] AuditLogInterceptor (logs auth events)
 - [x] Helmet.js middleware
 - [x] CORS configured (env-based origins)
 - [x] Rate limiting (Throttler) configured globally
-- [ ] Provider interfaces defined (IPaymentProvider, IVtuProvider, etc.)
-- [ ] PaymentService shell (delegates to adapters — adapters can be mocked)
-- [ ] SmsService + Termii adapter
-- [ ] EmailService + Resend adapter
-- [ ] StorageService + Cloudinary adapter (for license doc uploads in CBT onboarding)
-- [ ] UsersModule (profile read/update)
+- [x] Provider interfaces defined (IPaymentProvider, IVtuProvider, etc.)
+- [x] PaymentService shell (delegates to adapters — adapters can be mocked)
+- [x] SmsService + Termii adapter
+- [x] EmailService + Resend adapter
+- [x] StorageService + Cloudinary adapter (for license doc uploads in CBT onboarding)
+- [x] UsersModule (profile read/update)
 - [x] .env.example committed
 
 ### Frontend Checklist
-- [ ] Frontend stack fully aligned with architecture doc (current app is Next.js 16 + Tailwind 4 and does not yet include shadcn/ui)
-- [ ] Tailwind config with Zentry brand tokens
-- [ ] Plus Jakarta Sans fully configured from local assets
+- [x] Frontend stack fully aligned with architecture doc
+- [x] Tailwind config with Zentry brand tokens
+- [x] Plus Jakarta Sans fully configured from local assets
 - [x] PWA manifest.json (name, icons, colors)
-- [ ] next-pwa configured
+- [x] next-pwa configured
 - [x] Axios API client with JWT interceptor + silent refresh
-- [ ] TanStack Query configured
+- [x] TanStack Query configured
 - [x] Zustand auth store
-- [ ] Zustand notification store
-- [ ] Root layout with providers (QueryClient, Zustand, Toaster)
-- [x] Middleware.ts for auth-based routing
+- [x] Zustand notification store
+- [x] Root layout with providers (QueryClient, Zustand, Toaster)
+- [x] Proxy.ts for auth-based routing
 - [x] (auth) route group: Login page
 - [x] (auth) route group: Register pages (public individual path + dedicated cyber cafe / CBT entry paths)
 - [x] (auth) route group: OTP verification page
@@ -104,18 +104,18 @@ PWA installable, Provider Abstraction Layer interfaces defined.
 - [x] (cbt) route group: layout with CBT sidebar + bottom nav
 - [x] (cbt) route group: dashboard page (skeleton)
 - [x] (admin) route group: layout
-- [x] (admin) route group: dashboard page (skeleton)
+- [x] (admin) route group: dashboard page
 - [x] BottomNav component (mobile, role-aware)
-- [ ] Sidebar component extracted as its own reusable component
+- [x] Sidebar component extracted as its own reusable component
 - [x] TopBar component (notification bell, user avatar)
 - [x] MoreSheet component (Framer Motion slide-up)
-- [ ] OtpInput component (6 separate boxes, auto-advance)
+- [x] OtpInput component (6 separate boxes, auto-advance)
 - [x] StatCard component
 - [x] EmptyState component (illustrated)
-- [ ] SkeletonLoader components
+- [x] SkeletonLoader components
 - [x] WalletCard component (dark premium card, placeholder balance)
 - [x] Wallet page shell
-- [ ] PWA installable on mobile (test on Android Chrome + iOS Safari)
+- [ ] PWA installable on mobile (manual test on Android Chrome + iOS Safari still pending)
 
 ### Security Checklist (Phase 1)
 - [x] bcrypt rounds: 12 for passwords, 10 for PINs
@@ -131,16 +131,17 @@ PWA installable, Provider Abstraction Layer interfaces defined.
 
 ### Acceptance Criteria
 - [ ] `pnpm dev` starts both apps simultaneously
-- [ ] All 4 roles can register, verify email, and login
-- [ ] Token refresh works silently on 401
-- [ ] Role-based routing works (individual/cyber cafe sees `/home`, CBT sees `/dashboard`)
+- [x] All 3 public roles can register, verify email, and login
+- [x] Seeded super admin can login and route to `/admin/dashboard`
+- [ ] Token refresh works silently on 401 in a real browser session
+- [x] Role-based routing works (individual/cyber cafe sees `/home`, CBT sees `/dashboard`)
 - [x] Mobile bottom nav renders with More sheet animation
 - [x] Desktop sidebar shell renders
 - [ ] App is installable as PWA on mobile
 - [x] `pnpm typecheck` passes with zero errors
 - [x] `pnpm lint` passes with zero errors
-- [ ] `pnpm db:migrate` runs successfully
-- [ ] `pnpm db:seed` runs successfully and is idempotent
+- [x] `pnpm db:migrate` runs successfully
+- [x] `pnpm db:seed` runs successfully and is idempotent
 
 ### Notes
 - Verification completed on 2026-04-03:
@@ -153,8 +154,86 @@ PWA installable, Provider Abstraction Layer interfaces defined.
   shared protected account pages now exist at `/profile` and `/wallet`, both backed by live `/auth/me` data and protected by middleware.
 - Role migration + dashboard/auth cleanup completed on 2026-04-04:
   the public user role is now `INDIVIDUAL` across the schema, API, validators, seeds, middleware, and frontend copy; login and dashboard visuals were simplified, dedicated cyber cafe / CBT registration entry points were added, the More sheet logout flow was fixed, and placeholder pages were added for previously broken linked routes.
+- Profile + wallet refinement completed on 2026-04-04:
+  both account pages now have stronger information architecture, retry states for profile fetching, calmer wallet visuals, and Phase 2-ready placeholders for transactions and wallet controls without adding payment functionality early.
+- Services + orders workspace slice completed on 2026-04-04:
+  the main individual/cafe routes at `/services` and `/orders` now render useful frontend workspaces with service catalog structure, category filtering, order-tracking guidance, and stable empty states instead of generic placeholders.
+- Notifications + security workspace slice completed on 2026-04-04:
+  the top-bar bell now has a working local notification store and unread badge, `/notifications` is a real inbox workspace, and `/security` now exposes real wallet PIN set/change flows backed by the existing auth API.
+- Support + disputes workspace slice completed on 2026-04-04:
+  `/support` now works as a structured help center with guided actions and FAQs, while `/disputes` now explains dispute readiness, resolution expectations, and how dispute handling will connect to live order activity later.
+- CBT workspace slice completed on 2026-04-04:
+  the fulfiller-side routes at `/dashboard`, `/job-pool`, `/my-jobs`, `/earnings`, and `/withdraw` now form a coherent CBT workspace with proper desktop navigation, stable empty states, and Phase 4/5-ready information architecture.
+- Admin workspace slice completed on 2026-04-04:
+  the admin-side routes at `/admin/dashboard`, `/admin/orders`, `/admin/users`, and `/admin/finance` now form a coherent operations workspace with real sidebar navigation, calmer overview cards, and stable empty states instead of placeholders.
+- Public landing + auth entry polish completed on 2026-04-04:
+  the root `/` route now works as a clearer product entry page with dedicated account paths for individuals, cyber cafes, and CBT centers, and the shared auth shell now presents a more polished, role-aware entry experience.
+- OTP verification + shared loading states completed on 2026-04-04:
+  email verification now uses a dedicated six-box OTP input with paste support and auto-advance, and shared skeleton loader components now drive calmer loading states across verification, profile, and wallet pages.
+- Shared desktop sidebar extraction completed on 2026-04-05:
+  the duplicated desktop sidebar markup was replaced with a reusable sidebar component that now powers the individual/cyber cafe, CBT, and admin layouts while preserving role-specific navigation.
+- App providers + TanStack Query foundation completed on 2026-04-05:
+  the web app now has a shared provider layer for QueryClient, auth bootstrap, and toast handling, and `/auth/me` profile loading now runs through TanStack Query instead of a custom local effect loop.
+- Provider abstraction layer foundation completed on 2026-04-05:
+  the API now has a global providers module, shared PAL interfaces for payment, VTU, SMS, email, and storage, plus adapter-backed service shells for payment, mocked VTU, Termii SMS, Resend email, and Cloudinary storage.
+- UsersModule + profile update flow completed on 2026-04-05:
+  the backend now exposes `/users/me` profile read/update endpoints, and the profile page now includes a real edit form backed by React Query invalidation and user-facing success/error feedback.
+- Auth validation alignment completed on 2026-04-05:
+  the API now runs a global Zod validation pipe, and the auth DTOs are linked to the shared Zod schemas so backend auth validation stays aligned with the frontend validator package.
+- Audit-log interceptor completed on 2026-04-05:
+  the API now has an opt-in audit interceptor and audit decorator that enrich existing auth/profile audit rows with request metadata and records selected request-level auth events like OTP resend and password reset requests.
+- PWA install foundation completed on 2026-04-05:
+  the web app now registers a custom service worker, caches the basic app shell, and surfaces an install prompt for supported browsers plus iOS Safari guidance, though `next-pwa` itself is still not configured.
+- White-label roadmap documented on 2026-04-05:
+  a dedicated future-state roadmap now exists in `docs/ai-context/WHITE_LABEL_ROADMAP.md`, defining the multi-tenant tenant model, hybrid wallet approach, tenant-owned customer relationship, subdomain/custom-domain strategy, and the staged provider plan of Zentry-managed providers first, then tenant-managed VTU and NIN only.
+- Platform-first refinement documented on 2026-04-06:
+  the roadmap and architecture docs now explicitly treat Zentry as the infrastructure layer, the launch business as the first-party tenant, and PWA/security as first-class constraints that must carry into the tenant expansion.
+- PWA hardening completed on 2026-04-06:
+  `next-pwa` is now configured for production builds, the old hand-rolled service worker was replaced, an app-router offline fallback page now exists at `/offline`, and the install prompt now avoids stale local service workers during development.
+- Brand-token design system completed on 2026-04-06:
+  the Tailwind 4 theme layer in `globals.css` now defines shared Zentry brand tokens for surfaces, borders, text, navy, and accent colors, and the shared auth shell, wallet card, stat card, sidebar, top bar, and install prompt now consume those tokens instead of scattered hard-coded values.
+- Local font setup completed on 2026-04-06:
+  the web app now self-hosts Plus Jakarta Sans through `@fontsource-variable/plus-jakarta-sans`, removing the remaining missing-font gap and avoiding any dependency on remote font fetching at build or runtime.
+- Proxy convention migration completed on 2026-04-06:
+  the web auth-routing layer now uses `src/proxy.ts` instead of the deprecated `src/middleware.ts` convention, removing the Next.js 16 deprecation warning without changing the redirect or guard logic.
+- Stack-alignment cleanup completed on 2026-04-06:
+  the architecture/context docs and web README now match the actual app stack: Next.js 16, Tailwind CSS v4, repo-native shared components instead of shadcn/ui, `INDIVIDUAL` instead of `STUDENT`, and `proxy.ts` instead of the old middleware convention.
+- Security header baseline completed on 2026-04-06:
+  the web app now ships a stricter header baseline through `next.config.ts`
+  with CSP, referrer policy, clickjacking protection, content-type sniffing
+  protection, permissions policy, and production HSTS, while the API bootstrap
+  now applies matching Helmet/referrer/permissions protections without changing
+  route behavior.
+- Web typecheck stability completed on 2026-04-06:
+  the web package `typecheck` script now runs `next typegen` before `tsc`, so
+  route and app-router type files are regenerated automatically instead of
+  failing when `.next/types` is stale or missing from a prior build.
+- Workspace verification closeout completed on 2026-04-06:
+  the web package `typecheck` script now pre-creates the Next type output
+  folders before `next typegen`, fixing cold-run failures under Turborepo, and
+  the root workspace now has a `verify:phase1` script that runs lint,
+  typecheck, test, and build as one closeout command.
+- Database closeout completed on 2026-04-06:
+  the local Prisma migration history was reconciled with the already-applied
+  `INDIVIDUAL` role rename, `pnpm db:migrate` and `pnpm db:seed` now pass
+  against the Dockerized local database, and Prisma config was moved out of the
+  deprecated `package.json#prisma` field into `apps/api/prisma.config.ts`.
+- Runtime verification harness completed on 2026-04-06:
+  the repo now includes a root `verify:phase1:runtime` script that checks all
+  seeded roles against the live local web and API servers for login, `/auth/me`,
+  refresh rotation, logout, and role-based proxy redirects; this verification
+  confirmed role-routing behavior on the running stack.
+- Refresh rotation hardening completed on 2026-04-06:
+  JWT issuance now adds a unique `keyid` per token so login and refresh no
+  longer risk emitting identical JWT strings when they happen within the same
+  second, which makes refresh rotation deterministic during live runtime checks.
+- Manual acceptance cleanup completed on 2026-04-06:
+  protected-route redirects now preserve `?next=` through login, expired-session
+  redirects now return users to `/login` with a human-readable message, and the
+  remaining browser/mobile checks are documented in
+  `docs/ai-context/PHASE1_MANUAL_ACCEPTANCE.md`.
 - Remaining gaps are mostly unfinished Phase 1 scope, not broken core scaffolding:
-  missing provider service modules beyond payment adapters, no local-asset Plus Jakarta Sans setup, no `next-pwa` integration, and no live end-to-end browser verification recorded for this session.
+  no live end-to-end browser verification recorded for this session.
 
 ---
 
@@ -164,16 +243,50 @@ PWA installable, Provider Abstraction Layer interfaces defined.
 history, wallet dashboard UI.
 
 ### Key Deliverables
-- [ ] WalletModule: get balance, transaction history
-- [ ] PaymentModule: initiate funding (all 3 gateways)
-- [ ] Payment webhook handlers with signature verification
-- [ ] Idempotency check on webhook processing
-- [ ] Wallet funding confirmation + real-time balance update
-- [ ] Transaction history paginated API
-- [ ] Wallet page UI (premium dark card, balance, transactions list)
-- [ ] Fund Account modal/flow
-- [ ] Transaction history with filters (type, date range)
-- [ ] Admin: view all user wallets, platform wallet
+- [x] WalletModule: get balance, transaction history
+- [x] PaymentModule: initiate funding (all 3 gateways)
+- [x] Payment webhook handlers with signature verification
+- [x] Idempotency check on webhook processing
+- [x] Wallet funding confirmation + real-time balance update
+- [x] Transaction history paginated API
+- [x] Wallet page UI (premium dark card, balance, transactions list)
+- [x] Fund Account modal/flow
+- [x] Transaction history with filters (type, date range)
+- [x] Admin: view all user wallets, platform wallet
+
+### Notes
+- Phase 2 batch 1 completed on 2026-04-06:
+  a dedicated `WalletModule` now serves `/wallet/me` and
+  `/wallet/transactions`, the wallet page now reads live balance and recent
+  transaction data from the new wallet API instead of piggybacking on the
+  profile payload, and the seed now populates deterministic sample wallet
+  balances plus transaction history for the seeded accounts.
+- Phase 2 batch 2 completed on 2026-04-06:
+  wallet funding can now be initialized through `POST /wallet/fund`, a pending
+  `WALLET_FUNDING` transaction is created before checkout, the wallet page now
+  exposes a real fund modal, and local development falls back to a sandbox
+  checkout URL when gateway secrets are not configured yet.
+- Phase 2 batch 3 completed on 2026-04-06:
+  wallet funding can now be confirmed through `POST /wallet/fund/confirm`,
+  payment webhooks are handled through `POST /wallet/webhooks/payment` with
+  signature verification hooks in the provider layer, wallet crediting is
+  idempotent, and the wallet page now reconciles sandbox checkout returns into
+  a refreshed live balance update during development.
+- Phase 2 batch 4 completed on 2026-04-06:
+  `GET /wallet/transactions` now supports type, status, and date-range
+  filtering, and the wallet page now exposes a live ledger workspace with
+  filter controls, page navigation, and a preserved recent-activity snapshot
+  alongside the filtered results.
+- Phase 2 batch 5 completed on 2026-04-06:
+  super admins can now access `GET /wallet/admin/overview` and
+  `GET /wallet/admin/wallets` for platform wallet totals and paginated
+  user-wallet visibility, and the admin finance page now renders those live
+  backend views with role-aware filtering and search.
+- Phase 2 batch 6 completed on 2026-04-06:
+  super admins can now access `GET /wallet/admin/transactions` for live
+  platform wallet activity with type, status, role, search, and date filters,
+  and the admin finance page now exposes a real transaction feed covering
+  funding, escrow movement, commissions, refunds, and withdrawals.
 
 ---
 
@@ -184,13 +297,59 @@ docs. Funds escrowed at order creation.
 
 ### Key Deliverables
 - [ ] ServiceCategory + Service CRUD (admin only)
+  Status note: category + service create/update/list are now live; delete and
+  deeper admin ergonomics can follow later.
 - [ ] Dynamic form field system (admin defines fields, requester fills them)
-- [ ] Order creation with escrow lock (atomic transaction)
-- [ ] Document upload to Cloudinary
-- [ ] Order listing + status tracking
-- [ ] Service catalog UI (categorized, filterable)
-- [ ] Order placement flow UI (multi-step: fill form → upload docs → confirm → pay from wallet)
-- [ ] My Orders page UI (grouped by category, like competitor screenshot)
+- [x] Order creation with escrow lock (atomic transaction)
+- [x] Document upload to storage provider for service requests
+- [x] Order listing + status tracking
+- [x] Service catalog UI (categorized, filterable)
+- [x] Order placement flow UI (guided form → confirm → pay from wallet)
+- [x] My Orders page UI (grouped by category, like competitor screenshot)
+
+### Notes
+- Phase 3 batch 1 completed on 2026-04-06:
+  the API now has a dedicated `ServicesModule` with `GET /services/catalog`,
+  backed by the seeded service and category data, and the `/services` page now
+  renders a live categorized and searchable catalog from the backend instead of
+  the earlier static in-memory mock list.
+- Phase 3 batch 2 completed on 2026-04-06:
+  the API now has an `OrdersModule` with `POST /orders` and `GET /orders/me`,
+  order creation now validates required service fields and atomically moves
+  wallet balance into escrow, the `/services` page now opens a guided order
+  modal from live service records, and the `/orders` page now renders real
+  order history and live status metrics.
+- Phase 3 batch 3 completed on 2026-04-06:
+  the live service catalog now exposes service-level document requirements,
+  authenticated users can upload request files through `/orders/uploads`,
+  document-aware manual services are seeded with real requirements, and order
+  creation now persists `requesterDocUrls` while preserving the existing escrow
+  lock flow.
+- Phase 3 batch 4 completed on 2026-04-06:
+  the API now exposes super-admin category and service management endpoints for
+  list, create, and update flows, and the web app now has a live
+  `/admin/services` workspace for catalog control with filters, category
+  management, and service editing wired to the backend.
+- Phase 3 batch 5 completed on 2026-04-06:
+  the API now exposes requester order-detail and admin order queue/detail
+  endpoints, the `/orders` page now has a live selected-order detail workspace,
+  and the `/admin/orders` page now renders a real filtered queue plus full
+  inspection view for the selected order.
+- Phase 3 service-routing correction completed on 2026-04-07:
+  services now carry an explicit `deliveryMode` so the platform can distinguish
+  CBT-manual work from API-automated services and future PIN-stock products,
+  seeded NIN validation and JAMB status/profile retrieval services are now
+  classified as automated, and the CBT job pool now stays limited to true
+  manual services instead of swallowing automated requests.
+- Phase 3 batch 6 completed on 2026-04-06:
+  the API now exposes CBT-facing dashboard, job-pool, my-jobs, and job-detail
+  endpoints, seeded manual orders now include both available and already
+  assigned CBT work, and the CBT routes at `/dashboard`, `/job-pool`, and
+  `/my-jobs` now render live operational data instead of placeholders.
+- Phase 3 remains partially open:
+  dynamic admin-defined request fields and deeper admin service CRUD ergonomics
+  are still pending, even though the order flow itself is now live enough to
+  hand work into the CBT fulfillment side.
 
 ---
 
@@ -203,13 +362,51 @@ upload, 2-hour dispute window timer starts.
 - [ ] CBT registration with license upload
 - [ ] Admin: CBT approval/rejection flow
 - [ ] Job pool endpoint (filtered by service category CBT serves)
-- [ ] Job claim (atomic — first write wins)
-- [ ] Result file upload endpoint (CBT only, for their assigned order)
-- [ ] Order status update flow (ASSIGNED → IN_PROGRESS → COMPLETED)
+- [x] Job claim (atomic — first write wins)
+- [x] Result file upload endpoint (CBT only, for their assigned order)
+- [x] Order status update flow (ASSIGNED → IN_PROGRESS → COMPLETED)
 - [ ] Bull queue: RELEASE_ESCROW job scheduled on result upload
 - [ ] Requester notified: result available, download link (signed URL)
 - [ ] Job pool UI (CBT) — real-time via Socket.io
 - [ ] Admin: CBT approvals dashboard
+
+### Notes
+- Phase 4 batch 1 completed on 2026-04-06:
+  CBT users can now claim live pending manual jobs atomically, move their own
+  assigned jobs into `IN_PROGRESS`, and review those changes from the live
+  `/dashboard`, `/job-pool`, and `/my-jobs` workspaces.
+- Phase 4 batch 2 completed on 2026-04-06:
+  CBT users can now upload a result file to complete their assigned job, the
+  system now stamps `completedAt`, `resultUploadedAt`, and a 2-hour
+  `disputeWindowExpiresAt`, and requester order detail now surfaces the result
+  file and dispute-window timing.
+- Phase 4 batch 3 completed on 2026-04-06:
+  order summaries and details now expose a computed release state, requester
+  order history highlights result readiness and remaining dispute-window time,
+  and the admin orders workspace now supports release-state filters plus
+  metrics for orders still in the review window versus ready for release.
+- Phase 4 batch 4 completed on 2026-04-06:
+  the admin dashboard now has a live operations overview endpoint and UI,
+  release-ready versus still-waiting completed jobs are seeded and visible by
+  default, and release-scheduling groundwork now exists through dashboard
+  previews and admin queue filters without yet releasing funds.
+- Phase 4 batch 5 completed on 2026-04-06:
+  the admin orders workspace now supports intervention notes that save directly
+  onto orders, and admins can inspect a dry-run release preview that explains
+  the exact escrow, CBT, and platform ledger movements the future release
+  engine will perform once Phase 5 begins.
+- Phase 4 batch 6 completed on 2026-04-06:
+  the admin dashboard and order detail views now expose a concrete
+  `RELEASE_ESCROW` queue blueprint, including queue name, job id, scheduled
+  time, and dry-run payload previews for ready and still-waiting release
+  candidates, without yet enqueueing or executing those jobs.
+- Phase 4 batch 7 completed on 2026-04-06:
+  release preparation now includes a global admin audit that separates truly
+  ready candidates from blocked ones, and seeded dispute data now proves the
+  dashboard and scheduler preview exclude blocked orders from the ready queue
+  while still surfacing them for intervention.
+- The current fulfillment work still stops before dispute handling, delayed
+  escrow release scheduling, and real-time CBT job updates.
 
 ---
 
@@ -219,12 +416,40 @@ upload, 2-hour dispute window timer starts.
 platform and CBT. CBT earnings dashboard.
 
 ### Key Deliverables
-- [ ] Bull job processor: RELEASE_ESCROW
-- [ ] Atomic: release escrow → debit escrow → credit CBT → credit platform
-- [ ] CBT commission credited with `withdrawable: true` after 2hrs
-- [ ] CBT earnings history endpoint (paginated)
-- [ ] CBT earnings dashboard UI (bar chart by service, lifetime totals)
-- [ ] Platform commission tracking in admin analytics
+- [x] Bull job processor: RELEASE_ESCROW
+- [x] Atomic: release escrow → debit escrow → credit CBT → credit platform
+- [x] CBT commission credited with `withdrawable: true` after 2hrs
+- [x] CBT earnings history endpoint (paginated)
+- [x] CBT earnings dashboard UI (service mix, lifetime totals, release-state buckets)
+- [x] Admin visibility into released vs pending CBT earnings
+- [x] CBT withdrawal-readiness UI (ready, awaiting, blocked release buckets)
+- [x] CBT withdrawal request submission
+- [x] Admin payout review workflow (approve, processing, complete, reject)
+- [x] Platform commission tracking in admin analytics
+
+### Notes
+- Phase 5 batch 1 completed on 2026-04-07:
+  Bull queue infrastructure now schedules `RELEASE_ESCROW` jobs from completed
+  CBT work, startup recovery re-enqueues pending releases idempotently, ready
+  orders are released atomically, CBT earnings now land in `availableBalance`
+  after the dispute window, and platform commission is written into the live
+  wallet ledger/admin finance surfaces.
+- Phase 5 batch 2 completed on 2026-04-07:
+  CBT centers can now access `GET /wallet/cbt/earnings`, the `/earnings` page
+  now shows released totals, pending-ready and blocked payout buckets, service
+  mix, and paginated commission history, and the whole view is wired directly
+  to the live release engine instead of placeholder projections.
+- Phase 5 batch 3 completed on 2026-04-07:
+  super admins can now access `GET /wallet/admin/cbt-earnings`, `/admin/finance`
+  now separates released CBT commission from ready/awaiting/blocked payout
+  exposure, and `/withdraw` now shows live withdrawal readiness so CBT centers
+  can see what is available now versus what is still in the release queue or
+  blocked by dispute.
+- Phase 5 batch 4 completed on 2026-04-07:
+  CBT centers can now submit real payout requests, those requests reserve
+  wallet balance immediately, and admins can review them through pending,
+  approved, processing, completed, or rejected states from `/admin/finance`
+  while rejected requests restore the reserved funds safely.
 
 ---
 
@@ -234,14 +459,43 @@ platform and CBT. CBT earnings dashboard.
 and resolves. CBT can be penalised or asked to redo.
 
 ### Key Deliverables
-- [ ] Dispute creation endpoint (requester, within dispute window only)
-- [ ] Dispute cancels Bull RELEASE_ESCROW job
-- [ ] Dispute dashboard for admin
-- [ ] Admin actions: resolve-for-requester | resolve-for-cbt | request-redo
-- [ ] Redo flow: order returns to IN_PROGRESS, CBT notified, new deadline set
+- [x] Dispute creation endpoint (requester, within dispute window only)
+- [x] Dispute cancels Bull RELEASE_ESCROW job
+- [x] Dispute dashboard for admin
+- [x] Admin actions: resolve-for-requester | resolve-for-cbt | request-redo
+- [x] Redo flow: order returns to IN_PROGRESS, CBT notified, new deadline set
 - [ ] Penalty: deduct from CBT available balance, create PENALTY transaction
 - [ ] Dispute UI for requester (raise dispute, evidence upload)
-- [ ] Dispute management UI for admin
+- [x] Dispute management UI for admin
+- [x] Requester-favor resolution refunds locked escrow back to wallet
+- [x] Requester-favor resolution can open a pending CBT penalty review entry
+
+### Notes
+- Phase 6 batch 1 completed on 2026-04-07:
+  requesters can now raise live disputes from completed CBT-fulfilled orders
+  while the dispute window is still open, `/disputes` now lists real cases,
+  `/orders` now supports opening a dispute from the order detail pane, and the
+  admin order workspace can move a dispute into review or resolve it for the
+  requester or CBT center. Release preparation and queue logic now treat
+  unresolved disputes as blockers while allowing `RESOLVED_FOR_CBT` orders to
+  return safely to the completed/release-preparation flow.
+- Phase 6 batch 2 completed on 2026-04-07:
+  admin disputes now have a dedicated `/admin/disputes` queue with search,
+  status filtering, metrics, and shared review controls. Admins can now issue
+  `REQUEST_REDO`, which moves the order back to `IN_PROGRESS`, clears the
+  previous result handoff, sets a redo deadline, and keeps release blocked.
+  When the CBT uploads the corrected result, the order returns to
+  `COMPLETED`, the dispute records `redoCompletedAt`, and the admin dispute
+  payload now exposes refund/penalty groundwork such as escrow exposure,
+  candidate CBT penalty amount, platform amount at risk, and the expected
+  refund path preview.
+- Phase 6 batch 3 completed on 2026-04-08:
+  requester-favor resolutions now execute real wallet refunds when the order
+  amount is still held in escrow, moving the order to `REFUNDED` and creating
+  a `REFUND` transaction tied to the order. Admins can also opt to open a
+  pending `PENALTY` review entry against the assigned CBT center without
+  deducting funds yet, and the dispute/admin UI now exposes refund status,
+  refund reference, penalty status, and penalty reference directly.
 
 ---
 
@@ -334,9 +588,12 @@ optimized. Production deployed.
 ## What Is Intentionally NOT Built (Out of Scope)
 
 - No mobile native app (iOS/Android) — PWA only
-- No JAMB/NIMC direct API integration — services fulfilled by humans (CBTs)
+- No tenant-managed BYO provider rollout yet — platform-managed delivery
+  remains the current scope, while tenant-owned VTU/NIN providers belong to the
+  later white-label expansion
 - No chat/messaging between users — only notifications
 - No subscription model — pay-per-service only
 - No multi-currency — NGN only
 - No referral system (may be added post-launch)
 - No public API / third-party developer access
+- No white-label multi-tenant rollout during current Phase 1 stabilization

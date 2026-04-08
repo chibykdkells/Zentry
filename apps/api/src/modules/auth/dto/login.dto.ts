@@ -6,8 +6,19 @@ import {
   Length,
   Matches,
 } from 'class-validator';
+import {
+  ChangePinSchema,
+  ForgotPasswordSchema,
+  LoginSchema,
+  ResendOtpSchema,
+  ResetPasswordSchema,
+  SetPinSchema,
+  VerifyOtpSchema,
+} from '@zentry/validators';
 
 export class LoginDto {
+  static schema = LoginSchema;
+
   @IsEmail({}, { message: 'Invalid email address' })
   email: string;
 
@@ -17,6 +28,8 @@ export class LoginDto {
 }
 
 export class VerifyOtpDto {
+  static schema = VerifyOtpSchema;
+
   @IsEmail()
   email: string;
 
@@ -27,16 +40,22 @@ export class VerifyOtpDto {
 }
 
 export class ResendOtpDto {
+  static schema = ResendOtpSchema;
+
   @IsEmail()
   email: string;
 }
 
 export class ForgotPasswordDto {
+  static schema = ForgotPasswordSchema;
+
   @IsEmail({}, { message: 'Invalid email address' })
   email: string;
 }
 
 export class ResetPasswordDto {
+  static schema = ResetPasswordSchema;
+
   @IsString()
   @MinLength(1)
   token: string;
@@ -53,6 +72,8 @@ export class ResetPasswordDto {
 }
 
 export class SetPinDto {
+  static schema = SetPinSchema;
+
   @IsString()
   @Length(6, 6, { message: 'PIN must be exactly 6 digits' })
   @Matches(/^\d{6}$/, { message: 'PIN must contain only digits' })
@@ -63,6 +84,8 @@ export class SetPinDto {
 }
 
 export class ChangePinDto {
+  static schema = ChangePinSchema;
+
   @IsString()
   @Length(6, 6)
   @Matches(/^\d{6}$/)

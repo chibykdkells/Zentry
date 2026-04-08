@@ -1,6 +1,6 @@
 # ARCHITECTURE.md — Zentry System Architecture
 
-> Last updated: 2026-04-04
+> Last updated: 2026-04-06
 > Read this before touching any folder structure, adding a module, or
 > introducing a new dependency.
 
@@ -13,10 +13,17 @@ applications and three shared packages. Every external integration (payments,
 VTU, SMS, email, storage) is abstracted behind a provider interface — this
 is the **Provider Abstraction Layer (PAL)**.
 
+Current implementation still reflects the Phase 1 direct-platform structure.
+Future expansion direction is platform-first multi-tenancy:
+- Zentry becomes the infrastructure/platform layer
+- the launch business becomes the first-party tenant
+- future external businesses become additional tenants
+- platform admin remains above all tenants
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                        CLIENT (PWA)                         │
-│              Next.js 15 — Mobile-first — Installable        │
+│              Next.js 16 — Mobile-first — Installable        │
 └────────────────────────┬────────────────────────────────────┘
                          │ HTTPS REST + WebSocket
 ┌────────────────────────▼────────────────────────────────────┐
@@ -50,7 +57,7 @@ is the **Provider Abstraction Layer (PAL)**.
 ```
 zentry/
 ├── apps/
-│   ├── web/                          # Next.js 15 PWA
+│   ├── web/                          # Next.js 16 PWA
 │   │   ├── public/
 │   │   │   ├── manifest.json
 │   │   │   └── icons/
@@ -62,7 +69,6 @@ zentry/
 │   │       │   ├── (cbt)/            # CBT Center views
 │   │       │   └── (admin)/          # Super Admin views
 │   │       ├── components/
-│   │       │   ├── ui/               # shadcn/ui components
 │   │       │   ├── layout/           # Sidebar, BottomNav, TopBar, MoreSheet
 │   │       │   ├── auth/
 │   │       │   ├── wallet/
@@ -141,6 +147,20 @@ zentry/
 
 ## Frontend Architecture (apps/web)
 
+### Current vs Future Model
+
+Current Phase 1 frontend:
+- one direct-product surface for `INDIVIDUAL`, `CYBER_CAFE`, and `CBT_CENTER`
+- one platform admin surface
+
+Future platform-first model:
+- platform marketing and platform-admin surface
+- first-party tenant storefront
+- third-party tenant storefronts
+
+The first-party tenant must eventually use the same tenant architecture as every
+other tenant instead of remaining a privileged special-case frontend.
+
 ### Route Groups
 
 | Group | Path Pattern | Who Sees It |
@@ -150,7 +170,7 @@ zentry/
 | `(cbt)` | `/dashboard`, `/job-pool`, `/earnings`, `/withdraw` | CBT_CENTER |
 | `(admin)` | `/admin/*` | SUPER_ADMIN |
 
-Route groups are enforced by middleware (`middleware.ts`) that reads the JWT
+Route groups are enforced by the Next.js proxy layer (`proxy.ts`) that reads the JWT
 role claim and redirects accordingly.
 
 ### Mobile Navigation (Bottom Nav)
@@ -170,6 +190,8 @@ role claim and redirects accordingly.
 - **Zustand:** Auth state (user, token), notification unread count, UI state
 - **TanStack Query:** All server data — orders, wallet, job pool, etc.
 - **No Redux.** No Context API for server data.
+- Shared UI primitives currently live in repo-native components rather than a
+  shadcn/ui-generated layer.
 
 ### API Client
 
@@ -182,6 +204,20 @@ Single Axios instance (`lib/api-client.ts`):
 ---
 
 ## Backend Architecture (apps/api)
+
+### Future Direction
+
+The current backend is still Phase 1 single-platform oriented.
+
+The future expansion must move toward:
+- tenant-aware auth
+- tenant-aware routing and request resolution
+- tenant-scoped business data
+- platform-admin oversight over all tenants
+- platform-managed PWA and security rules that continue to work across tenant
+  storefronts
+
+See `docs/ai-context/WHITE_LABEL_ROADMAP.md` for the expansion plan.
 
 ### Module Dependency Order
 

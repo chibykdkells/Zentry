@@ -39,6 +39,12 @@ export enum FulfillmentType {
   AUTOMATED = 'AUTOMATED',
 }
 
+export enum ServiceDeliveryMode {
+  CBT_MANUAL = 'CBT_MANUAL',
+  API_AUTOMATED = 'API_AUTOMATED',
+  PIN_STOCK = 'PIN_STOCK',
+}
+
 export enum ServiceCategory {
   JAMB = 'JAMB',
   NIMC = 'NIMC',
