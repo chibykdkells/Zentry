@@ -15,6 +15,7 @@ const prisma = new PrismaClient();
 async function upsertSeedTransaction(input: {
   walletId: string;
   userId: string;
+  tenantId: string | null;
   reference: string;
   type: TransactionType;
   status?: TransactionStatus;
@@ -30,6 +31,7 @@ async function upsertSeedTransaction(input: {
     update: {
       walletId: input.walletId,
       userId: input.userId,
+      tenantId: input.tenantId,
       type: input.type,
       status: input.status ?? TransactionStatus.SUCCESS,
       amount: input.amount,
@@ -42,6 +44,7 @@ async function upsertSeedTransaction(input: {
     create: {
       walletId: input.walletId,
       userId: input.userId,
+      tenantId: input.tenantId,
       reference: input.reference,
       type: input.type,
       status: input.status ?? TransactionStatus.SUCCESS,
@@ -61,22 +64,131 @@ async function main() {
   const BCRYPT_ROUNDS = 12;
   const PIN_ROUNDS = 10;
 
-  // ── Users ────────────────────────────────────────────────────
-
   const adminPassword = await bcrypt.hash('Admin@Zentry2024!', BCRYPT_ROUNDS);
   const testPassword = await bcrypt.hash('Test@1234!', BCRYPT_ROUNDS);
   const testPin = await bcrypt.hash('123456', PIN_ROUNDS);
 
-  const legacyIndividual = await prisma.user.findUnique({
-    where: { email: 'student@test.com' },
+  // ── Tenant ────────────────────────────────────────────────────
+
+  const testTenant = await prisma.tenant.upsert({
+    where: { slug: 'testbiz' },
+    update: {
+      name: 'Test Business',
+      primaryColor: '#0D1B3E',
+      accentColor: '#F5A623',
+      tenantMarginRate: 500, // 5% tenant margin (on top of platform rate)
+      isActive: true,
+    },
+    create: {
+      name: 'Test Business',
+      slug: 'testbiz',
+      primaryColor: '#0D1B3E',
+      accentColor: '#F5A623',
+      tenantMarginRate: 500,
+      isActive: true,
+    },
+  });
+
+  // ── Users ────────────────────────────────────────────────────
+
+  // Super Admin — platform-level, no tenantId
+  const existingAdmin = await prisma.user.findFirst({
+    where: {
+      email: 'admin@zentry.ng',
+      tenantId: null,
+    },
     select: { id: true },
   });
 
-  const currentIndividual = await prisma.user.findUnique({
-    where: { email: 'user@test.com' },
-    select: { id: true },
+  const admin = existingAdmin
+    ? await prisma.user.update({
+        where: { id: existingAdmin.id },
+        data: {
+          firstName: 'Zentry',
+          lastName: 'Admin',
+          phone: '+2348000000001',
+          passwordHash: adminPassword,
+          walletPin: testPin,
+          role: UserRole.SUPER_ADMIN,
+          isEmailVerified: true,
+          isPhoneVerified: true,
+          tenantId: null,
+        },
+      })
+    : await prisma.user.create({
+        data: {
+          firstName: 'Zentry',
+          lastName: 'Admin',
+          email: 'admin@zentry.ng',
+          phone: '+2348000000001',
+          passwordHash: adminPassword,
+          walletPin: testPin,
+          role: UserRole.SUPER_ADMIN,
+          isEmailVerified: true,
+          isPhoneVerified: true,
+          tenantId: null,
+        },
+      });
+
+  await prisma.wallet.upsert({
+    where: { userId: admin.id },
+    update: { availableBalance: 0n, escrowBalance: 0n, totalEarned: 0n, totalWithdrawn: 0n },
+    create: { userId: admin.id },
   });
 
+  // Tenant Admin — belongs to testbiz tenant
+  const tenantAdmin = await prisma.user.upsert({
+    where: {
+      tenantId_email: {
+        tenantId: testTenant.id,
+        email: 'tenant@test.com',
+      },
+    },
+    update: {
+      firstName: 'Test',
+      lastName: 'TenantAdmin',
+      phone: '+2348000000005',
+      passwordHash: testPassword,
+      walletPin: testPin,
+      role: UserRole.TENANT_ADMIN,
+      isEmailVerified: true,
+      isPhoneVerified: false,
+      tenantId: testTenant.id,
+    },
+    create: {
+      firstName: 'Test',
+      lastName: 'TenantAdmin',
+      email: 'tenant@test.com',
+      phone: '+2348000000005',
+      passwordHash: testPassword,
+      walletPin: testPin,
+      role: UserRole.TENANT_ADMIN,
+      isEmailVerified: true,
+      tenantId: testTenant.id,
+    },
+  });
+
+  await prisma.wallet.upsert({
+    where: { userId: tenantAdmin.id },
+    update: { availableBalance: 0n, escrowBalance: 0n, totalEarned: 0n, totalWithdrawn: 0n },
+    create: { userId: tenantAdmin.id },
+  });
+
+  // Handle legacy student email migration
+  const legacyIndividual = await prisma.user.findFirst({
+    where: {
+      email: 'student@test.com',
+      tenantId: testTenant.id,
+    },
+    select: { id: true },
+  });
+  const currentIndividual = await prisma.user.findFirst({
+    where: {
+      email: 'user@test.com',
+      tenantId: testTenant.id,
+    },
+    select: { id: true },
+  });
   if (legacyIndividual && !currentIndividual) {
     await prisma.user.update({
       where: { id: legacyIndividual.id },
@@ -90,48 +202,19 @@ async function main() {
         role: UserRole.INDIVIDUAL,
         isEmailVerified: true,
         isPhoneVerified: false,
+        tenantId: testTenant.id,
       },
     });
   }
 
-  const admin = await prisma.user.upsert({
-    where: { email: 'admin@zentry.ng' },
-    update: {
-      firstName: 'Zentry',
-      lastName: 'Admin',
-      phone: '+2348000000001',
-      passwordHash: adminPassword,
-      walletPin: testPin,
-      role: UserRole.SUPER_ADMIN,
-      isEmailVerified: true,
-      isPhoneVerified: true,
-    },
-    create: {
-      firstName: 'Zentry',
-      lastName: 'Admin',
-      email: 'admin@zentry.ng',
-      phone: '+2348000000001',
-      passwordHash: adminPassword,
-      walletPin: testPin,
-      role: UserRole.SUPER_ADMIN,
-      isEmailVerified: true,
-      isPhoneVerified: true,
-    },
-  });
-
-  await prisma.wallet.upsert({
-    where: { userId: admin.id },
-    update: {
-      availableBalance: 0n,
-      escrowBalance: 0n,
-      totalEarned: 0n,
-      totalWithdrawn: 0n,
-    },
-    create: { userId: admin.id },
-  });
-
+  // Individual user — belongs to testbiz tenant
   const individual = await prisma.user.upsert({
-    where: { email: 'user@test.com' },
+    where: {
+      tenantId_email: {
+        tenantId: testTenant.id,
+        email: 'user@test.com',
+      },
+    },
     update: {
       firstName: 'Test',
       lastName: 'User',
@@ -140,7 +223,7 @@ async function main() {
       walletPin: testPin,
       role: UserRole.INDIVIDUAL,
       isEmailVerified: true,
-      isPhoneVerified: false,
+      tenantId: testTenant.id,
     },
     create: {
       firstName: 'Test',
@@ -151,17 +234,13 @@ async function main() {
       walletPin: testPin,
       role: UserRole.INDIVIDUAL,
       isEmailVerified: true,
+      tenantId: testTenant.id,
     },
   });
 
   const individualWallet = await prisma.wallet.upsert({
     where: { userId: individual.id },
-    update: {
-      availableBalance: 500000n,
-      escrowBalance: 0n,
-      totalEarned: 0n,
-      totalWithdrawn: 0n,
-    },
+    update: { availableBalance: 500000n, escrowBalance: 0n, totalEarned: 0n, totalWithdrawn: 0n },
     create: {
       userId: individual.id,
       availableBalance: 500000n,
@@ -174,6 +253,7 @@ async function main() {
   await upsertSeedTransaction({
     walletId: individualWallet.id,
     userId: individual.id,
+    tenantId: testTenant.id,
     reference: 'SEED-IND-FUND-001',
     type: TransactionType.WALLET_FUNDING,
     amount: 350000n,
@@ -187,6 +267,7 @@ async function main() {
   await upsertSeedTransaction({
     walletId: individualWallet.id,
     userId: individual.id,
+    tenantId: testTenant.id,
     reference: 'SEED-IND-REFUND-001',
     type: TransactionType.REFUND,
     amount: 50000n,
@@ -198,6 +279,7 @@ async function main() {
   await upsertSeedTransaction({
     walletId: individualWallet.id,
     userId: individual.id,
+    tenantId: testTenant.id,
     reference: 'SEED-IND-FUND-002',
     type: TransactionType.WALLET_FUNDING,
     amount: 150000n,
@@ -208,8 +290,14 @@ async function main() {
     gatewayRef: 'seed-flw-ind-002',
   });
 
+  // CBT Center — belongs to testbiz tenant
   const cbtUser = await prisma.user.upsert({
-    where: { email: 'cbt@test.com' },
+    where: {
+      tenantId_email: {
+        tenantId: testTenant.id,
+        email: 'cbt@test.com',
+      },
+    },
     update: {
       firstName: 'Test',
       lastName: 'CBT',
@@ -218,7 +306,7 @@ async function main() {
       walletPin: testPin,
       role: UserRole.CBT_CENTER,
       isEmailVerified: true,
-      isPhoneVerified: false,
+      tenantId: testTenant.id,
     },
     create: {
       firstName: 'Test',
@@ -229,6 +317,7 @@ async function main() {
       walletPin: testPin,
       role: UserRole.CBT_CENTER,
       isEmailVerified: true,
+      tenantId: testTenant.id,
     },
   });
 
@@ -252,6 +341,7 @@ async function main() {
   await upsertSeedTransaction({
     walletId: cbtWallet.id,
     userId: cbtUser.id,
+    tenantId: testTenant.id,
     reference: 'SEED-CBT-EARN-001',
     type: TransactionType.CBT_COMMISSION,
     amount: 120000n,
@@ -263,6 +353,7 @@ async function main() {
   await upsertSeedTransaction({
     walletId: cbtWallet.id,
     userId: cbtUser.id,
+    tenantId: testTenant.id,
     reference: 'SEED-CBT-WITHDRAW-001',
     type: TransactionType.WITHDRAWAL,
     amount: 50000n,
@@ -273,12 +364,12 @@ async function main() {
 
   await prisma.cbtProfile.upsert({
     where: { userId: cbtUser.id },
-    update: {},
+    update: { tenantId: testTenant.id },
     create: {
       userId: cbtUser.id,
+      tenantId: testTenant.id,
       centerName: 'Test CBT Center',
       licenseNumber: 'CBT-TEST-001',
-      licenseDocUrl: 'https://example.com/license.pdf',
       address: '1 Test Street, Lagos',
       state: 'Lagos',
       lga: 'Lagos Island',
@@ -288,195 +379,117 @@ async function main() {
     },
   });
 
-  const cafe = await prisma.user.upsert({
-    where: { email: 'cafe@test.com' },
-    update: {
-      firstName: 'Test',
-      lastName: 'Cafe',
-      phone: '+2348000000004',
-      passwordHash: testPassword,
-      walletPin: testPin,
-      role: UserRole.CYBER_CAFE,
-      isEmailVerified: true,
-      isPhoneVerified: false,
-    },
-    create: {
-      firstName: 'Test',
-      lastName: 'Cafe',
-      email: 'cafe@test.com',
-      phone: '+2348000000004',
-      passwordHash: testPassword,
-      walletPin: testPin,
-      role: UserRole.CYBER_CAFE,
-      isEmailVerified: true,
-    },
-  });
-
-  const cafeWallet = await prisma.wallet.upsert({
-    where: { userId: cafe.id },
-    update: {
-      availableBalance: 200000n,
-      escrowBalance: 50000n,
-      totalEarned: 0n,
-      totalWithdrawn: 0n,
-    },
-    create: {
-      userId: cafe.id,
-      availableBalance: 200000n,
-      escrowBalance: 50000n,
-      totalEarned: 0n,
-      totalWithdrawn: 0n,
-    },
-  });
-
-  await upsertSeedTransaction({
-    walletId: cafeWallet.id,
-    userId: cafe.id,
-    reference: 'SEED-CAFE-FUND-001',
-    type: TransactionType.WALLET_FUNDING,
-    amount: 250000n,
-    balanceBefore: 0n,
-    balanceAfter: 250000n,
-    description: 'Seeded cafe wallet funding for walk-in operations',
-    gateway: PaymentGateway.FINTAVAPAY,
-    gatewayRef: 'seed-fintava-cafe-001',
-  });
-
-  await upsertSeedTransaction({
-    walletId: cafeWallet.id,
-    userId: cafe.id,
-    reference: 'SEED-CAFE-ESCROW-001',
-    type: TransactionType.ESCROW_LOCK,
-    amount: 50000n,
-    balanceBefore: 250000n,
-    balanceAfter: 200000n,
-    description: 'Escrow locked for a seeded customer service request',
-  });
-
-  await prisma.cyberCafeProfile.upsert({
-    where: { userId: cafe.id },
-    update: {},
-    create: {
-      userId: cafe.id,
-      businessName: 'Test Cyber Cafe',
-      address: '2 Test Avenue, Abuja',
-      state: 'FCT',
-    },
-  });
-
-  // ── Service Categories ────────────────────────────────────────
+  // ── Service Categories (per tenant) ──────────────────────────
 
   const jamb = await prisma.serviceCategoryModel.upsert({
-    where: { slug: 'jamb' },
+    where: { slug_tenantId: { slug: 'jamb', tenantId: testTenant.id } },
     update: {},
-    create: { name: 'JAMB', slug: 'jamb', description: 'JAMB examination services', sortOrder: 1 },
+    create: {
+      name: 'JAMB',
+      slug: 'jamb',
+      description: 'JAMB examination services',
+      sortOrder: 1,
+      tenantId: testTenant.id,
+    },
   });
 
   const nimc = await prisma.serviceCategoryModel.upsert({
-    where: { slug: 'nimc' },
+    where: { slug_tenantId: { slug: 'nimc', tenantId: testTenant.id } },
     update: {},
-    create: { name: 'NIMC', slug: 'nimc', description: 'National Identity Management Commission services', sortOrder: 2 },
+    create: {
+      name: 'NIMC',
+      slug: 'nimc',
+      description: 'National Identity Management Commission services',
+      sortOrder: 2,
+      tenantId: testTenant.id,
+    },
   });
 
   const neco = await prisma.serviceCategoryModel.upsert({
-    where: { slug: 'neco' },
+    where: { slug_tenantId: { slug: 'neco', tenantId: testTenant.id } },
     update: {},
-    create: { name: 'NECO', slug: 'neco', description: 'NECO examination services', sortOrder: 3 },
+    create: {
+      name: 'NECO',
+      slug: 'neco',
+      description: 'NECO examination services',
+      sortOrder: 3,
+      tenantId: testTenant.id,
+    },
   });
 
   const airtimeCat = await prisma.serviceCategoryModel.upsert({
-    where: { slug: 'vtu-airtime' },
+    where: { slug_tenantId: { slug: 'vtu-airtime', tenantId: testTenant.id } },
     update: {},
-    create: { name: 'Airtime Topup', slug: 'vtu-airtime', description: 'Buy airtime for any network', sortOrder: 4 },
+    create: {
+      name: 'Airtime Topup',
+      slug: 'vtu-airtime',
+      description: 'Buy airtime for any network',
+      sortOrder: 4,
+      tenantId: testTenant.id,
+    },
   });
 
   const dataCat = await prisma.serviceCategoryModel.upsert({
-    where: { slug: 'vtu-data' },
+    where: { slug_tenantId: { slug: 'vtu-data', tenantId: testTenant.id } },
     update: {},
-    create: { name: 'Data Subscription', slug: 'vtu-data', description: 'Buy data bundles', sortOrder: 5 },
+    create: {
+      name: 'Data Subscription',
+      slug: 'vtu-data',
+      description: 'Buy data bundles',
+      sortOrder: 5,
+      tenantId: testTenant.id,
+    },
   });
 
   const cableCat = await prisma.serviceCategoryModel.upsert({
-    where: { slug: 'vtu-cable' },
+    where: { slug_tenantId: { slug: 'vtu-cable', tenantId: testTenant.id } },
     update: {},
-    create: { name: 'Cable TV', slug: 'vtu-cable', description: 'Pay for DStv, GOtv, StarTimes', sortOrder: 6 },
+    create: {
+      name: 'Cable TV',
+      slug: 'vtu-cable',
+      description: 'Pay for DStv, GOtv, StarTimes',
+      sortOrder: 6,
+      tenantId: testTenant.id,
+    },
   });
 
   const electricityCat = await prisma.serviceCategoryModel.upsert({
-    where: { slug: 'vtu-electricity' },
+    where: { slug_tenantId: { slug: 'vtu-electricity', tenantId: testTenant.id } },
     update: {},
-    create: { name: 'Electricity', slug: 'vtu-electricity', description: 'Pay electricity bills', sortOrder: 7 },
+    create: {
+      name: 'Electricity',
+      slug: 'vtu-electricity',
+      description: 'Pay electricity bills',
+      sortOrder: 7,
+      tenantId: testTenant.id,
+    },
   });
 
-  // ── Services ──────────────────────────────────────────────────
+  // ── Services (per tenant) ──────────────────────────────────────
 
   const jambServices = [
-    {
-      name: 'JAMB Original Result Printing',
-      slug: 'jamb-result-printing',
-      platformFee: 50000n,
-      cbtCommission: 30000n,
-      deliveryMode: ServiceDeliveryMode.CBT_MANUAL,
-    },
-    {
-      name: 'JAMB Admission Letter Printing',
-      slug: 'jamb-admission-letter',
-      platformFee: 50000n,
-      cbtCommission: 30000n,
-      deliveryMode: ServiceDeliveryMode.CBT_MANUAL,
-    },
-    {
-      name: 'JAMB Reprinting',
-      slug: 'jamb-reprinting',
-      platformFee: 50000n,
-      cbtCommission: 30000n,
-      deliveryMode: ServiceDeliveryMode.CBT_MANUAL,
-    },
-    {
-      name: 'Check JAMB Admission Status',
-      slug: 'jamb-admission-status',
-      platformFee: 20000n,
-      cbtCommission: 0n,
-      deliveryMode: ServiceDeliveryMode.API_AUTOMATED,
-    },
-    {
-      name: "JAMB O'Level Result Screenshot",
-      slug: 'jamb-olevel-screenshot',
-      platformFee: 30000n,
-      cbtCommission: 30000n,
-      deliveryMode: ServiceDeliveryMode.CBT_MANUAL,
-    },
-    {
-      name: 'JAMB Profile Code Retrieval',
-      slug: 'jamb-profile-code',
-      platformFee: 20000n,
-      cbtCommission: 0n,
-      deliveryMode: ServiceDeliveryMode.API_AUTOMATED,
-    },
-    {
-      name: 'JAMB Registration Number Retrieval',
-      slug: 'jamb-reg-number',
-      platformFee: 20000n,
-      cbtCommission: 0n,
-      deliveryMode: ServiceDeliveryMode.API_AUTOMATED,
-    },
+    { name: 'JAMB Original Result Printing',    slug: 'jamb-result-printing',  platformFee: 50000n, cbtCommission: 30000n, deliveryMode: ServiceDeliveryMode.CBT_MANUAL },
+    { name: 'JAMB Admission Letter Printing',    slug: 'jamb-admission-letter', platformFee: 50000n, cbtCommission: 30000n, deliveryMode: ServiceDeliveryMode.CBT_MANUAL },
+    { name: 'JAMB Reprinting',                  slug: 'jamb-reprinting',        platformFee: 50000n, cbtCommission: 30000n, deliveryMode: ServiceDeliveryMode.CBT_MANUAL },
+    { name: 'Check JAMB Admission Status',       slug: 'jamb-admission-status', platformFee: 20000n, cbtCommission: 0n,     deliveryMode: ServiceDeliveryMode.API_AUTOMATED },
+    { name: "JAMB O'Level Result Screenshot",    slug: 'jamb-olevel-screenshot',platformFee: 30000n, cbtCommission: 30000n, deliveryMode: ServiceDeliveryMode.CBT_MANUAL },
+    { name: 'JAMB Profile Code Retrieval',       slug: 'jamb-profile-code',     platformFee: 20000n, cbtCommission: 0n,     deliveryMode: ServiceDeliveryMode.API_AUTOMATED },
+    { name: 'JAMB Registration Number Retrieval',slug: 'jamb-reg-number',       platformFee: 20000n, cbtCommission: 0n,     deliveryMode: ServiceDeliveryMode.API_AUTOMATED },
   ];
 
   for (const s of jambServices) {
     await prisma.service.upsert({
-      where: { slug: s.slug },
+      where: { slug_tenantId: { slug: s.slug, tenantId: testTenant.id } },
       update: {
         categoryId: jamb.id,
         name: s.name,
         deliveryMode: s.deliveryMode,
-        fulfillmentType:
-          s.deliveryMode === ServiceDeliveryMode.CBT_MANUAL
-            ? FulfillmentType.MANUAL
-            : FulfillmentType.AUTOMATED,
+        fulfillmentType: s.deliveryMode === ServiceDeliveryMode.CBT_MANUAL ? FulfillmentType.MANUAL : FulfillmentType.AUTOMATED,
         providerCost: 0n,
         platformFee: s.platformFee,
         totalPrice: s.platformFee,
         cbtCommission: s.cbtCommission,
+        tenantId: testTenant.id,
         requiredFields: [{ name: 'registrationNumber', label: 'JAMB Registration Number', type: 'text', required: true }],
         requiredDocuments: [],
       },
@@ -484,11 +497,9 @@ async function main() {
         categoryId: jamb.id,
         name: s.name,
         slug: s.slug,
+        tenantId: testTenant.id,
         deliveryMode: s.deliveryMode,
-        fulfillmentType:
-          s.deliveryMode === ServiceDeliveryMode.CBT_MANUAL
-            ? FulfillmentType.MANUAL
-            : FulfillmentType.AUTOMATED,
+        fulfillmentType: s.deliveryMode === ServiceDeliveryMode.CBT_MANUAL ? FulfillmentType.MANUAL : FulfillmentType.AUTOMATED,
         providerCost: 0n,
         platformFee: s.platformFee,
         totalPrice: s.platformFee,
@@ -500,104 +511,54 @@ async function main() {
   }
 
   const nimcServices = [
-    {
-      name: 'NIN Slip Printing',
-      slug: 'nimc-nin-slip',
-      platformFee: 30000n,
-      cbtCommission: 0n,
-      deliveryMode: ServiceDeliveryMode.API_AUTOMATED,
-    },
-    {
-      name: 'NIN Validation',
-      slug: 'nimc-nin-validation',
-      platformFee: 20000n,
-      cbtCommission: 0n,
-      deliveryMode: ServiceDeliveryMode.API_AUTOMATED,
-    },
-    {
-      name: 'NIN Modification',
-      slug: 'nimc-nin-modification',
-      platformFee: 50000n,
-      cbtCommission: 25000n,
-      deliveryMode: ServiceDeliveryMode.CBT_MANUAL,
-    },
+    { name: 'NIN Slip Printing',  slug: 'nimc-nin-slip',        platformFee: 30000n, cbtCommission: 0n,     deliveryMode: ServiceDeliveryMode.API_AUTOMATED },
+    { name: 'NIN Validation',     slug: 'nimc-nin-validation',  platformFee: 20000n, cbtCommission: 0n,     deliveryMode: ServiceDeliveryMode.API_AUTOMATED },
+    { name: 'NIN Modification',   slug: 'nimc-nin-modification',platformFee: 50000n, cbtCommission: 25000n, deliveryMode: ServiceDeliveryMode.CBT_MANUAL },
   ];
 
   for (const s of nimcServices) {
+    const nimcDocs =
+      s.slug === 'nimc-nin-modification'
+        ? [
+            { name: 'nin-slip', label: 'Existing NIN Slip', required: true, acceptedTypes: ['PDF', 'JPG', 'PNG'], description: 'Upload the current slip or slip print used for the modification request.' },
+            { name: 'supporting-proof', label: 'Supporting Proof', required: true, acceptedTypes: ['PDF', 'JPG', 'PNG'], description: 'Upload the correction evidence, such as date-of-birth or name support document.' },
+          ]
+        : [];
+
     await prisma.service.upsert({
-      where: { slug: s.slug },
+      where: { slug_tenantId: { slug: s.slug, tenantId: testTenant.id } },
       update: {
         categoryId: nimc.id,
         name: s.name,
         deliveryMode: s.deliveryMode,
-        fulfillmentType:
-          s.deliveryMode === ServiceDeliveryMode.CBT_MANUAL
-            ? FulfillmentType.MANUAL
-            : FulfillmentType.AUTOMATED,
+        fulfillmentType: s.deliveryMode === ServiceDeliveryMode.CBT_MANUAL ? FulfillmentType.MANUAL : FulfillmentType.AUTOMATED,
         providerCost: 0n,
         platformFee: s.platformFee,
         totalPrice: s.platformFee,
         cbtCommission: s.cbtCommission,
+        tenantId: testTenant.id,
         requiredFields: [{ name: 'nin', label: 'NIN (11 digits)', type: 'text', required: true }],
-        requiredDocuments:
-          s.slug === 'nimc-nin-modification'
-            ? [
-                {
-                  name: 'nin-slip',
-                  label: 'Existing NIN Slip',
-                  required: true,
-                  acceptedTypes: ['PDF', 'JPG', 'PNG'],
-                  description: 'Upload the current slip or slip print used for the modification request.',
-                },
-                {
-                  name: 'supporting-proof',
-                  label: 'Supporting Proof',
-                  required: true,
-                  acceptedTypes: ['PDF', 'JPG', 'PNG'],
-                  description: 'Upload the correction evidence, such as date-of-birth or name support document.',
-                },
-              ]
-            : [],
+        requiredDocuments: nimcDocs,
       },
       create: {
         categoryId: nimc.id,
         name: s.name,
         slug: s.slug,
+        tenantId: testTenant.id,
         deliveryMode: s.deliveryMode,
-        fulfillmentType:
-          s.deliveryMode === ServiceDeliveryMode.CBT_MANUAL
-            ? FulfillmentType.MANUAL
-            : FulfillmentType.AUTOMATED,
+        fulfillmentType: s.deliveryMode === ServiceDeliveryMode.CBT_MANUAL ? FulfillmentType.MANUAL : FulfillmentType.AUTOMATED,
         providerCost: 0n,
         platformFee: s.platformFee,
         totalPrice: s.platformFee,
         cbtCommission: s.cbtCommission,
         requiredFields: [{ name: 'nin', label: 'NIN (11 digits)', type: 'text', required: true }],
-        requiredDocuments:
-          s.slug === 'nimc-nin-modification'
-            ? [
-                {
-                  name: 'nin-slip',
-                  label: 'Existing NIN Slip',
-                  required: true,
-                  acceptedTypes: ['PDF', 'JPG', 'PNG'],
-                  description: 'Upload the current slip or slip print used for the modification request.',
-                },
-                {
-                  name: 'supporting-proof',
-                  label: 'Supporting Proof',
-                  required: true,
-                  acceptedTypes: ['PDF', 'JPG', 'PNG'],
-                  description: 'Upload the correction evidence, such as date-of-birth or name support document.',
-                },
-              ]
-            : [],
+        requiredDocuments: nimcDocs,
       },
     });
   }
 
   await prisma.service.upsert({
-    where: { slug: 'neco-e-verification' },
+    where: { slug_tenantId: { slug: 'neco-e-verification', tenantId: testTenant.id } },
     update: {
       categoryId: neco.id,
       name: 'NECO e-Verification',
@@ -607,24 +568,20 @@ async function main() {
       platformFee: 30000n,
       totalPrice: 30000n,
       cbtCommission: 15000n,
+      tenantId: testTenant.id,
       requiredFields: [
         { name: 'examNumber', label: 'NECO Exam Number', type: 'text', required: true },
         { name: 'examYear', label: 'Exam Year', type: 'number', required: true },
       ],
       requiredDocuments: [
-        {
-          name: 'result-copy',
-          label: 'Result Copy',
-          required: true,
-          acceptedTypes: ['PDF', 'JPG', 'PNG'],
-          description: 'Upload a clear copy or screenshot of the result to verify.',
-        },
+        { name: 'result-copy', label: 'Result Copy', required: true, acceptedTypes: ['PDF', 'JPG', 'PNG'], description: 'Upload a clear copy or screenshot of the result to verify.' },
       ],
     },
     create: {
       categoryId: neco.id,
       name: 'NECO e-Verification',
       slug: 'neco-e-verification',
+      tenantId: testTenant.id,
       deliveryMode: ServiceDeliveryMode.CBT_MANUAL,
       fulfillmentType: FulfillmentType.MANUAL,
       providerCost: 0n,
@@ -636,38 +593,53 @@ async function main() {
         { name: 'examYear', label: 'Exam Year', type: 'number', required: true },
       ],
       requiredDocuments: [
-        {
-          name: 'result-copy',
-          label: 'Result Copy',
-          required: true,
-          acceptedTypes: ['PDF', 'JPG', 'PNG'],
-          description: 'Upload a clear copy or screenshot of the result to verify.',
-        },
+        { name: 'result-copy', label: 'Result Copy', required: true, acceptedTypes: ['PDF', 'JPG', 'PNG'], description: 'Upload a clear copy or screenshot of the result to verify.' },
       ],
     },
   });
 
   // VTU services (automated — no CBT commission)
   const vtuServices = [
-    { categoryId: airtimeCat.id, name: 'MTN Airtime', slug: 'airtime-mtn', providerKey: 'MTN' },
-    { categoryId: airtimeCat.id, name: 'GLO Airtime', slug: 'airtime-glo', providerKey: 'GLO' },
-    { categoryId: airtimeCat.id, name: 'Airtel Airtime', slug: 'airtime-airtel', providerKey: 'AIRTEL' },
-    { categoryId: airtimeCat.id, name: '9Mobile Airtime', slug: 'airtime-9mobile', providerKey: '9MOBILE' },
-    { categoryId: dataCat.id, name: 'MTN Data', slug: 'data-mtn', providerKey: 'MTN' },
-    { categoryId: dataCat.id, name: 'GLO Data', slug: 'data-glo', providerKey: 'GLO' },
-    { categoryId: dataCat.id, name: 'Airtel Data', slug: 'data-airtel', providerKey: 'AIRTEL' },
-    { categoryId: dataCat.id, name: '9Mobile Data', slug: 'data-9mobile', providerKey: '9MOBILE' },
-    { categoryId: cableCat.id, name: 'DStv Subscription', slug: 'cable-dstv', providerKey: 'DSTV' },
-    { categoryId: cableCat.id, name: 'GOtv Subscription', slug: 'cable-gotv', providerKey: 'GOTV' },
-    { categoryId: cableCat.id, name: 'StarTimes Subscription', slug: 'cable-startimes', providerKey: 'STARTIMES' },
-    { categoryId: electricityCat.id, name: 'EKEDC (Eko Electric)', slug: 'electricity-ekedc', providerKey: 'EKEDC' },
-    { categoryId: electricityCat.id, name: 'IKEDC (Ikeja Electric)', slug: 'electricity-ikedc', providerKey: 'IKEDC' },
+    { categoryId: airtimeCat.id, name: 'MTN Airtime',           slug: 'airtime-mtn',          providerKey: 'MTN' },
+    { categoryId: airtimeCat.id, name: 'GLO Airtime',           slug: 'airtime-glo',          providerKey: 'GLO' },
+    { categoryId: airtimeCat.id, name: 'Airtel Airtime',        slug: 'airtime-airtel',       providerKey: 'AIRTEL' },
+    { categoryId: airtimeCat.id, name: '9Mobile Airtime',       slug: 'airtime-9mobile',      providerKey: '9MOBILE' },
+    { categoryId: dataCat.id,    name: 'MTN Data',              slug: 'data-mtn',             providerKey: 'MTN' },
+    { categoryId: dataCat.id,    name: 'GLO Data',              slug: 'data-glo',             providerKey: 'GLO' },
+    { categoryId: dataCat.id,    name: 'Airtel Data',           slug: 'data-airtel',          providerKey: 'AIRTEL' },
+    { categoryId: dataCat.id,    name: '9Mobile Data',          slug: 'data-9mobile',         providerKey: '9MOBILE' },
+    { categoryId: cableCat.id,   name: 'DStv Subscription',     slug: 'cable-dstv',           providerKey: 'DSTV' },
+    { categoryId: cableCat.id,   name: 'GOtv Subscription',     slug: 'cable-gotv',           providerKey: 'GOTV' },
+    { categoryId: cableCat.id,   name: 'StarTimes Subscription',slug: 'cable-startimes',      providerKey: 'STARTIMES' },
+    { categoryId: electricityCat.id, name: 'EKEDC (Eko Electric)',  slug: 'electricity-ekedc',providerKey: 'EKEDC' },
+    { categoryId: electricityCat.id, name: 'IKEDC (Ikeja Electric)',slug: 'electricity-ikedc',providerKey: 'IKEDC' },
     { categoryId: electricityCat.id, name: 'AEDC (Abuja Electric)', slug: 'electricity-aedc', providerKey: 'AEDC' },
   ];
 
   for (const s of vtuServices) {
+    const requiredFields = s.slug.startsWith('airtime-')
+      ? [
+          { name: 'phone', label: 'Phone Number', type: 'text', required: true },
+          { name: 'amountNaira', label: 'Airtime Amount (Naira)', type: 'number', required: true },
+        ]
+      : s.slug.startsWith('data-')
+        ? [
+            { name: 'phone', label: 'Phone Number', type: 'text', required: true },
+            { name: 'planCode', label: 'Data Plan', type: 'select', required: true },
+          ]
+        : s.slug.startsWith('cable-')
+          ? [
+              { name: 'smartcardNumber', label: 'Smartcard / IUC Number', type: 'text', required: true },
+              { name: 'bouquetCode', label: 'Bouquet', type: 'select', required: true },
+            ]
+          : [
+              { name: 'meterNumber', label: 'Meter Number', type: 'text', required: true },
+              { name: 'meterType', label: 'Meter Type', type: 'select', required: true },
+              { name: 'amountNaira', label: 'Amount (Naira)', type: 'number', required: true },
+            ];
+
     await prisma.service.upsert({
-      where: { slug: s.slug },
+      where: { slug_tenantId: { slug: s.slug, tenantId: testTenant.id } },
       update: {
         categoryId: s.categoryId,
         name: s.name,
@@ -678,90 +650,69 @@ async function main() {
         totalPrice: 5000n,
         cbtCommission: 0n,
         providerKey: s.providerKey,
-        requiredFields: [],
+        tenantId: testTenant.id,
+        requiredFields,
         requiredDocuments: [],
       },
       create: {
         categoryId: s.categoryId,
         name: s.name,
         slug: s.slug,
+        tenantId: testTenant.id,
         deliveryMode: ServiceDeliveryMode.API_AUTOMATED,
         fulfillmentType: FulfillmentType.AUTOMATED,
-        providerCost: 0n, // Updated by admin with real provider cost
-        platformFee: 5000n, // ₦50 markup
+        providerCost: 0n,
+        platformFee: 5000n,
         totalPrice: 5000n,
         cbtCommission: 0n,
         providerKey: s.providerKey,
-        requiredFields: [],
+        requiredFields,
         requiredDocuments: [],
       },
     });
   }
 
-  // ── Seeded manual orders for requester/admin/CBT workspaces ───────────────
+  // ── Seeded Orders ─────────────────────────────────────────────
 
-  const nimcModificationService = await prisma.service.findUniqueOrThrow({
-    where: { slug: 'nimc-nin-modification' },
-    select: {
-      id: true,
-      totalPrice: true,
-      platformFee: true,
-      cbtCommission: true,
-      deliveryMode: true,
-      fulfillmentType: true,
-    },
+  const nimcModificationService = await prisma.service.findFirstOrThrow({
+    where: { slug: 'nimc-nin-modification', tenantId: testTenant.id },
+    select: { id: true, totalPrice: true, platformFee: true, cbtCommission: true, deliveryMode: true, fulfillmentType: true },
   });
 
-  const jambResultService = await prisma.service.findUniqueOrThrow({
-    where: { slug: 'jamb-result-printing' },
-    select: {
-      id: true,
-      totalPrice: true,
-      platformFee: true,
-      cbtCommission: true,
-      deliveryMode: true,
-      fulfillmentType: true,
-    },
+  const jambResultService = await prisma.service.findFirstOrThrow({
+    where: { slug: 'jamb-result-printing', tenantId: testTenant.id },
+    select: { id: true, totalPrice: true, platformFee: true, cbtCommission: true, deliveryMode: true, fulfillmentType: true },
   });
 
-  const seedCafePendingOrder = await prisma.order.upsert({
-    where: { orderNumber: 'ZTR-SEED-CAFE-001' },
+  // Pending order (from individual, for CBT job-pool visibility)
+  const seedPendingOrder = await prisma.order.upsert({
+    where: { orderNumber: 'ZTR-SEED-PENDING-001' },
     update: {
-      requesterId: cafe.id,
+      requesterId: individual.id,
+      tenantId: testTenant.id,
       serviceId: nimcModificationService.id,
       status: 'PENDING',
       deliveryMode: nimcModificationService.deliveryMode,
       fulfillmentType: nimcModificationService.fulfillmentType,
-      submittedData: {
-        nin: '22334455667',
-      },
-      requesterDocUrls: [
-        'https://example.com/seed/nin-slip.pdf',
-        'https://example.com/seed/supporting-proof.pdf',
-      ],
+      submittedData: { nin: '22334455667' },
+      requesterDocUrls: ['https://example.com/seed/nin-slip.pdf', 'https://example.com/seed/supporting-proof.pdf'],
       totalAmount: nimcModificationService.totalPrice,
       platformFee: nimcModificationService.platformFee,
       cbtCommission: nimcModificationService.cbtCommission,
       assignedCbtId: null,
-      assignedAt: null,
       completedAt: null,
-      cbtNotes: null,
       adminNotes: 'Seeded pending manual order for CBT job-pool visibility.',
     },
     create: {
-      orderNumber: 'ZTR-SEED-CAFE-001',
-      requesterId: cafe.id,
+      orderNumber: 'ZTR-SEED-PENDING-001',
+      requesterId: individual.id,
+      tenantId: testTenant.id,
       serviceId: nimcModificationService.id,
       status: 'PENDING',
       deliveryMode: nimcModificationService.deliveryMode,
       fulfillmentType: nimcModificationService.fulfillmentType,
-      submittedData: {
-        nin: '22334455667',
-      },
-      requesterDocUrls: [
-        'https://example.com/seed/nin-slip.pdf',
-        'https://example.com/seed/supporting-proof.pdf',
-      ],
+      submittedData: { nin: '22334455667' },
+      requesterDocUrls: ['https://example.com/seed/nin-slip.pdf', 'https://example.com/seed/supporting-proof.pdf'],
       totalAmount: nimcModificationService.totalPrice,
       platformFee: nimcModificationService.platformFee,
       cbtCommission: nimcModificationService.cbtCommission,
@@ -769,17 +720,17 @@ async function main() {
     },
   });
 
+  // In-progress order (assigned to CBT)
   const seedAssignedOrder = await prisma.order.upsert({
     where: { orderNumber: 'ZTR-SEED-CBT-001' },
     update: {
       requesterId: individual.id,
+      tenantId: testTenant.id,
       serviceId: jambResultService.id,
       status: 'IN_PROGRESS',
       deliveryMode: jambResultService.deliveryMode,
       fulfillmentType: jambResultService.fulfillmentType,
-      submittedData: {
-        registrationNumber: '202600000001AA',
-      },
+      submittedData: { registrationNumber: '202600000001AA' },
       requesterDocUrls: [],
       totalAmount: jambResultService.totalPrice,
       platformFee: jambResultService.platformFee,
@@ -792,13 +743,12 @@ async function main() {
     create: {
       orderNumber: 'ZTR-SEED-CBT-001',
       requesterId: individual.id,
+      tenantId: testTenant.id,
       serviceId: jambResultService.id,
       status: 'IN_PROGRESS',
       deliveryMode: jambResultService.deliveryMode,
       fulfillmentType: jambResultService.fulfillmentType,
-      submittedData: {
-        registrationNumber: '202600000001AA',
-      },
+      submittedData: { registrationNumber: '202600000001AA' },
       requesterDocUrls: [],
       totalAmount: jambResultService.totalPrice,
       platformFee: jambResultService.platformFee,
@@ -810,17 +760,17 @@ async function main() {
     },
   });
 
+  // Completed order (ready for release)
   const seedReadyForReleaseOrder = await prisma.order.upsert({
     where: { orderNumber: 'ZTR-SEED-READY-001' },
     update: {
       requesterId: individual.id,
+      tenantId: testTenant.id,
       serviceId: jambResultService.id,
       status: 'COMPLETED',
       deliveryMode: jambResultService.deliveryMode,
       fulfillmentType: jambResultService.fulfillmentType,
-      submittedData: {
-        registrationNumber: '202600000002BB',
-      },
+      submittedData: { registrationNumber: '202600000002BB' },
       requesterDocUrls: [],
       resultFileUrl: 'https://example.com/seed/results/jamb-result-ready.pdf',
       resultUploadedAt: new Date('2026-04-06T07:00:00.000Z'),
@@ -838,13 +788,12 @@ async function main() {
     create: {
       orderNumber: 'ZTR-SEED-READY-001',
       requesterId: individual.id,
+      tenantId: testTenant.id,
       serviceId: jambResultService.id,
       status: 'COMPLETED',
       deliveryMode: jambResultService.deliveryMode,
       fulfillmentType: jambResultService.fulfillmentType,
-      submittedData: {
-        registrationNumber: '202600000002BB',
-      },
+      submittedData: { registrationNumber: '202600000002BB' },
       requesterDocUrls: [],
       resultFileUrl: 'https://example.com/seed/results/jamb-result-ready.pdf',
       resultUploadedAt: new Date('2026-04-06T07:00:00.000Z'),
@@ -860,17 +809,17 @@ async function main() {
     },
   });
 
+  // Completed + disputed order (blocked from release)
   const seedBlockedReleaseOrder = await prisma.order.upsert({
     where: { orderNumber: 'ZTR-SEED-BLOCKED-001' },
     update: {
       requesterId: individual.id,
+      tenantId: testTenant.id,
       serviceId: jambResultService.id,
       status: 'COMPLETED',
       deliveryMode: jambResultService.deliveryMode,
       fulfillmentType: jambResultService.fulfillmentType,
-      submittedData: {
-        registrationNumber: '202600000003CC',
-      },
+      submittedData: { registrationNumber: '202600000003CC' },
       requesterDocUrls: [],
       resultFileUrl: 'https://example.com/seed/results/jamb-result-disputed.pdf',
       resultUploadedAt: new Date('2026-04-06T08:00:00.000Z'),
@@ -888,13 +837,12 @@ async function main() {
     create: {
       orderNumber: 'ZTR-SEED-BLOCKED-001',
       requesterId: individual.id,
+      tenantId: testTenant.id,
       serviceId: jambResultService.id,
       status: 'COMPLETED',
       deliveryMode: jambResultService.deliveryMode,
       fulfillmentType: jambResultService.fulfillmentType,
-      submittedData: {
-        registrationNumber: '202600000003CC',
-      },
+      submittedData: { registrationNumber: '202600000003CC' },
       requesterDocUrls: [],
       resultFileUrl: 'https://example.com/seed/results/jamb-result-disputed.pdf',
       resultUploadedAt: new Date('2026-04-06T08:00:00.000Z'),
@@ -922,6 +870,7 @@ async function main() {
       resolvedAt: null,
       redoDeadline: null,
       redoCompletedAt: null,
+      tenantId: testTenant.id,
     },
     create: {
       orderId: seedBlockedReleaseOrder.id,
@@ -929,9 +878,11 @@ async function main() {
       reason: 'Seeded dispute keeps this completed order out of the release queue.',
       evidenceUrls: ['https://example.com/seed/evidence/dispute-note.pdf'],
       status: 'OPEN',
+      tenantId: testTenant.id,
     },
   });
 
+  // Update individual wallet to reflect escrowed orders
   await prisma.wallet.update({
     where: { id: individualWallet.id },
     data: {
@@ -945,6 +896,7 @@ async function main() {
   await upsertSeedTransaction({
     walletId: individualWallet.id,
     userId: individual.id,
+    tenantId: testTenant.id,
     reference: 'SEED-IND-ESCROW-001',
     type: TransactionType.ESCROW_LOCK,
     amount: jambResultService.totalPrice,
@@ -956,6 +908,7 @@ async function main() {
   await upsertSeedTransaction({
     walletId: individualWallet.id,
     userId: individual.id,
+    tenantId: testTenant.id,
     reference: 'SEED-IND-ESCROW-002',
     type: TransactionType.ESCROW_LOCK,
     amount: jambResultService.totalPrice,
@@ -964,31 +917,10 @@ async function main() {
     description: 'Escrow locked for seeded JAMB result request awaiting release',
   });
 
-  await prisma.transaction.update({
-    where: { reference: 'SEED-IND-ESCROW-001' },
-    data: {
-      orderId: seedAssignedOrder.id,
-      metadata: {
-        orderNumber: seedAssignedOrder.orderNumber,
-        scope: 'seeded-order-link',
-      },
-    },
-  });
-
-  await prisma.transaction.update({
-    where: { reference: 'SEED-IND-ESCROW-002' },
-    data: {
-      orderId: seedReadyForReleaseOrder.id,
-      metadata: {
-        orderNumber: seedReadyForReleaseOrder.orderNumber,
-        scope: 'seeded-release-ready-order',
-      },
-    },
-  });
-
   await upsertSeedTransaction({
     walletId: individualWallet.id,
     userId: individual.id,
+    tenantId: testTenant.id,
     reference: 'SEED-IND-ESCROW-003',
     type: TransactionType.ESCROW_LOCK,
     amount: jambResultService.totalPrice,
@@ -997,36 +929,32 @@ async function main() {
     description: 'Escrow locked for seeded disputed JAMB result request',
   });
 
+  // Link transactions to orders
+  await prisma.transaction.update({
+    where: { reference: 'SEED-IND-ESCROW-001' },
+    data: { orderId: seedAssignedOrder.id, metadata: { orderNumber: seedAssignedOrder.orderNumber, scope: 'seeded-order-link' } },
+  });
+  await prisma.transaction.update({
+    where: { reference: 'SEED-IND-ESCROW-002' },
+    data: { orderId: seedReadyForReleaseOrder.id, metadata: { orderNumber: seedReadyForReleaseOrder.orderNumber, scope: 'seeded-release-ready-order' } },
+  });
   await prisma.transaction.update({
     where: { reference: 'SEED-IND-ESCROW-003' },
-    data: {
-      orderId: seedBlockedReleaseOrder.id,
-      metadata: {
-        orderNumber: seedBlockedReleaseOrder.orderNumber,
-        scope: 'seeded-blocked-release-order',
-      },
-    },
+    data: { orderId: seedBlockedReleaseOrder.id, metadata: { orderNumber: seedBlockedReleaseOrder.orderNumber, scope: 'seeded-blocked-release-order' } },
   });
 
-  await prisma.transaction.update({
-    where: { reference: 'SEED-CAFE-ESCROW-001' },
-    data: {
-      orderId: seedCafePendingOrder.id,
-      metadata: {
-        orderNumber: seedCafePendingOrder.orderNumber,
-        scope: 'seeded-order-link',
-      },
-    },
-  });
+  // Also link pending order escrow (if needed later)
+  void seedPendingOrder;
 
   // ── System Config ─────────────────────────────────────────────
 
   const configs = [
-    { key: 'DISPUTE_WINDOW_HOURS', value: '2', description: 'Hours after result upload before escrow auto-releases' },
-    { key: 'PLATFORM_MIN_WITHDRAWAL_KOBO', value: '100000', description: 'Minimum withdrawal amount in Kobo (₦1,000)' },
-    { key: 'MAINTENANCE_MODE', value: 'false', description: 'Set to true to put platform in maintenance mode' },
-    { key: 'MAX_PIN_ATTEMPTS', value: '5', description: 'Max wrong PIN attempts before lockout' },
-    { key: 'PIN_LOCKOUT_MINUTES', value: '15', description: 'PIN lockout duration in minutes' },
+    { key: 'DISPUTE_WINDOW_HOURS',         value: '2',       description: 'Hours after result upload before escrow auto-releases' },
+    { key: 'PLATFORM_COMMISSION_RATE',     value: '500',     description: 'Platform commission rate in basis points (500 = 5%)' },
+    { key: 'PLATFORM_MIN_WITHDRAWAL_KOBO', value: '100000',  description: 'Minimum withdrawal amount in Kobo (₦1,000)' },
+    { key: 'MAINTENANCE_MODE',             value: 'false',   description: 'Set to true to put platform in maintenance mode' },
+    { key: 'MAX_PIN_ATTEMPTS',             value: '5',       description: 'Max wrong PIN attempts before lockout' },
+    { key: 'PIN_LOCKOUT_MINUTES',          value: '15',      description: 'PIN lockout duration in minutes' },
   ];
 
   for (const c of configs) {
@@ -1040,10 +968,10 @@ async function main() {
   console.log('✅ Seed complete!');
   console.log('');
   console.log('Test accounts:');
-  console.log('  Super Admin : admin@zentry.ng      / Admin@Zentry2024!  PIN: 123456');
-  console.log('  Individual  : user@test.com        / Test@1234!         PIN: 123456');
-  console.log('  CBT Center  : cbt@test.com         / Test@1234!         PIN: 123456');
-  console.log('  Cyber Cafe  : cafe@test.com        / Test@1234!         PIN: 123456');
+  console.log('  Super Admin   : admin@zentry.ng   / Admin@Zentry2024!  PIN: 123456  (platform-level)');
+  console.log('  Tenant Admin  : tenant@test.com   / Test@1234!         PIN: 123456  (tenant: testbiz)');
+  console.log('  Individual    : user@test.com     / Test@1234!         PIN: 123456  (tenant: testbiz)');
+  console.log('  CBT Center    : cbt@test.com      / Test@1234!         PIN: 123456  (tenant: testbiz)');
 }
 
 main()

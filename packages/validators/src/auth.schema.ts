@@ -33,19 +33,6 @@ export const RegisterIndividualSchema = z
 
 export type RegisterIndividualInput = z.infer<typeof RegisterIndividualSchema>;
 
-export const RegisterCyberCafeSchema = RegisterIndividualSchema.innerType().extend({
-  businessName: z.string().min(2, 'Business name must be at least 2 characters').max(100),
-  address: z.string().min(10, 'Please provide a full address').max(255),
-  state: z.string().min(2).max(50),
-  cacNumber: z.string().max(50).optional(),
-  confirmPassword: z.string(),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: 'Passwords do not match',
-  path: ['confirmPassword'],
-});
-
-export type RegisterCyberCafeInput = z.infer<typeof RegisterCyberCafeSchema>;
-
 export const RegisterCbtSchema = RegisterIndividualSchema.innerType().extend({
   centerName: z.string().min(2, 'Center name must be at least 2 characters').max(100),
   licenseNumber: z.string().min(5, 'Invalid license number').max(50),

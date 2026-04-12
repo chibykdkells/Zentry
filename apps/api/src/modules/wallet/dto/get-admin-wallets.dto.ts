@@ -20,4 +20,8 @@ export class GetAdminWalletsQueryDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @IsOptional()
+  @IsString()
+  tenantId?: string;
 }

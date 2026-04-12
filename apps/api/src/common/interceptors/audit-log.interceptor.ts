@@ -15,7 +15,8 @@ import {
 } from '../decorators/audit.decorator';
 
 type AuditRequest = Request & {
-  user?: { sub?: string };
+  user?: { sub?: string; tenantId?: string | null };
+  tenant?: { id: string } | null;
   body?: unknown;
 };
 
@@ -130,8 +131,15 @@ export class AuditLogInterceptor implements NestInterceptor {
           return null;
         }
 
-        const user = await this.prisma.user.findUnique({
-          where: { email },
+        const user = await this.prisma.user.findFirst({
+          where: {
+            email,
+            ...(request.tenant?.id
+              ? { tenantId: request.tenant.id }
+              : request.user?.tenantId
+                ? { tenantId: request.user.tenantId }
+                : { tenantId: null }),
+          },
           select: { id: true },
         });
 

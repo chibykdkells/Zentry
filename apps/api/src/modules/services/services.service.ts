@@ -3,16 +3,26 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
-import { FulfillmentType, Prisma, ServiceDeliveryMode } from '@prisma/client';
+import {
+  FulfillmentType,
+  Prisma,
+  ProviderRolloutMode,
+  ServiceDeliveryMode,
+} from '@prisma/client';
 import { nairaToKobo } from '@zentry/utils';
 import { GetServiceCatalogQueryDto } from './dto/get-service-catalog.dto';
+import { UpdateVtuProviderConfigDto } from './dto/update-vtu-provider-config.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateServiceCategoryDto } from './dto/create-service-category.dto';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { GetAdminServicesQueryDto } from './dto/get-admin-services.dto';
 import { UpdateServiceCategoryDto } from './dto/update-service-category.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
+import { ProviderCredentialsService } from '../../providers/provider-credentials.service';
+import { VtuService } from '../../providers/vtu/vtu.service';
+import { RedisService } from '../redis/redis.service';
 
 type RequiredFieldDefinition = {
   name: string;
@@ -29,12 +39,63 @@ type RequiredDocumentDefinition = {
   description?: string;
 };
 
+type VtuIntegrationMeta = {
+  name: string;
+  mode: 'live' | 'mock';
+  cached: boolean;
+};
+
+type CableVerificationResponseData = {
+  success: boolean;
+  provider: string;
+  smartcardNumber: string;
+  customerName: string;
+  currentPlan?: string;
+  dueDate?: string;
+  status: 'VALID' | 'INVALID';
+  integration: VtuIntegrationMeta;
+};
+
+type ElectricityVerificationResponseData = {
+  success: boolean;
+  disco: string;
+  meterNumber: string;
+  meterType: 'PREPAID' | 'POSTPAID';
+  customerName: string;
+  address?: string;
+  status: 'VALID' | 'INVALID';
+  integration: VtuIntegrationMeta;
+};
+
+const PLATFORM_PROVIDER_SCOPE = {
+  scopeType: 'PLATFORM' as const,
+  scopeKey: 'platform',
+  label: 'Platform default',
+  tenantId: null as string | null,
+};
+
+type ProviderScopeContext = {
+  scopeType: 'PLATFORM' | 'TENANT';
+  scopeKey: string;
+  label: string;
+  tenantId: string | null;
+};
+
 @Injectable()
 export class ServicesService {
-  constructor(private readonly prisma: PrismaService) {}
+  private static readonly VTU_PLAN_CACHE_TTL_SECONDS = 300;
+  private static readonly VTU_VERIFICATION_CACHE_TTL_SECONDS = 120;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly vtuService: VtuService,
+    private readonly redisService: RedisService,
+    private readonly providerCredentialsService: ProviderCredentialsService,
+  ) {}
 
   async getAdminCategories() {
     const categories = await this.prisma.serviceCategoryModel.findMany({
+      where: { tenantId: null },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
       select: {
         id: true,
@@ -65,12 +126,661 @@ export class ServicesService {
     };
   }
 
+  async getProviderReadiness() {
+    return this.getScopedProviderReadiness(PLATFORM_PROVIDER_SCOPE);
+  }
+
+  async getTenantProviderReadiness(tenantId: string) {
+    return this.getScopedProviderReadiness({
+      scopeType: 'TENANT',
+      scopeKey: tenantId,
+      label: 'Tenant override',
+      tenantId,
+    });
+  }
+
+  async getTenantServiceManagementCatalog(
+    tenantId: string,
+    query: GetServiceCatalogQueryDto,
+  ) {
+    const trimmedSearch = query.search?.trim();
+    const tenantFilter = this.buildServiceVisibilityFilter(tenantId);
+    const categoryTenantFilter = this.buildCategoryVisibilityFilter(tenantId);
+    const where: Prisma.ServiceWhereInput = {
+      isActive: true,
+      ...tenantFilter,
+      ...(query.categorySlug ? { category: { slug: query.categorySlug } } : {}),
+      ...(trimmedSearch
+        ? {
+            OR: [
+              {
+                name: {
+                  contains: trimmedSearch,
+                  mode: Prisma.QueryMode.insensitive,
+                },
+              },
+              {
+                description: {
+                  contains: trimmedSearch,
+                  mode: Prisma.QueryMode.insensitive,
+                },
+              },
+              {
+                category: {
+                  name: {
+                    contains: trimmedSearch,
+                    mode: Prisma.QueryMode.insensitive,
+                  },
+                },
+              },
+            ],
+          }
+        : {}),
+    };
+
+    const [selectionState, categories, services] = await Promise.all([
+      this.getTenantServiceSelectionState(tenantId),
+      this.prisma.serviceCategoryModel.findMany({
+        where: { isActive: true, ...categoryTenantFilter },
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+        select: {
+          id: true,
+          tenantId: true,
+          name: true,
+          slug: true,
+          description: true,
+        },
+      }),
+      this.prisma.service.findMany({
+        where,
+        orderBy: [
+          { category: { sortOrder: 'asc' } },
+          { sortOrder: 'asc' },
+          { name: 'asc' },
+        ],
+        select: {
+          id: true,
+          tenantId: true,
+          name: true,
+          slug: true,
+          description: true,
+          deliveryMode: true,
+          fulfillmentType: true,
+          totalPrice: true,
+          cbtCommission: true,
+          requiredFields: true,
+          requiredDocuments: true,
+          category: {
+            select: {
+              id: true,
+              tenantId: true,
+              name: true,
+              slug: true,
+              description: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    const visibleServices = this.dedupeTenantScopedBySlug(services, tenantId);
+    const visibleCategories = this.buildCatalogCategories(
+      categories,
+      visibleServices,
+      tenantId,
+    );
+    const selectedSlugs = selectionState.selectedServiceSlugs;
+
+    return {
+      message: 'Tenant service management catalog retrieved',
+      data: {
+        selection: {
+          usesCustomSelection: selectionState.usesCustomSelection,
+          selectedServiceSlugs: Array.from(selectedSlugs),
+          selectedCount: selectionState.usesCustomSelection
+            ? selectedSlugs.size
+            : visibleServices.length,
+          visibleCount: visibleServices.length,
+        },
+        categories: visibleCategories.map((category) => ({
+          id: category.id,
+          name: category.name,
+          slug: category.slug,
+          description: category.description,
+          serviceCount: category.serviceCount,
+        })),
+        services: visibleServices.map((service) => ({
+          id: service.id,
+          name: service.name,
+          slug: service.slug,
+          description: service.description,
+          deliveryMode: service.deliveryMode,
+          fulfillmentType: service.fulfillmentType,
+          totalPrice: service.totalPrice.toString(),
+          cbtCommission: service.cbtCommission.toString(),
+          requiredFieldsCount: Array.isArray(service.requiredFields)
+            ? service.requiredFields.length
+            : 0,
+          requiredDocumentsCount: Array.isArray(service.requiredDocuments)
+            ? service.requiredDocuments.length
+            : 0,
+          eta: this.getEtaForDeliveryMode(service.deliveryMode),
+          isSelected: selectionState.usesCustomSelection
+            ? selectedSlugs.has(service.slug)
+            : true,
+          category: {
+            id: service.category.id,
+            name: service.category.name,
+            slug: service.category.slug,
+            description: service.category.description,
+          },
+        })),
+        filters: {
+          search: trimmedSearch ?? null,
+          categorySlug: query.categorySlug ?? null,
+        },
+      },
+    };
+  }
+
+  async updateTenantServiceSelection(
+    tenantId: string,
+    input: {
+      usesCustomSelection: boolean;
+      selectedServiceSlugs: string[];
+    },
+  ) {
+    const normalizedSlugs = Array.from(
+      new Set(
+        (input.selectedServiceSlugs ?? [])
+          .map((slug) => slug.trim().toLowerCase())
+          .filter(Boolean),
+      ),
+    );
+
+    const visibleServices = this.dedupeTenantScopedBySlug(
+      await this.prisma.service.findMany({
+        where: {
+          isActive: true,
+          ...this.buildServiceVisibilityFilter(tenantId),
+        },
+        select: {
+          slug: true,
+          tenantId: true,
+        },
+      }),
+      tenantId,
+    );
+    const visibleSlugs = new Set(
+      visibleServices.map((service) => service.slug),
+    );
+    const invalidSlugs = normalizedSlugs.filter(
+      (slug) => !visibleSlugs.has(slug),
+    );
+
+    if (invalidSlugs.length > 0) {
+      throw new BadRequestException(
+        `These services are not available to this business: ${invalidSlugs.join(', ')}`,
+      );
+    }
+
+    if (input.usesCustomSelection && normalizedSlugs.length === 0) {
+      throw new BadRequestException(
+        'Choose at least one service before saving a custom service lineup.',
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.tenant.update({
+        where: { id: tenantId },
+        data: {
+          usesCustomServiceSelection: input.usesCustomSelection,
+        },
+      });
+
+      await tx.tenantServiceSelection.deleteMany({
+        where: { tenantId },
+      });
+
+      if (input.usesCustomSelection && normalizedSlugs.length > 0) {
+        await tx.tenantServiceSelection.createMany({
+          data: normalizedSlugs.map((serviceSlug) => ({
+            tenantId,
+            serviceSlug,
+          })),
+        });
+      }
+    });
+
+    return this.getTenantServiceManagementCatalog(tenantId, {});
+  }
+
+  private async getScopedProviderReadiness(scope: ProviderScopeContext) {
+    const savedConfig = await this.prisma.platformProviderConfig.findUnique({
+      where: {
+        providerType_providerKey_scopeType_scopeKey: {
+          providerType: 'VTU',
+          providerKey: 'PROVIDER_ONE',
+          scopeType: scope.scopeType,
+          scopeKey: scope.scopeKey,
+        },
+      },
+      select: {
+        scopeType: true,
+        scopeKey: true,
+        isEnabled: true,
+        rolloutMode: true,
+        baseUrl: true,
+        apiKeyLast4: true,
+        apiKeyEncrypted: true,
+        apiKeyHeader: true,
+        apiKeyPrefix: true,
+        healthPath: true,
+        airtimePath: true,
+        dataPurchasePath: true,
+        dataPlansPath: true,
+        cablePlansPath: true,
+        cableVerifyPath: true,
+        cablePurchasePath: true,
+        electricityVerifyPath: true,
+        electricityPurchasePath: true,
+        notes: true,
+        lastValidatedAt: true,
+        lastValidationStatus: true,
+        lastValidationMessage: true,
+      },
+    });
+    const validationHistory =
+      await this.prisma.providerValidationEvent.findMany({
+        where: {
+          providerType: 'VTU',
+          providerKey: 'PROVIDER_ONE',
+          scopeType: scope.scopeType,
+          scopeKey: scope.scopeKey,
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 6,
+        select: {
+          id: true,
+          rolloutMode: true,
+          effectiveMode: true,
+          probeStatus: true,
+          probeMessage: true,
+          missingConfig: true,
+          endpointBaseUrl: true,
+          createdAt: true,
+        },
+      });
+
+    const automatedServices = await this.prisma.service.findMany({
+      where: {
+        ...this.buildServiceVisibilityFilter(scope.tenantId),
+        deliveryMode: ServiceDeliveryMode.API_AUTOMATED,
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        name: true,
+        slug: true,
+        providerKey: true,
+        category: {
+          select: {
+            name: true,
+            slug: true,
+          },
+        },
+      },
+      orderBy: [{ category: { sortOrder: 'asc' } }, { name: 'asc' }],
+    });
+
+    const visibleAutomatedServices = scope.tenantId
+      ? this.dedupeTenantScopedBySlug(automatedServices, scope.tenantId)
+      : automatedServices;
+
+    const readiness = await this.vtuService.getReadiness({
+      tenantId: scope.tenantId,
+    });
+
+    return {
+      message: 'Provider readiness retrieved',
+      data: {
+        vtu: readiness,
+        scope: {
+          type: scope.scopeType,
+          key: scope.scopeKey,
+          label: scope.label,
+          tenantReady: true,
+          effectiveType: readiness.resolvedScope.type,
+          effectiveKey: readiness.resolvedScope.key,
+        },
+        savedConfig: savedConfig
+          ? {
+              scopeType: savedConfig.scopeType,
+              scopeKey: savedConfig.scopeKey,
+              isEnabled: savedConfig.isEnabled,
+              rolloutMode: savedConfig.rolloutMode,
+              baseUrl: savedConfig.baseUrl,
+              apiKeyConfigured: Boolean(savedConfig.apiKeyEncrypted),
+              apiKeyLast4: savedConfig.apiKeyLast4,
+              apiKeyHeader: savedConfig.apiKeyHeader,
+              apiKeyPrefix: savedConfig.apiKeyPrefix,
+              healthPath: savedConfig.healthPath,
+              airtimePath: savedConfig.airtimePath,
+              dataPurchasePath: savedConfig.dataPurchasePath,
+              dataPlansPath: savedConfig.dataPlansPath,
+              cablePlansPath: savedConfig.cablePlansPath,
+              cableVerifyPath: savedConfig.cableVerifyPath,
+              cablePurchasePath: savedConfig.cablePurchasePath,
+              electricityVerifyPath: savedConfig.electricityVerifyPath,
+              electricityPurchasePath: savedConfig.electricityPurchasePath,
+              notes: savedConfig.notes,
+              lastValidatedAt: savedConfig.lastValidatedAt,
+              lastValidationStatus: savedConfig.lastValidationStatus,
+              lastValidationMessage: savedConfig.lastValidationMessage,
+            }
+          : null,
+        validationHistory: validationHistory.map((event) => ({
+          id: event.id,
+          rolloutMode: event.rolloutMode,
+          effectiveMode: event.effectiveMode,
+          probeStatus: event.probeStatus,
+          probeMessage: event.probeMessage,
+          missingConfig: Array.isArray(event.missingConfig)
+            ? event.missingConfig
+            : [],
+          endpointBaseUrl: event.endpointBaseUrl,
+          createdAt: event.createdAt,
+        })),
+        cache: {
+          planTtlSeconds: ServicesService.VTU_PLAN_CACHE_TTL_SECONDS,
+          verificationTtlSeconds:
+            ServicesService.VTU_VERIFICATION_CACHE_TTL_SECONDS,
+        },
+        automatedServices: visibleAutomatedServices.map((service) => ({
+          id: service.id,
+          name: service.name,
+          slug: service.slug,
+          providerKey: service.providerKey,
+          category: service.category,
+        })),
+      },
+    };
+  }
+
+  async updateVtuProviderConfig(dto: UpdateVtuProviderConfigDto) {
+    return this.updateScopedVtuProviderConfig(dto, PLATFORM_PROVIDER_SCOPE);
+  }
+
+  async updateTenantVtuProviderConfig(
+    tenantId: string,
+    dto: UpdateVtuProviderConfigDto,
+  ) {
+    return this.updateScopedVtuProviderConfig(dto, {
+      scopeType: 'TENANT',
+      scopeKey: tenantId,
+      label: 'Tenant override',
+      tenantId,
+    });
+  }
+
+  private async updateScopedVtuProviderConfig(
+    dto: UpdateVtuProviderConfigDto,
+    scope: ProviderScopeContext,
+  ) {
+    const existing = await this.prisma.platformProviderConfig.findUnique({
+      where: {
+        providerType_providerKey_scopeType_scopeKey: {
+          providerType: 'VTU',
+          providerKey: 'PROVIDER_ONE',
+          scopeType: scope.scopeType,
+          scopeKey: scope.scopeKey,
+        },
+      },
+    });
+
+    const apiKey = dto.apiKey?.trim();
+    const updateData: Prisma.PlatformProviderConfigUncheckedUpdateInput = {
+      ...(dto.isEnabled !== undefined ? { isEnabled: dto.isEnabled } : {}),
+      ...(dto.rolloutMode
+        ? { rolloutMode: dto.rolloutMode as ProviderRolloutMode }
+        : {}),
+      ...(dto.baseUrl !== undefined
+        ? { baseUrl: this.normalizeNullableString(dto.baseUrl) }
+        : {}),
+      ...(dto.apiKeyHeader !== undefined
+        ? { apiKeyHeader: this.normalizeNullableString(dto.apiKeyHeader) }
+        : {}),
+      ...(dto.apiKeyPrefix !== undefined
+        ? { apiKeyPrefix: this.normalizeNullableString(dto.apiKeyPrefix) }
+        : {}),
+      ...(dto.healthPath !== undefined
+        ? { healthPath: this.normalizePath(dto.healthPath) }
+        : {}),
+      ...(dto.airtimePath !== undefined
+        ? { airtimePath: this.normalizePath(dto.airtimePath) }
+        : {}),
+      ...(dto.dataPurchasePath !== undefined
+        ? { dataPurchasePath: this.normalizePath(dto.dataPurchasePath) }
+        : {}),
+      ...(dto.dataPlansPath !== undefined
+        ? { dataPlansPath: this.normalizePath(dto.dataPlansPath) }
+        : {}),
+      ...(dto.cablePlansPath !== undefined
+        ? { cablePlansPath: this.normalizePath(dto.cablePlansPath) }
+        : {}),
+      ...(dto.cableVerifyPath !== undefined
+        ? { cableVerifyPath: this.normalizePath(dto.cableVerifyPath) }
+        : {}),
+      ...(dto.cablePurchasePath !== undefined
+        ? { cablePurchasePath: this.normalizePath(dto.cablePurchasePath) }
+        : {}),
+      ...(dto.electricityVerifyPath !== undefined
+        ? {
+            electricityVerifyPath: this.normalizePath(
+              dto.electricityVerifyPath,
+            ),
+          }
+        : {}),
+      ...(dto.electricityPurchasePath !== undefined
+        ? {
+            electricityPurchasePath: this.normalizePath(
+              dto.electricityPurchasePath,
+            ),
+          }
+        : {}),
+      ...(dto.notes !== undefined
+        ? { notes: this.normalizeNullableString(dto.notes) }
+        : {}),
+      lastValidatedAt: null,
+      lastValidationStatus: null,
+      lastValidationMessage: null,
+    };
+
+    if (apiKey) {
+      updateData.apiKeyEncrypted =
+        this.providerCredentialsService.encrypt(apiKey);
+      updateData.apiKeyLast4 = this.providerCredentialsService.mask(apiKey);
+    } else if (dto.clearApiKey) {
+      updateData.apiKeyEncrypted = null;
+      updateData.apiKeyLast4 = null;
+    }
+
+    await this.prisma.platformProviderConfig.upsert({
+      where: {
+        providerType_providerKey_scopeType_scopeKey: {
+          providerType: 'VTU',
+          providerKey: 'PROVIDER_ONE',
+          scopeType: scope.scopeType,
+          scopeKey: scope.scopeKey,
+        },
+      },
+      update: updateData,
+      create: {
+        providerType: 'VTU',
+        providerKey: 'PROVIDER_ONE',
+        scopeType: scope.scopeType,
+        scopeKey: scope.scopeKey,
+        displayName:
+          scope.scopeType === 'TENANT'
+            ? 'Tenant VTU Provider One'
+            : 'Provider One VTU',
+        isEnabled: dto.isEnabled ?? existing?.isEnabled ?? true,
+        rolloutMode:
+          (dto.rolloutMode as ProviderRolloutMode | undefined) ??
+          ProviderRolloutMode.AUTO,
+        baseUrl:
+          dto.baseUrl !== undefined
+            ? this.normalizeNullableString(dto.baseUrl)
+            : null,
+        apiKeyEncrypted: apiKey
+          ? this.providerCredentialsService.encrypt(apiKey)
+          : null,
+        apiKeyLast4: apiKey
+          ? this.providerCredentialsService.mask(apiKey)
+          : null,
+        apiKeyHeader:
+          dto.apiKeyHeader !== undefined
+            ? this.normalizeNullableString(dto.apiKeyHeader)
+            : null,
+        apiKeyPrefix:
+          dto.apiKeyPrefix !== undefined
+            ? this.normalizeNullableString(dto.apiKeyPrefix)
+            : null,
+        healthPath:
+          dto.healthPath !== undefined
+            ? this.normalizePath(dto.healthPath)
+            : null,
+        airtimePath:
+          dto.airtimePath !== undefined
+            ? this.normalizePath(dto.airtimePath)
+            : null,
+        dataPurchasePath:
+          dto.dataPurchasePath !== undefined
+            ? this.normalizePath(dto.dataPurchasePath)
+            : null,
+        dataPlansPath:
+          dto.dataPlansPath !== undefined
+            ? this.normalizePath(dto.dataPlansPath)
+            : null,
+        cablePlansPath:
+          dto.cablePlansPath !== undefined
+            ? this.normalizePath(dto.cablePlansPath)
+            : null,
+        cableVerifyPath:
+          dto.cableVerifyPath !== undefined
+            ? this.normalizePath(dto.cableVerifyPath)
+            : null,
+        cablePurchasePath:
+          dto.cablePurchasePath !== undefined
+            ? this.normalizePath(dto.cablePurchasePath)
+            : null,
+        electricityVerifyPath:
+          dto.electricityVerifyPath !== undefined
+            ? this.normalizePath(dto.electricityVerifyPath)
+            : null,
+        electricityPurchasePath:
+          dto.electricityPurchasePath !== undefined
+            ? this.normalizePath(dto.electricityPurchasePath)
+            : null,
+        notes:
+          dto.notes !== undefined
+            ? this.normalizeNullableString(dto.notes)
+            : null,
+      },
+    });
+
+    const readiness = await this.getScopedProviderReadiness(scope);
+
+    return {
+      message: 'VTU provider settings updated successfully.',
+      data: readiness.data,
+    };
+  }
+
+  async validateVtuProviderConfig() {
+    return this.validateScopedVtuProviderConfig(PLATFORM_PROVIDER_SCOPE);
+  }
+
+  async validateTenantVtuProviderConfig(tenantId: string) {
+    return this.validateScopedVtuProviderConfig({
+      scopeType: 'TENANT',
+      scopeKey: tenantId,
+      label: 'Tenant override',
+      tenantId,
+    });
+  }
+
+  private async validateScopedVtuProviderConfig(scope: ProviderScopeContext) {
+    const readiness = await this.vtuService.getReadiness({
+      tenantId: scope.tenantId,
+    });
+    const probeStatus = readiness.probe.status;
+    const probeMessage = readiness.probe.message;
+
+    const config = await this.prisma.platformProviderConfig.upsert({
+      where: {
+        providerType_providerKey_scopeType_scopeKey: {
+          providerType: 'VTU',
+          providerKey: 'PROVIDER_ONE',
+          scopeType: scope.scopeType,
+          scopeKey: scope.scopeKey,
+        },
+      },
+      update: {
+        lastValidatedAt: new Date(readiness.probe.checkedAt),
+        lastValidationStatus: probeStatus,
+        lastValidationMessage: probeMessage,
+      },
+      create: {
+        providerType: 'VTU',
+        providerKey: 'PROVIDER_ONE',
+        scopeType: scope.scopeType,
+        scopeKey: scope.scopeKey,
+        displayName:
+          scope.scopeType === 'TENANT'
+            ? 'Tenant VTU Provider One'
+            : 'Provider One VTU',
+        lastValidatedAt: new Date(readiness.probe.checkedAt),
+        lastValidationStatus: probeStatus,
+        lastValidationMessage: probeMessage,
+      },
+      select: { id: true, rolloutMode: true, baseUrl: true },
+    });
+
+    await this.prisma.providerValidationEvent.create({
+      data: {
+        providerConfigId: config.id,
+        providerType: 'VTU',
+        providerKey: 'PROVIDER_ONE',
+        scopeType: scope.scopeType,
+        scopeKey: scope.scopeKey,
+        rolloutMode: config.rolloutMode,
+        effectiveMode: readiness.mode,
+        probeStatus,
+        probeMessage,
+        missingConfig: readiness.missingConfig,
+        endpointBaseUrl: config.baseUrl,
+      },
+    });
+
+    const refreshed = await this.getScopedProviderReadiness(scope);
+
+    return {
+      message:
+        probeStatus === 'healthy'
+          ? 'VTU provider validation completed successfully.'
+          : 'VTU provider validation completed with warnings.',
+      data: refreshed.data,
+    };
+  }
+
   async getAdminServices(query: GetAdminServicesQueryDto) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 12;
     const search = query.search?.trim();
 
     const where: Prisma.ServiceWhereInput = {
+      tenantId: null,
       ...(typeof query.isActive === 'boolean'
         ? { isActive: query.isActive }
         : {}),
@@ -116,21 +826,25 @@ export class ServicesService {
       categories,
       services,
     ] = await this.prisma.$transaction([
-      this.prisma.service.count(),
-      this.prisma.service.count({ where: { isActive: true } }),
+      this.prisma.service.count({ where: { tenantId: null } }),
+      this.prisma.service.count({ where: { tenantId: null, isActive: true } }),
       this.prisma.service.count({
-        where: { fulfillmentType: FulfillmentType.MANUAL },
+        where: { tenantId: null, fulfillmentType: FulfillmentType.MANUAL },
       }),
       this.prisma.service.count({
-        where: { fulfillmentType: FulfillmentType.AUTOMATED },
+        where: { tenantId: null, fulfillmentType: FulfillmentType.AUTOMATED },
       }),
       this.prisma.service.count({
-        where: { deliveryMode: ServiceDeliveryMode.API_AUTOMATED },
+        where: {
+          tenantId: null,
+          deliveryMode: ServiceDeliveryMode.API_AUTOMATED,
+        },
       }),
       this.prisma.service.count({
-        where: { deliveryMode: ServiceDeliveryMode.PIN_STOCK },
+        where: { tenantId: null, deliveryMode: ServiceDeliveryMode.PIN_STOCK },
       }),
       this.prisma.serviceCategoryModel.findMany({
+        where: { tenantId: null },
         orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
         select: {
           id: true,
@@ -220,8 +934,8 @@ export class ServicesService {
 
   async createCategory(dto: CreateServiceCategoryDto) {
     const normalizedSlug = this.normalizeSlug(dto.slug);
-    const existing = await this.prisma.serviceCategoryModel.findUnique({
-      where: { slug: normalizedSlug },
+    const existing = await this.prisma.serviceCategoryModel.findFirst({
+      where: { slug: normalizedSlug, tenantId: null },
       select: { id: true },
     });
 
@@ -233,6 +947,7 @@ export class ServicesService {
       data: {
         name: dto.name.trim(),
         slug: normalizedSlug,
+        tenantId: null,
         description: dto.description?.trim() || null,
         sortOrder: dto.sortOrder ?? 0,
         isActive: dto.isActive ?? true,
@@ -266,8 +981,8 @@ export class ServicesService {
     await this.ensureCategoryExists(id);
 
     if (dto.slug) {
-      const existing = await this.prisma.serviceCategoryModel.findUnique({
-        where: { slug: this.normalizeSlug(dto.slug) },
+      const existing = await this.prisma.serviceCategoryModel.findFirst({
+        where: { slug: this.normalizeSlug(dto.slug), tenantId: null },
         select: { id: true },
       });
 
@@ -322,6 +1037,7 @@ export class ServicesService {
     const service = await this.prisma.service.create({
       data: {
         categoryId: dto.categoryId,
+        tenantId: null,
         name: dto.name.trim(),
         slug: this.normalizeSlug(dto.slug),
         description: dto.description?.trim() || null,
@@ -376,8 +1092,8 @@ export class ServicesService {
   }
 
   async updateService(id: string, dto: UpdateServiceDto) {
-    const existingService = await this.prisma.service.findUnique({
-      where: { id },
+    const existingService = await this.prisma.service.findFirst({
+      where: { id, tenantId: null },
       select: { id: true, deliveryMode: true },
     });
 
@@ -477,10 +1193,12 @@ export class ServicesService {
     };
   }
 
-  async getCatalog(query: GetServiceCatalogQueryDto) {
+  async getCatalog(query: GetServiceCatalogQueryDto, tenantId: string | null) {
     const trimmedSearch = query.search?.trim();
+    const tenantFilter = this.buildServiceVisibilityFilter(tenantId);
     const where: Prisma.ServiceWhereInput = {
       isActive: true,
+      ...tenantFilter,
       ...(query.categorySlug ? { category: { slug: query.categorySlug } } : {}),
       ...(trimmedSearch
         ? {
@@ -510,19 +1228,18 @@ export class ServicesService {
         : {}),
     };
 
-    const [categories, services] = await this.prisma.$transaction([
+    const categoryTenantFilter = this.buildCategoryVisibilityFilter(tenantId);
+    const [selectionState, categories, services] = await Promise.all([
+      tenantId ? this.getTenantServiceSelectionState(tenantId) : null,
       this.prisma.serviceCategoryModel.findMany({
-        where: { isActive: true },
+        where: { isActive: true, ...categoryTenantFilter },
         orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
         select: {
           id: true,
+          tenantId: true,
           name: true,
           slug: true,
           description: true,
-          services: {
-            where: { isActive: true },
-            select: { id: true },
-          },
         },
       }),
       this.prisma.service.findMany({
@@ -534,6 +1251,7 @@ export class ServicesService {
         ],
         select: {
           id: true,
+          tenantId: true,
           name: true,
           slug: true,
           description: true,
@@ -546,6 +1264,7 @@ export class ServicesService {
           category: {
             select: {
               id: true,
+              tenantId: true,
               name: true,
               slug: true,
               description: true,
@@ -555,17 +1274,33 @@ export class ServicesService {
       }),
     ]);
 
+    const visibleServices = this.dedupeTenantScopedBySlug(services, tenantId);
+    const hasActiveCustomSelection =
+      tenantId &&
+      selectionState?.usesCustomSelection &&
+      selectionState.selectedServiceSlugs.size > 0;
+    const selectedVisibleServices = hasActiveCustomSelection
+      ? visibleServices.filter((service) =>
+          selectionState.selectedServiceSlugs.has(service.slug),
+        )
+      : visibleServices;
+    const visibleCategories = this.buildCatalogCategories(
+      categories,
+      selectedVisibleServices,
+      tenantId,
+    );
+
     return {
       message: 'Service catalog retrieved',
       data: {
-        categories: categories.map((category) => ({
+        categories: visibleCategories.map((category) => ({
           id: category.id,
           name: category.name,
           slug: category.slug,
           description: category.description,
-          serviceCount: category.services.length,
+          serviceCount: category.serviceCount,
         })),
-        services: services.map((service) => ({
+        services: selectedVisibleServices.map((service) => ({
           id: service.id,
           name: service.name,
           slug: service.slug,
@@ -599,6 +1334,343 @@ export class ServicesService {
           categorySlug: query.categorySlug ?? null,
         },
       },
+    };
+  }
+
+  async getVtuDataPlans(serviceId: string, tenantId: string | null) {
+    const service = await this.getAutomatedVtuService(
+      serviceId,
+      'vtu-data',
+      tenantId,
+    );
+    const cacheKey = `vtu:data-plans:${this.getTenantCacheScope(tenantId)}:${this.vtuService.providerName}:${service.providerKey}`;
+    const cached = await this.getCachedValue<{
+      plans: {
+        code: string;
+        name: string;
+        amountKobo: string;
+        validity: string;
+      }[];
+    }>(cacheKey);
+
+    if (cached) {
+      const integration = await this.getVtuProviderMeta(true, tenantId);
+      return {
+        message: 'VTU data plans retrieved',
+        data: {
+          serviceId: service.id,
+          serviceName: service.name,
+          network: service.providerKey,
+          plans: cached.plans,
+          provider: integration,
+        },
+      };
+    }
+
+    const plans = await this.runVtuOperation(() =>
+      this.vtuService.getDataPlans(service.providerKey, tenantId),
+    );
+    const mappedPlans = plans.map((plan) => ({
+      code: plan.code,
+      name: plan.name,
+      amountKobo: plan.amountKobo.toString(),
+      validity: plan.validity,
+    }));
+
+    await this.setCachedValue(
+      cacheKey,
+      { plans: mappedPlans },
+      ServicesService.VTU_PLAN_CACHE_TTL_SECONDS,
+    );
+
+    const integration = await this.getVtuProviderMeta(false, tenantId);
+
+    return {
+      message: 'VTU data plans retrieved',
+      data: {
+        serviceId: service.id,
+        serviceName: service.name,
+        network: service.providerKey,
+        plans: mappedPlans,
+        provider: integration,
+      },
+    };
+  }
+
+  async getVtuCablePlans(serviceId: string, tenantId: string | null) {
+    const service = await this.getAutomatedVtuService(
+      serviceId,
+      'vtu-cable',
+      tenantId,
+    );
+    const cacheKey = `vtu:cable-plans:${this.getTenantCacheScope(tenantId)}:${this.vtuService.providerName}:${service.providerKey}`;
+    const cached = await this.getCachedValue<{
+      plans: {
+        code: string;
+        name: string;
+        amountKobo: string;
+        duration: string;
+      }[];
+    }>(cacheKey);
+
+    if (cached) {
+      const integration = await this.getVtuProviderMeta(true, tenantId);
+      return {
+        message: 'VTU cable plans retrieved',
+        data: {
+          serviceId: service.id,
+          serviceName: service.name,
+          provider: service.providerKey,
+          plans: cached.plans,
+          integration,
+        },
+      };
+    }
+
+    const plans = await this.runVtuOperation(() =>
+      this.vtuService.getCablePlans(service.providerKey, tenantId),
+    );
+    const mappedPlans = plans.map((plan) => ({
+      code: plan.code,
+      name: plan.name,
+      amountKobo: plan.amountKobo.toString(),
+      duration: plan.duration,
+    }));
+
+    await this.setCachedValue(
+      cacheKey,
+      { plans: mappedPlans },
+      ServicesService.VTU_PLAN_CACHE_TTL_SECONDS,
+    );
+
+    const integration = await this.getVtuProviderMeta(false, tenantId);
+
+    return {
+      message: 'VTU cable plans retrieved',
+      data: {
+        serviceId: service.id,
+        serviceName: service.name,
+        provider: service.providerKey,
+        plans: mappedPlans,
+        integration,
+      },
+    };
+  }
+
+  async verifyVtuCable(
+    serviceId: string,
+    smartcardNumber: string,
+    tenantId: string | null,
+  ) {
+    const service = await this.getAutomatedVtuService(
+      serviceId,
+      'vtu-cable',
+      tenantId,
+    );
+    const normalizedSmartcardNumber = smartcardNumber.trim();
+
+    if (normalizedSmartcardNumber.length < 6) {
+      throw new BadRequestException(
+        'Please enter a valid smartcard or IUC number.',
+      );
+    }
+
+    const cacheKey = `vtu:cable-verify:${this.getTenantCacheScope(tenantId)}:${this.vtuService.providerName}:${service.providerKey}:${normalizedSmartcardNumber}`;
+    const cached =
+      await this.getCachedValue<CableVerificationResponseData>(cacheKey);
+
+    if (cached) {
+      const integration = await this.getVtuProviderMeta(true, tenantId);
+      return {
+        message: 'Cable smartcard verified',
+        data: {
+          ...cached,
+          integration,
+        },
+      };
+    }
+
+    const verification = await this.runVtuOperation(() =>
+      this.vtuService.verifyCableSmartcard({
+        provider: service.providerKey,
+        smartcardNumber: normalizedSmartcardNumber,
+        tenantId,
+      }),
+    );
+
+    if (!verification.success || verification.status !== 'VALID') {
+      throw new BadRequestException(
+        'We could not verify this smartcard number right now.',
+      );
+    }
+
+    const responseData = {
+      ...verification,
+      integration: await this.getVtuProviderMeta(false, tenantId),
+    };
+
+    await this.setCachedValue(
+      cacheKey,
+      responseData,
+      ServicesService.VTU_VERIFICATION_CACHE_TTL_SECONDS,
+    );
+
+    return {
+      message: 'Cable smartcard verified',
+      data: responseData,
+    };
+  }
+
+  async verifyVtuElectricity(
+    serviceId: string,
+    input: { meterNumber: string; meterType: string },
+    tenantId: string | null,
+  ) {
+    const service = await this.getAutomatedVtuService(
+      serviceId,
+      'vtu-electricity',
+      tenantId,
+    );
+    const meterNumber = input.meterNumber.trim();
+    const meterType = input.meterType.trim().toUpperCase();
+
+    if (meterNumber.length < 6) {
+      throw new BadRequestException('Please enter a valid meter number.');
+    }
+
+    if (meterType !== 'PREPAID' && meterType !== 'POSTPAID') {
+      throw new BadRequestException(
+        'Please choose either prepaid or postpaid meter type.',
+      );
+    }
+
+    const cacheKey = `vtu:electricity-verify:${this.getTenantCacheScope(tenantId)}:${this.vtuService.providerName}:${service.providerKey}:${meterType}:${meterNumber}`;
+    const cached =
+      await this.getCachedValue<ElectricityVerificationResponseData>(cacheKey);
+
+    if (cached) {
+      const integration = await this.getVtuProviderMeta(true, tenantId);
+      return {
+        message: 'Electricity meter verified',
+        data: {
+          ...cached,
+          integration,
+        },
+      };
+    }
+
+    const verification = await this.runVtuOperation(() =>
+      this.vtuService.verifyElectricityMeter({
+        disco: service.providerKey,
+        meterNumber,
+        meterType,
+        tenantId,
+      }),
+    );
+
+    if (!verification.success || verification.status !== 'VALID') {
+      throw new BadRequestException(
+        'We could not verify this meter number right now.',
+      );
+    }
+
+    const responseData = {
+      ...verification,
+      integration: await this.getVtuProviderMeta(false, tenantId),
+    };
+
+    await this.setCachedValue(
+      cacheKey,
+      responseData,
+      ServicesService.VTU_VERIFICATION_CACHE_TTL_SECONDS,
+    );
+
+    return {
+      message: 'Electricity meter verified',
+      data: responseData,
+    };
+  }
+
+  private async getVtuProviderMeta(cached: boolean, tenantId?: string | null) {
+    const readiness = await this.vtuService.getReadiness({ tenantId });
+
+    return {
+      name: readiness.providerName,
+      mode: readiness.mode,
+      cached,
+    };
+  }
+
+  private async getCachedValue<T>(key: string): Promise<T | null> {
+    try {
+      return await this.redisService.getJson<T>(key);
+    } catch {
+      return null;
+    }
+  }
+
+  private async setCachedValue(
+    key: string,
+    value: unknown,
+    ttlSeconds: number,
+  ): Promise<void> {
+    try {
+      await this.redisService.setJson(key, value, ttlSeconds);
+    } catch {
+      // Intentionally allow VTU reads to continue even if cache writes fail.
+    }
+  }
+
+  private async runVtuOperation<T>(operation: () => Promise<T>) {
+    try {
+      return await operation();
+    } catch {
+      throw new ServiceUnavailableException(
+        'This provider service is temporarily unavailable. Please try again shortly.',
+      );
+    }
+  }
+
+  private async getAutomatedVtuService(
+    serviceId: string,
+    categorySlug: 'vtu-data' | 'vtu-cable' | 'vtu-electricity',
+    tenantId: string | null,
+  ) {
+    const service = await this.prisma.service.findFirst({
+      where: {
+        id: serviceId,
+        ...this.buildServiceVisibilityFilter(tenantId),
+      },
+      select: {
+        id: true,
+        name: true,
+        providerKey: true,
+        deliveryMode: true,
+        category: {
+          select: {
+            slug: true,
+          },
+        },
+      },
+    });
+
+    if (!service) {
+      throw new NotFoundException('Service not found.');
+    }
+
+    if (
+      service.deliveryMode !== ServiceDeliveryMode.API_AUTOMATED ||
+      service.category.slug !== categorySlug ||
+      !service.providerKey
+    ) {
+      throw new BadRequestException(
+        'This service is not available for this automated VTU action.',
+      );
+    }
+
+    return {
+      ...service,
+      providerKey: service.providerKey,
     };
   }
 
@@ -665,8 +1737,8 @@ export class ServicesService {
   }
 
   private async ensureCategoryExists(id: string) {
-    const category = await this.prisma.serviceCategoryModel.findUnique({
-      where: { id },
+    const category = await this.prisma.serviceCategoryModel.findFirst({
+      where: { id, tenantId: null },
       select: { id: true },
     });
 
@@ -676,8 +1748,8 @@ export class ServicesService {
   }
 
   private async ensureServiceExists(id: string) {
-    const service = await this.prisma.service.findUnique({
-      where: { id },
+    const service = await this.prisma.service.findFirst({
+      where: { id, tenantId: null },
       select: { id: true },
     });
 
@@ -687,14 +1759,112 @@ export class ServicesService {
   }
 
   private async ensureUniqueServiceSlug(slug: string, currentId?: string) {
-    const service = await this.prisma.service.findUnique({
-      where: { slug },
+    const service = await this.prisma.service.findFirst({
+      where: { slug, tenantId: null },
       select: { id: true },
     });
 
     if (service && service.id !== currentId) {
       throw new ConflictException('A service with that slug already exists.');
     }
+  }
+
+  private buildServiceVisibilityFilter(tenantId: string | null) {
+    return tenantId
+      ? ({
+          OR: [{ tenantId: null }, { tenantId }],
+        } satisfies Prisma.ServiceWhereInput)
+      : ({ tenantId: null } satisfies Prisma.ServiceWhereInput);
+  }
+
+  private buildCategoryVisibilityFilter(tenantId: string | null) {
+    return tenantId
+      ? ({
+          OR: [{ tenantId: null }, { tenantId }],
+        } satisfies Prisma.ServiceCategoryModelWhereInput)
+      : ({ tenantId: null } satisfies Prisma.ServiceCategoryModelWhereInput);
+  }
+
+  private getTenantCacheScope(tenantId: string | null) {
+    return tenantId ?? 'platform';
+  }
+
+  private async getTenantServiceSelectionState(tenantId: string) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: {
+        usesCustomServiceSelection: true,
+        serviceSelections: {
+          select: {
+            serviceSlug: true,
+          },
+        },
+      },
+    });
+
+    if (!tenant) {
+      throw new NotFoundException('Tenant not found.');
+    }
+
+    return {
+      usesCustomSelection: tenant.usesCustomServiceSelection,
+      selectedServiceSlugs: new Set(
+        tenant.serviceSelections.map((selection) => selection.serviceSlug),
+      ),
+    };
+  }
+
+  private dedupeTenantScopedBySlug<
+    T extends { slug: string; tenantId: string | null },
+  >(records: T[], tenantId: string | null) {
+    const deduped = new Map<string, T>();
+
+    for (const record of records) {
+      const existing = deduped.get(record.slug);
+
+      if (!existing) {
+        deduped.set(record.slug, record);
+        continue;
+      }
+
+      if (
+        tenantId &&
+        existing.tenantId !== tenantId &&
+        record.tenantId === tenantId
+      ) {
+        deduped.set(record.slug, record);
+      }
+    }
+
+    return Array.from(deduped.values());
+  }
+
+  private buildCatalogCategories(
+    categories: Array<{
+      id: string;
+      tenantId: string | null;
+      name: string;
+      slug: string;
+      description: string | null;
+    }>,
+    services: Array<{
+      category: {
+        slug: string;
+      };
+    }>,
+    tenantId: string | null,
+  ) {
+    const counts = services.reduce<Map<string, number>>((map, service) => {
+      map.set(service.category.slug, (map.get(service.category.slug) ?? 0) + 1);
+      return map;
+    }, new Map());
+
+    return this.dedupeTenantScopedBySlug(categories, tenantId)
+      .map((category) => ({
+        ...category,
+        serviceCount: counts.get(category.slug) ?? 0,
+      }))
+      .filter((category) => category.serviceCount > 0);
   }
 
   private validateServiceAmounts(dto: {
@@ -762,5 +1932,20 @@ export class ServicesService {
     value: Record<string, unknown>[] | undefined,
   ): Prisma.InputJsonValue {
     return (value ?? []) as Prisma.InputJsonValue;
+  }
+
+  private normalizeNullableString(value: string | undefined) {
+    const trimmed = value?.trim();
+    return trimmed ? trimmed : null;
+  }
+
+  private normalizePath(value: string | undefined) {
+    const trimmed = value?.trim();
+
+    if (!trimmed) {
+      return null;
+    }
+
+    return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
   }
 }

@@ -10,17 +10,19 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Request, Response } from 'express';
+import type { Tenant } from '@prisma/client';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Audit } from '../../common/decorators/audit.decorator';
+import { TenantContext } from '../../common/decorators/tenant-context.decorator';
+import { RequiresTenant } from '../../common/decorators/requires-tenant.decorator';
 import type { JwtUser } from '@zentry/types';
 import { UserRole } from '@zentry/types';
 import {
   RegisterIndividualDto,
-  RegisterCyberCafeDto,
   RegisterCbtDto,
   LoginDto,
   VerifyOtpDto,
@@ -111,6 +113,7 @@ export class AuthController {
   // ── Registration ──────────────────────────────────────────────
 
   @Public()
+  @RequiresTenant()
   @Post('register/individual')
   @Audit({
     action: 'USER_REGISTERED',
@@ -119,24 +122,15 @@ export class AuthController {
     mergeExisting: true,
     captureRequestFields: ['email'],
   })
-  registerIndividual(@Body() dto: RegisterIndividualDto) {
-    return this.authService.registerIndividual(dto);
+  registerIndividual(
+    @Body() dto: RegisterIndividualDto,
+    @TenantContext() tenant: Tenant,
+  ) {
+    return this.authService.registerIndividual(dto, tenant.id);
   }
 
   @Public()
-  @Post('register/cyber-cafe')
-  @Audit({
-    action: 'USER_REGISTERED',
-    entity: 'User',
-    lookup: 'response_user',
-    mergeExisting: true,
-    captureRequestFields: ['email'],
-  })
-  registerCyberCafe(@Body() dto: RegisterCyberCafeDto) {
-    return this.authService.registerCyberCafe(dto);
-  }
-
-  @Public()
+  @RequiresTenant()
   @Post('register/cbt')
   @Audit({
     action: 'USER_REGISTERED',
@@ -145,8 +139,8 @@ export class AuthController {
     mergeExisting: true,
     captureRequestFields: ['email'],
   })
-  registerCbt(@Body() dto: RegisterCbtDto) {
-    return this.authService.registerCbt(dto);
+  registerCbt(@Body() dto: RegisterCbtDto, @TenantContext() tenant: Tenant) {
+    return this.authService.registerCbt(dto, tenant.id);
   }
 
   // ── OTP & Verification ────────────────────────────────────────
@@ -163,9 +157,14 @@ export class AuthController {
   })
   async verifyEmail(
     @Body() dto: VerifyOtpDto,
+    @TenantContext() tenant: Tenant | null,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const result = await this.authService.verifyEmail(dto.email, dto.otp);
+    const result = await this.authService.verifyEmail(
+      dto.email,
+      dto.otp,
+      tenant?.id ?? null,
+    );
     this.setRefreshTokenCookie(response, result.data.refreshToken);
 
     return {
@@ -187,8 +186,8 @@ export class AuthController {
     lookup: 'body_email',
     captureRequestFields: ['email'],
   })
-  resendOtp(@Body() dto: ResendOtpDto) {
-    return this.authService.resendOtp(dto.email);
+  resendOtp(@Body() dto: ResendOtpDto, @TenantContext() tenant: Tenant | null) {
+    return this.authService.resendOtp(dto.email, tenant?.id ?? null);
   }
 
   // ── Login / Logout ────────────────────────────────────────────
@@ -205,11 +204,17 @@ export class AuthController {
   })
   async login(
     @Body() dto: LoginDto,
+    @TenantContext() tenant: Tenant | null,
     @Req() req: Request,
     @Res({ passthrough: true }) response: Response,
   ) {
     const ip = req.ip ?? req.socket.remoteAddress;
-    const result = await this.authService.login(dto.email, dto.password, ip);
+    const result = await this.authService.login(
+      dto.email,
+      dto.password,
+      tenant?.id ?? null,
+      ip,
+    );
     this.setRefreshTokenCookie(response, result.data.refreshToken);
 
     return {
@@ -278,8 +283,11 @@ export class AuthController {
     lookup: 'body_email',
     captureRequestFields: ['email'],
   })
-  forgotPassword(@Body() dto: ForgotPasswordDto) {
-    return this.authService.forgotPassword(dto.email);
+  forgotPassword(
+    @Body() dto: ForgotPasswordDto,
+    @TenantContext() tenant: Tenant | null,
+  ) {
+    return this.authService.forgotPassword(dto.email, tenant?.id ?? null);
   }
 
   @Public()
@@ -297,7 +305,7 @@ export class AuthController {
 
   @Post('set-pin')
   @HttpCode(HttpStatus.OK)
-  @Roles(UserRole.INDIVIDUAL, UserRole.CYBER_CAFE, UserRole.CBT_CENTER)
+  @Roles(UserRole.INDIVIDUAL, UserRole.CBT_CENTER, UserRole.TENANT_ADMIN)
   @Audit({
     action: 'PIN_SET',
     entity: 'User',
@@ -310,7 +318,7 @@ export class AuthController {
 
   @Post('change-pin')
   @HttpCode(HttpStatus.OK)
-  @Roles(UserRole.INDIVIDUAL, UserRole.CYBER_CAFE, UserRole.CBT_CENTER)
+  @Roles(UserRole.INDIVIDUAL, UserRole.CBT_CENTER, UserRole.TENANT_ADMIN)
   @Audit({
     action: 'PIN_CHANGED',
     entity: 'User',

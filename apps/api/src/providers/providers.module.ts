@@ -19,6 +19,7 @@ import { TermiiSmsProvider } from './sms/termii.provider';
 import { SmsService } from './sms/sms.service';
 import { CloudinaryStorageProvider } from './storage/cloudinary.provider';
 import { StorageService } from './storage/storage.service';
+import { ProviderCredentialsService } from './provider-credentials.service';
 
 @Global()
 @Module({
@@ -141,6 +142,7 @@ import { StorageService } from './storage/storage.service';
     SmsService,
     EmailService,
     StorageService,
+    ProviderCredentialsService,
   ],
   exports: [
     PAYMENT_PROVIDER,
@@ -153,6 +155,7 @@ import { StorageService } from './storage/storage.service';
     SmsService,
     EmailService,
     StorageService,
+    ProviderCredentialsService,
   ],
 })
 export class ProvidersModule {}

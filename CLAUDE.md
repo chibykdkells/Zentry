@@ -45,9 +45,9 @@ admin only.
 | Role | Constant | Description |
 |---|---|---|
 | Individual | `INDIVIDUAL` | Individual requesting government services |
-| Cyber Cafe | `CYBER_CAFE` | Business submitting jobs on behalf of customers |
 | CBT Center | `CBT_CENTER` | Licensed fulfiller — picks jobs, uploads results |
-| Super Admin | `SUPER_ADMIN` | Platform owner — full control |
+| Tenant Admin | `TENANT_ADMIN` | Business licensing the platform — created by SUPER_ADMIN |
+| Super Admin | `SUPER_ADMIN` | Platform owner — full control, no tenantId |
 
 ---
 

@@ -38,6 +38,10 @@ export class GetAdminWalletTransactionsQueryDto {
   search?: string;
 
   @IsOptional()
+  @IsString()
+  tenantId?: string;
+
+  @IsOptional()
   @IsDateString()
   startDate?: string;
 

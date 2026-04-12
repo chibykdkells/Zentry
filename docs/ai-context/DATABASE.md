@@ -163,12 +163,13 @@ Zentry does **not** use soft deletes by default. Exceptions:
 
 The seed always creates:
 1. Super Admin: `admin@zentry.ng` / `Admin@Zentry2024!`
-2. Test Individual: `user@test.com` / `Test@1234!`
-3. Test CBT (approved): `cbt@test.com` / `Test@1234!`
-4. Test Cyber Cafe: `cafe@test.com` / `Test@1234!`
-5. Initial service categories: JAMB, NIMC, NECO, VTU_AIRTIME, VTU_DATA, VTU_CABLE_TV, VTU_ELECTRICITY
-6. Sample services per category with realistic pricing
-7. System config records
+2. Test tenant: `testbiz`
+3. Tenant Admin: `tenant@test.com` / `Test@1234!`
+4. Test Individual: `user@test.com` / `Test@1234!`
+5. Test CBT (approved): `cbt@test.com` / `Test@1234!`
+6. Initial service categories: JAMB, NIMC, NECO, VTU_AIRTIME, VTU_DATA, VTU_CABLE_TV, VTU_ELECTRICITY
+7. Sample services per category with realistic pricing
+8. System config records
 
 Seed is idempotent — running twice does not create duplicates (use `upsert`).
 
@@ -179,13 +180,15 @@ Seed is idempotent — running twice does not create duplicates (use `upsert`).
 ```
 User (1) ──────── (1) Wallet
 User (1) ──────── (1) CbtProfile        [CBT_CENTER only]
-User (1) ──────── (1) CyberCafeProfile  [CYBER_CAFE only]
 User (1) ──────── (N) Order             [as requester]
 User (1) ──────── (N) Order             [as assigned CBT]
 User (1) ──────── (N) Transaction
 User (1) ──────── (N) Notification
 User (1) ──────── (N) WithdrawalRequest
 User (1) ──────── (N) AuditLog
+Tenant (1) ────── (N) User
+Tenant (1) ────── (N) Order
+Tenant (1) ────── (N) AuditLog
 
 Wallet (1) ─────── (N) Transaction
 

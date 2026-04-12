@@ -4,6 +4,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -20,6 +21,8 @@ import {
 } from '@prisma/client';
 import type { Request } from 'express';
 import { PaymentService } from '../../providers/payment/payment.service';
+import { EmailService } from '../../providers/email/email.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { generateTransactionRef } from '@zentry/utils';
 import { nairaToKobo } from '@zentry/utils';
 import { PrismaService } from '../prisma/prisma.service';
@@ -234,14 +237,32 @@ type AdminWithdrawalRequestRecord = Prisma.WithdrawalRequestGetPayload<{
 
 @Injectable()
 export class WalletService {
+  private readonly logger = new Logger(WalletService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly paymentService: PaymentService,
+    private readonly notificationsService: NotificationsService,
+    private readonly emailService: EmailService,
   ) {}
 
-  async getMyWalletOverview(userId: string) {
-    const wallet = await this.prisma.wallet.findUnique({
-      where: { userId },
+  private async sendEmailSafely(input: {
+    to: string;
+    subject: string;
+    html: string;
+    text: string;
+  }) {
+    await this.emailService.sendEmail(input).catch(() => undefined);
+  }
+
+  async getMyWalletOverview(userId: string, tenantId: string | null) {
+    const wallet = await this.prisma.wallet.findFirst({
+      where: {
+        userId,
+        user: {
+          ...(tenantId ? { tenantId } : { tenantId: null }),
+        },
+      },
       select: {
         id: true,
         availableBalance: true,
@@ -286,18 +307,23 @@ export class WalletService {
     };
   }
 
-  async getAdminWalletOverview() {
+  async getAdminWalletOverview(tenantId: string | null) {
+    const tf = tenantId ? { tenantId } : {};
+    const walletTf = tenantId ? { user: { tenantId } } : {};
     const [
       walletAggregate,
       walletCount,
       fundedWalletCount,
       pendingFundingCount,
       successfulFundingAggregate,
-      commissionAggregate,
+      platformCommissionAggregate,
+      cbtCommissionAggregate,
       withdrawalAggregate,
       refundAggregate,
+      heldFundsByTenant,
     ] = await this.prisma.$transaction([
       this.prisma.wallet.aggregate({
+        where: walletTf,
         _sum: {
           availableBalance: true,
           escrowBalance: true,
@@ -305,9 +331,10 @@ export class WalletService {
           totalWithdrawn: true,
         },
       }),
-      this.prisma.wallet.count(),
+      this.prisma.wallet.count({ where: walletTf }),
       this.prisma.wallet.count({
         where: {
+          ...walletTf,
           OR: [
             { availableBalance: { gt: 0n } },
             { escrowBalance: { gt: 0n } },
@@ -317,12 +344,14 @@ export class WalletService {
       }),
       this.prisma.transaction.count({
         where: {
+          ...tf,
           type: TransactionType.WALLET_FUNDING,
           status: TransactionStatus.PENDING,
         },
       }),
       this.prisma.transaction.aggregate({
         where: {
+          ...tf,
           type: TransactionType.WALLET_FUNDING,
           status: TransactionStatus.SUCCESS,
         },
@@ -332,12 +361,8 @@ export class WalletService {
       }),
       this.prisma.transaction.aggregate({
         where: {
-          type: {
-            in: [
-              TransactionType.PLATFORM_COMMISSION,
-              TransactionType.CBT_COMMISSION,
-            ],
-          },
+          ...tf,
+          type: TransactionType.PLATFORM_COMMISSION,
           status: TransactionStatus.SUCCESS,
         },
         _sum: {
@@ -346,6 +371,17 @@ export class WalletService {
       }),
       this.prisma.transaction.aggregate({
         where: {
+          ...tf,
+          type: TransactionType.CBT_COMMISSION,
+          status: TransactionStatus.SUCCESS,
+        },
+        _sum: {
+          amount: true,
+        },
+      }),
+      this.prisma.transaction.aggregate({
+        where: {
+          ...tf,
           type: TransactionType.WITHDRAWAL,
           status: TransactionStatus.SUCCESS,
         },
@@ -355,6 +391,7 @@ export class WalletService {
       }),
       this.prisma.transaction.aggregate({
         where: {
+          ...tf,
           type: TransactionType.REFUND,
           status: TransactionStatus.SUCCESS,
         },
@@ -362,7 +399,46 @@ export class WalletService {
           amount: true,
         },
       }),
+      this.prisma.tenant.findMany({
+        where: tenantId ? { id: tenantId } : undefined,
+        orderBy: { name: 'asc' },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          users: {
+            select: {
+              wallet: {
+                select: {
+                  escrowBalance: true,
+                },
+              },
+            },
+          },
+        },
+      }),
     ]);
+
+    const heldFundsByBusiness = heldFundsByTenant
+      .map((tenant) => ({
+        id: tenant.id,
+        name: tenant.name,
+        slug: tenant.slug,
+        heldFunds: tenant.users
+          .reduce((sum, user) => sum + (user.wallet?.escrowBalance ?? 0n), 0n)
+          .toString(),
+      }))
+      .filter((tenant) => tenant.heldFunds !== '0')
+      .sort((left, right) => {
+        const leftAmount = BigInt(left.heldFunds);
+        const rightAmount = BigInt(right.heldFunds);
+
+        if (leftAmount === rightAmount) {
+          return left.name.localeCompare(right.name);
+        }
+
+        return rightAmount > leftAmount ? 1 : -1;
+      });
 
     return {
       message: 'Admin wallet overview retrieved',
@@ -378,16 +454,26 @@ export class WalletService {
         totalWithdrawn: walletAggregate._sum.totalWithdrawn?.toString() ?? '0',
         successfulFundingVolume:
           successfulFundingAggregate._sum.amount?.toString() ?? '0',
-        commissionVolume: commissionAggregate._sum.amount?.toString() ?? '0',
+        commissionVolume: (
+          (platformCommissionAggregate._sum.amount ?? 0n) +
+          (cbtCommissionAggregate._sum.amount ?? 0n)
+        ).toString(),
+        platformCommissionVolume:
+          platformCommissionAggregate._sum.amount?.toString() ?? '0',
+        cbtCommissionVolume:
+          cbtCommissionAggregate._sum.amount?.toString() ?? '0',
         withdrawalVolume: withdrawalAggregate._sum.amount?.toString() ?? '0',
         refundVolume: refundAggregate._sum.amount?.toString() ?? '0',
+        heldFundsByTenant: heldFundsByBusiness,
       },
     };
   }
 
-  async getAdminCbtEarningsOverview() {
+  async getAdminCbtEarningsOverview(tenantId: string | null) {
     const now = new Date();
+    const tf = tenantId ? { tenantId } : {};
     const releasedCommissionWhere: Prisma.TransactionWhereInput = {
+      ...tf,
       type: TransactionType.CBT_COMMISSION,
       status: TransactionStatus.SUCCESS,
       user: {
@@ -403,6 +489,7 @@ export class WalletService {
     };
 
     const awaitingReleaseWhere: Prisma.OrderWhereInput = {
+      ...tf,
       fulfillmentType: FulfillmentType.MANUAL,
       status: OrderStatus.COMPLETED,
       assignedCbtId: {
@@ -416,6 +503,7 @@ export class WalletService {
     };
 
     const readyReleaseWhere: Prisma.OrderWhereInput = {
+      ...tf,
       fulfillmentType: FulfillmentType.MANUAL,
       status: OrderStatus.COMPLETED,
       assignedCbtId: {
@@ -429,6 +517,7 @@ export class WalletService {
     };
 
     const blockedReleaseWhere: Prisma.OrderWhereInput = {
+      ...tf,
       fulfillmentType: FulfillmentType.MANUAL,
       status: OrderStatus.COMPLETED,
       assignedCbtId: {
@@ -569,6 +658,7 @@ export class WalletService {
         where: {
           user: {
             role: UserRole.CBT_CENTER,
+            ...(tenantId ? { tenantId } : {}),
           },
         },
         _sum: {
@@ -581,6 +671,7 @@ export class WalletService {
         where: {
           user: {
             role: UserRole.CBT_CENTER,
+            ...(tenantId ? { tenantId } : {}),
           },
         },
         orderBy: [{ totalEarned: 'desc' }, { availableBalance: 'desc' }],
@@ -716,11 +807,17 @@ export class WalletService {
     };
   }
 
-  async getAdminWithdrawals(query: GetAdminWithdrawalsQueryDto) {
+  async getAdminWithdrawals(
+    query: GetAdminWithdrawalsQueryDto,
+    tenantId: string | null,
+  ) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const trimmedSearch = query.search?.trim();
+    const effectiveTenantId = query.tenantId ?? tenantId;
+    const tf = effectiveTenantId ? { tenantId: effectiveTenantId } : {};
     const where: Prisma.WithdrawalRequestWhereInput = {
+      ...tf,
       ...(query.status ? { status: query.status } : {}),
       ...(trimmedSearch
         ? {
@@ -789,27 +886,27 @@ export class WalletService {
         },
       }),
       this.prisma.withdrawalRequest.aggregate({
-        where: { status: WithdrawalStatus.PENDING },
+        where: { ...tf, status: WithdrawalStatus.PENDING },
         _sum: { amount: true },
         _count: true,
       }),
       this.prisma.withdrawalRequest.aggregate({
-        where: { status: WithdrawalStatus.APPROVED },
+        where: { ...tf, status: WithdrawalStatus.APPROVED },
         _sum: { amount: true },
         _count: true,
       }),
       this.prisma.withdrawalRequest.aggregate({
-        where: { status: WithdrawalStatus.PROCESSING },
+        where: { ...tf, status: WithdrawalStatus.PROCESSING },
         _sum: { amount: true },
         _count: true,
       }),
       this.prisma.withdrawalRequest.aggregate({
-        where: { status: WithdrawalStatus.COMPLETED },
+        where: { ...tf, status: WithdrawalStatus.COMPLETED },
         _sum: { amount: true },
         _count: true,
       }),
       this.prisma.withdrawalRequest.aggregate({
-        where: { status: WithdrawalStatus.REJECTED },
+        where: { ...tf, status: WithdrawalStatus.REJECTED },
         _sum: { amount: true },
         _count: true,
       }),
@@ -842,19 +939,25 @@ export class WalletService {
         },
         filters: {
           status: query.status ?? null,
+          tenantId: query.tenantId ?? null,
           search: trimmedSearch ?? null,
         },
       },
     };
   }
 
-  async getMyWithdrawals(userId: string, query: GetMyWithdrawalsQueryDto) {
-    await this.ensureApprovedCbtUser(userId);
+  async getMyWithdrawals(
+    userId: string,
+    query: GetMyWithdrawalsQueryDto,
+    tenantId: string | null,
+  ) {
+    await this.ensureWithdrawalEligibleUser(userId, tenantId);
 
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const where: Prisma.WithdrawalRequestWhereInput = {
       userId,
+      ...(tenantId ? { tenantId } : { tenantId: null }),
       ...(query.status ? { status: query.status } : {}),
     };
 
@@ -897,27 +1000,47 @@ export class WalletService {
         },
       }),
       this.prisma.withdrawalRequest.aggregate({
-        where: { userId, status: WithdrawalStatus.PENDING },
+        where: {
+          userId,
+          ...(tenantId ? { tenantId } : { tenantId: null }),
+          status: WithdrawalStatus.PENDING,
+        },
         _sum: { amount: true },
         _count: true,
       }),
       this.prisma.withdrawalRequest.aggregate({
-        where: { userId, status: WithdrawalStatus.APPROVED },
+        where: {
+          userId,
+          ...(tenantId ? { tenantId } : { tenantId: null }),
+          status: WithdrawalStatus.APPROVED,
+        },
         _sum: { amount: true },
         _count: true,
       }),
       this.prisma.withdrawalRequest.aggregate({
-        where: { userId, status: WithdrawalStatus.PROCESSING },
+        where: {
+          userId,
+          ...(tenantId ? { tenantId } : { tenantId: null }),
+          status: WithdrawalStatus.PROCESSING,
+        },
         _sum: { amount: true },
         _count: true,
       }),
       this.prisma.withdrawalRequest.aggregate({
-        where: { userId, status: WithdrawalStatus.COMPLETED },
+        where: {
+          userId,
+          ...(tenantId ? { tenantId } : { tenantId: null }),
+          status: WithdrawalStatus.COMPLETED,
+        },
         _sum: { amount: true },
         _count: true,
       }),
       this.prisma.withdrawalRequest.aggregate({
-        where: { userId, status: WithdrawalStatus.REJECTED },
+        where: {
+          userId,
+          ...(tenantId ? { tenantId } : { tenantId: null }),
+          status: WithdrawalStatus.REJECTED,
+        },
         _sum: { amount: true },
         _count: true,
       }),
@@ -958,8 +1081,9 @@ export class WalletService {
   async createWithdrawalRequest(
     userId: string,
     dto: CreateWithdrawalRequestDto,
+    tenantId: string | null,
   ) {
-    await this.ensureApprovedCbtUser(userId);
+    await this.ensureWithdrawalEligibleUser(userId, tenantId);
 
     const amount = nairaToKobo(dto.amountNaira);
     if (amount <= 0n) {
@@ -967,8 +1091,13 @@ export class WalletService {
     }
 
     const result = await this.prisma.$transaction(async (tx) => {
-      const wallet = await tx.wallet.findUnique({
-        where: { userId },
+      const wallet = await tx.wallet.findFirst({
+        where: {
+          userId,
+          user: {
+            ...(tenantId ? { tenantId } : { tenantId: null }),
+          },
+        },
         select: {
           id: true,
           availableBalance: true,
@@ -989,6 +1118,7 @@ export class WalletService {
       const request = await tx.withdrawalRequest.create({
         data: {
           userId,
+          tenantId,
           amount,
           bankName: dto.bankName.trim(),
           bankCode: dto.bankCode.trim(),
@@ -1086,14 +1216,18 @@ export class WalletService {
     adminUserId: string,
     withdrawalRequestId: string,
     dto: ReviewWithdrawalRequestDto,
+    tenantId: string | null = null,
   ) {
     if (dto.status === WithdrawalStatus.PENDING) {
       throw new BadRequestException('Pending is not a review action.');
     }
 
     const result = await this.prisma.$transaction(async (tx) => {
-      const request = await tx.withdrawalRequest.findUnique({
-        where: { id: withdrawalRequestId },
+      const request = await tx.withdrawalRequest.findFirst({
+        where: {
+          id: withdrawalRequestId,
+          ...(tenantId ? { tenantId } : {}),
+        },
         select: {
           id: true,
           userId: true,
@@ -1363,22 +1497,135 @@ export class WalletService {
       return updatedRequest;
     });
 
+    // Real-time: notify user of withdrawal decision
+    this.notificationsService.pushNotificationToUser(result.user.id, {
+      type:
+        dto.status === WithdrawalStatus.REJECTED
+          ? 'WITHDRAWAL_REJECTED'
+          : 'WITHDRAWAL_APPROVED',
+      title:
+        dto.status === WithdrawalStatus.REJECTED
+          ? 'Withdrawal request rejected'
+          : 'Withdrawal request approved',
+      message:
+        dto.status === WithdrawalStatus.REJECTED
+          ? 'Your withdrawal request was rejected and the funds were restored to your wallet.'
+          : 'Your withdrawal request has been approved and moved into payout review.',
+    });
+    await this.sendEmailSafely({
+      to: result.user.email,
+      subject:
+        dto.status === WithdrawalStatus.REJECTED
+          ? 'Withdrawal request update'
+          : 'Withdrawal request approved',
+      text: [
+        `Hi ${result.user.firstName || 'there'},`,
+        '',
+        dto.status === WithdrawalStatus.REJECTED
+          ? 'Your withdrawal request was rejected and the funds were restored to your wallet.'
+          : 'Your withdrawal request has been approved and moved into payout review.',
+        `Request ID: ${result.id}`,
+      ].join('\n'),
+      html: `
+        <p>Hi ${result.user.firstName || 'there'},</p>
+        <p>${
+          dto.status === WithdrawalStatus.REJECTED
+            ? 'Your withdrawal request was rejected and the funds were restored to your wallet.'
+            : 'Your withdrawal request has been approved and moved into payout review.'
+        }</p>
+        <p><strong>Request ID:</strong> ${result.id}</p>
+      `,
+    });
+
+    // Auto-initiate bank transfer when admin approves
+    if (dto.status === WithdrawalStatus.APPROVED) {
+      const payoutRef = `ZEN-PAYOUT-${result.id.replace(/-/g, '').slice(0, 16).toUpperCase()}`;
+      try {
+        const transferResult = await this.paymentService.initiateTransfer({
+          amountKobo: result.amount,
+          accountNumber: result.accountNumber,
+          bankCode: result.bankCode,
+          accountName: result.accountName,
+          reference: payoutRef,
+          narration: `Zentry withdrawal ${result.id}`,
+        });
+
+        // Advance to PROCESSING and store the gateway reference
+        await this.prisma.withdrawalRequest.update({
+          where: { id: result.id },
+          data: {
+            status: WithdrawalStatus.PROCESSING,
+            gatewayRef: transferResult.gatewayRef,
+          },
+        });
+
+        if (transferResult.status === 'SUCCESS') {
+          // Gateway settled immediately — mark COMPLETED
+          await this.prisma.$transaction(async (tx) => {
+            const wallet = await tx.wallet.findUnique({
+              where: { userId: result.user.id },
+              select: { id: true, totalWithdrawn: true },
+            });
+            if (wallet) {
+              await tx.wallet.update({
+                where: { id: wallet.id },
+                data: { totalWithdrawn: { increment: result.amount } },
+              });
+            }
+            await tx.withdrawalRequest.update({
+              where: { id: result.id },
+              data: {
+                status: WithdrawalStatus.COMPLETED,
+                processedAt: new Date(),
+              },
+            });
+            await tx.transaction.updateMany({
+              where: {
+                userId: result.user.id,
+                type: TransactionType.WITHDRAWAL,
+                status: TransactionStatus.PENDING,
+                metadata: { path: ['withdrawalRequestId'], equals: result.id },
+              },
+              data: {
+                status: TransactionStatus.SUCCESS,
+                gatewayRef: transferResult.gatewayRef,
+              },
+            });
+          });
+        }
+      } catch (err) {
+        // Payout initiation failed — keep status as APPROVED for manual retry
+        this.logger.error(
+          `Payout initiation failed for withdrawal ${result.id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
     return {
       message: this.getWithdrawalReviewMessage(dto.status),
       data: this.serializeWithdrawalRequest(result),
     };
   }
 
-  async getAdminWallets(query: GetAdminWalletsQueryDto) {
+  async getAdminWallets(
+    query: GetAdminWalletsQueryDto,
+    tenantId: string | null,
+  ) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const trimmedSearch = query.search?.trim();
+    const userBase = {
+      ...(query.role ? { role: query.role } : {}),
+      ...((query.tenantId ?? tenantId)
+        ? { tenantId: query.tenantId ?? tenantId }
+        : {}),
+    };
     const where: Prisma.WalletWhereInput = {
-      ...(query.role ? { user: { role: query.role } } : {}),
+      ...(query.role || tenantId ? { user: userBase } : {}),
       ...(trimmedSearch
         ? {
             user: {
-              ...(query.role ? { role: query.role } : {}),
+              ...userBase,
               OR: [
                 {
                   firstName: {
@@ -1466,19 +1713,30 @@ export class WalletService {
         },
         filters: {
           role: query.role ?? null,
+          tenantId: query.tenantId ?? null,
           search: trimmedSearch ?? null,
         },
       },
     };
   }
 
-  async getAdminTransactions(query: GetAdminWalletTransactionsQueryDto) {
+  async getAdminTransactions(
+    query: GetAdminWalletTransactionsQueryDto,
+    tenantId: string | null,
+  ) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const trimmedSearch = query.search?.trim();
     const createdAtFilter = this.buildTransactionDateFilter(query);
-    const userFilter = this.buildAdminUserFilter(query.role, trimmedSearch);
+    const userFilter = this.buildAdminUserFilter(
+      query.role,
+      trimmedSearch,
+      query.tenantId ?? tenantId,
+    );
     const where: Prisma.TransactionWhereInput = {
+      ...((query.tenantId ?? tenantId)
+        ? { tenantId: query.tenantId ?? tenantId }
+        : {}),
       ...(query.type ? { type: query.type } : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(createdAtFilter ? { createdAt: createdAtFilter } : {}),
@@ -1559,6 +1817,7 @@ export class WalletService {
           type: query.type ?? null,
           status: query.status ?? null,
           role: query.role ?? null,
+          tenantId: query.tenantId ?? null,
           search: trimmedSearch ?? null,
           startDate: query.startDate ?? null,
           endDate: query.endDate ?? null,
@@ -1570,9 +1829,15 @@ export class WalletService {
   async getMyTransactions(
     userId: string,
     query: GetWalletTransactionsQueryDto,
+    tenantId: string | null,
   ) {
-    const wallet = await this.prisma.wallet.findUnique({
-      where: { userId },
+    const wallet = await this.prisma.wallet.findFirst({
+      where: {
+        userId,
+        user: {
+          ...(tenantId ? { tenantId } : { tenantId: null }),
+        },
+      },
       select: { id: true },
     });
 
@@ -1636,9 +1901,20 @@ export class WalletService {
     };
   }
 
-  async getCbtEarnings(userId: string, query: GetCbtEarningsQueryDto) {
-    const wallet = await this.prisma.wallet.findUnique({
-      where: { userId },
+  async getCbtEarnings(
+    userId: string,
+    query: GetCbtEarningsQueryDto,
+    tenantId: string | null,
+  ) {
+    await this.ensureApprovedCbtUser(userId, tenantId);
+
+    const wallet = await this.prisma.wallet.findFirst({
+      where: {
+        userId,
+        user: {
+          ...(tenantId ? { tenantId } : { tenantId: null }),
+        },
+      },
       select: {
         id: true,
         availableBalance: true,
@@ -1657,6 +1933,7 @@ export class WalletService {
 
     const awaitingReleaseWhere: Prisma.OrderWhereInput = {
       assignedCbtId: userId,
+      ...(tenantId ? { tenantId } : {}),
       fulfillmentType: FulfillmentType.MANUAL,
       status: OrderStatus.COMPLETED,
       escrowReleasedAt: null,
@@ -1668,6 +1945,7 @@ export class WalletService {
 
     const readyReleaseWhere: Prisma.OrderWhereInput = {
       assignedCbtId: userId,
+      ...(tenantId ? { tenantId } : {}),
       fulfillmentType: FulfillmentType.MANUAL,
       status: OrderStatus.COMPLETED,
       escrowReleasedAt: null,
@@ -1679,6 +1957,7 @@ export class WalletService {
 
     const blockedReleaseWhere: Prisma.OrderWhereInput = {
       assignedCbtId: userId,
+      ...(tenantId ? { tenantId } : {}),
       fulfillmentType: FulfillmentType.MANUAL,
       status: OrderStatus.COMPLETED,
       escrowReleasedAt: null,
@@ -2175,6 +2454,136 @@ export class WalletService {
     };
   }
 
+  async getBanks() {
+    const banks = await this.paymentService.getBanks();
+    return { message: 'Banks fetched', data: banks };
+  }
+
+  async handlePayoutWebhook(request: Request & { rawBody?: Buffer }) {
+    const signatureHeader = this.extractSignatureHeader(request);
+    const rawBody = request.rawBody;
+
+    if (!rawBody || !signatureHeader) {
+      throw new BadRequestException('Webhook payload is incomplete');
+    }
+
+    const parsed = this.paymentService.parseWebhook(
+      rawBody,
+      Array.isArray(signatureHeader) ? signatureHeader[0] : signatureHeader,
+    );
+
+    if (!parsed.isValid) {
+      throw new BadRequestException('Invalid webhook signature');
+    }
+
+    // Payout events: transfer.success / transfer.failed / transfer.reversed
+    const isSuccess =
+      parsed.event === 'transfer.success' ||
+      parsed.event === 'transfer.completed';
+    const isFailed =
+      parsed.event === 'transfer.failed' ||
+      parsed.event === 'transfer.reversed';
+
+    if (!isSuccess && !isFailed) {
+      return {
+        message: 'Webhook acknowledged',
+        data: { processed: false, event: parsed.event },
+      };
+    }
+
+    const withdrawalRequest = await this.prisma.withdrawalRequest.findFirst({
+      where: { gatewayRef: parsed.gatewayRef },
+      select: {
+        id: true,
+        userId: true,
+        amount: true,
+        status: true,
+        user: { select: { id: true, firstName: true, email: true } },
+      },
+    });
+
+    if (!withdrawalRequest) {
+      // Could be a non-Zentry transfer — ack without error
+      return {
+        message: 'Webhook acknowledged',
+        data: { processed: false, reason: 'unknown ref' },
+      };
+    }
+
+    if (isSuccess) {
+      await this.prisma.$transaction(async (tx) => {
+        const wallet = await tx.wallet.findUnique({
+          where: { userId: withdrawalRequest.userId },
+          select: { id: true },
+        });
+        if (wallet) {
+          await tx.wallet.update({
+            where: { id: wallet.id },
+            data: { totalWithdrawn: { increment: withdrawalRequest.amount } },
+          });
+        }
+        await tx.withdrawalRequest.update({
+          where: { id: withdrawalRequest.id },
+          data: { status: WithdrawalStatus.COMPLETED, processedAt: new Date() },
+        });
+        await tx.transaction.updateMany({
+          where: {
+            userId: withdrawalRequest.userId,
+            type: TransactionType.WITHDRAWAL,
+            status: TransactionStatus.PENDING,
+            metadata: {
+              path: ['withdrawalRequestId'],
+              equals: withdrawalRequest.id,
+            },
+          },
+          data: {
+            status: TransactionStatus.SUCCESS,
+            gatewayRef: parsed.gatewayRef,
+          },
+        });
+      });
+    } else {
+      // Transfer failed/reversed — refund to wallet
+      await this.prisma.$transaction(async (tx) => {
+        const wallet = await tx.wallet.findUnique({
+          where: { userId: withdrawalRequest.userId },
+          select: { id: true, availableBalance: true },
+        });
+        if (wallet) {
+          await tx.wallet.update({
+            where: { id: wallet.id },
+            data: { availableBalance: { increment: withdrawalRequest.amount } },
+          });
+        }
+        await tx.withdrawalRequest.update({
+          where: { id: withdrawalRequest.id },
+          data: { status: WithdrawalStatus.REJECTED, processedAt: new Date() },
+        });
+        await tx.transaction.updateMany({
+          where: {
+            userId: withdrawalRequest.userId,
+            type: TransactionType.WITHDRAWAL,
+            status: { in: [TransactionStatus.PENDING] },
+            metadata: {
+              path: ['withdrawalRequestId'],
+              equals: withdrawalRequest.id,
+            },
+          },
+          data: { status: TransactionStatus.REVERSED },
+        });
+      });
+    }
+
+    return {
+      message: 'Payout webhook processed',
+      data: {
+        processed: true,
+        event: parsed.event,
+        gatewayRef: parsed.gatewayRef,
+      },
+    };
+  }
+
   private serializeWallet(wallet: WalletWithRecentTransactions) {
     return {
       id: wallet.id,
@@ -2287,9 +2696,12 @@ export class WalletService {
     };
   }
 
-  private async ensureApprovedCbtUser(userId: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
+  private async ensureApprovedCbtUser(userId: string, tenantId: string | null) {
+    const user = await this.prisma.user.findFirst({
+      where: {
+        id: userId,
+        ...(tenantId ? { tenantId } : { tenantId: null }),
+      },
       select: {
         id: true,
         cbtProfile: {
@@ -2302,6 +2714,49 @@ export class WalletService {
 
     if (!user?.cbtProfile) {
       throw new NotFoundException('CBT profile not found');
+    }
+
+    if (user.cbtProfile.approvalStatus !== CbtApprovalStatus.APPROVED) {
+      throw new ForbiddenException(
+        'Your CBT center must be approved before it can request withdrawals.',
+      );
+    }
+
+    return user;
+  }
+
+  private async ensureWithdrawalEligibleUser(
+    userId: string,
+    tenantId: string | null,
+  ) {
+    const user = await this.prisma.user.findFirst({
+      where: {
+        id: userId,
+        ...(tenantId ? { tenantId } : { tenantId: null }),
+      },
+      select: {
+        id: true,
+        role: true,
+        cbtProfile: {
+          select: {
+            approvalStatus: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.role === UserRole.SUPER_ADMIN) {
+      return user;
+    }
+
+    if (!user.cbtProfile) {
+      throw new ForbiddenException(
+        'Only approved CBT centers or the platform owner can request withdrawals.',
+      );
     }
 
     if (user.cbtProfile.approvalStatus !== CbtApprovalStatus.APPROVED) {
@@ -2438,13 +2893,18 @@ export class WalletService {
     return createdAt;
   }
 
-  private buildAdminUserFilter(role?: UserRole, search?: string) {
-    if (!role && !search) {
+  private buildAdminUserFilter(
+    role?: UserRole,
+    search?: string,
+    tenantId?: string | null,
+  ) {
+    if (!role && !search && !tenantId) {
       return null;
     }
 
     return {
       ...(role ? { role } : {}),
+      ...(tenantId ? { tenantId } : {}),
       ...(search
         ? {
             OR: [
@@ -2621,6 +3081,9 @@ export class WalletService {
 
       return updated;
     });
+
+    // Real-time: tell client to refresh wallet balance
+    this.notificationsService.broadcastWalletUpdated(transaction.userId);
 
     return {
       message: 'Wallet funding confirmed.',

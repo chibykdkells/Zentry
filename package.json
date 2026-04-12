@@ -10,6 +10,7 @@
     "test": "turbo run test",
     "verify:phase1": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "verify:phase1:runtime": "node ./scripts/verify-phase1-runtime.mjs",
+    "verify:tenant:runtime": "node ./scripts/verify-tenant-runtime.mjs",
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
     "infra:logs": "docker compose logs -f postgres redis",

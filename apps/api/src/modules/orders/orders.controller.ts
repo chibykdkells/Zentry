@@ -23,6 +23,7 @@ import { GetCbtJobPoolQueryDto } from './dto/get-cbt-job-pool.dto';
 import { GetCbtMyJobsQueryDto } from './dto/get-cbt-my-jobs.dto';
 import { GetMyDisputesQueryDto } from './dto/get-my-disputes.dto';
 import { ReviewDisputeDto } from './dto/review-dispute.dto';
+import { ReviewDisputeFinancialFollowUpDto } from './dto/review-dispute-financial-follow-up.dto';
 import { UpdateAdminOrderNotesDto } from './dto/update-admin-order-notes.dto';
 import { OrdersService, UploadedDocumentFile } from './orders.service';
 
@@ -32,7 +33,7 @@ export class OrdersController {
 
   @Get('me')
   getMyOrders(@CurrentUser() user: JwtUser) {
-    return this.ordersService.getMyOrders(user.sub);
+    return this.ordersService.getMyOrders(user.sub, user.tenantId);
   }
 
   @Get('me/disputes')
@@ -40,7 +41,7 @@ export class OrdersController {
     @CurrentUser() user: JwtUser,
     @Query() query: GetMyDisputesQueryDto,
   ) {
-    return this.ordersService.getMyDisputes(user.sub, query);
+    return this.ordersService.getMyDisputes(user.sub, query, user.tenantId);
   }
 
   @Get('me/:orderId')
@@ -48,7 +49,11 @@ export class OrdersController {
     @CurrentUser() user: JwtUser,
     @Param('orderId') orderId: string,
   ) {
-    return this.ordersService.getMyOrderDetail(user.sub, orderId);
+    return this.ordersService.getMyOrderDetail(
+      user.sub,
+      orderId,
+      user.tenantId,
+    );
   }
 
   @Post('me/:orderId/dispute')
@@ -57,52 +62,77 @@ export class OrdersController {
     @Param('orderId') orderId: string,
     @Body() dto: CreateDisputeDto,
   ) {
-    return this.ordersService.createDispute(user.sub, orderId, dto);
+    return this.ordersService.createDispute(
+      user.sub,
+      orderId,
+      dto,
+      user.tenantId,
+    );
   }
 
   @Roles(UserRole.SUPER_ADMIN)
   @Get('admin/overview')
-  getAdminOperationsOverview() {
-    return this.ordersService.getAdminOperationsOverview();
+  getAdminOperationsOverview(@CurrentUser() user: JwtUser) {
+    return this.ordersService.getAdminOperationsOverview(user.tenantId);
   }
 
   @Roles(UserRole.SUPER_ADMIN)
   @Get('admin/release-scheduler-preview')
-  getAdminReleaseSchedulerPreview() {
-    return this.ordersService.getAdminReleaseSchedulerPreview();
+  getAdminReleaseSchedulerPreview(@CurrentUser() user: JwtUser) {
+    return this.ordersService.getAdminReleaseSchedulerPreview(user.tenantId);
   }
 
   @Roles(UserRole.SUPER_ADMIN)
   @Get('admin')
-  getAdminOrders(@Query() query: GetAdminOrdersQueryDto) {
-    return this.ordersService.getAdminOrders(query);
+  getAdminOrders(
+    @CurrentUser() user: JwtUser,
+    @Query() query: GetAdminOrdersQueryDto,
+  ) {
+    return this.ordersService.getAdminOrders(query, user.tenantId);
   }
 
   @Roles(UserRole.SUPER_ADMIN)
   @Get('admin/disputes')
-  getAdminDisputes(@Query() query: GetAdminDisputesQueryDto) {
-    return this.ordersService.getAdminDisputes(query);
+  getAdminDisputes(
+    @CurrentUser() user: JwtUser,
+    @Query() query: GetAdminDisputesQueryDto,
+  ) {
+    return this.ordersService.getAdminDisputes(query, user.tenantId);
   }
 
   @Roles(UserRole.SUPER_ADMIN)
   @Get('admin/:orderId')
-  getAdminOrderDetail(@Param('orderId') orderId: string) {
-    return this.ordersService.getAdminOrderDetail(orderId);
+  getAdminOrderDetail(
+    @CurrentUser() user: JwtUser,
+    @Param('orderId') orderId: string,
+  ) {
+    return this.ordersService.getAdminOrderDetail(orderId, user.tenantId);
   }
 
   @Roles(UserRole.SUPER_ADMIN)
   @Get('admin/:orderId/release-preview')
-  getAdminOrderReleasePreview(@Param('orderId') orderId: string) {
-    return this.ordersService.getAdminOrderReleasePreview(orderId);
+  getAdminOrderReleasePreview(
+    @CurrentUser() user: JwtUser,
+    @Param('orderId') orderId: string,
+  ) {
+    return this.ordersService.getAdminOrderReleasePreview(
+      orderId,
+      user.tenantId,
+    );
   }
 
   @Roles(UserRole.SUPER_ADMIN)
   @Patch('admin/:orderId/notes')
   updateAdminOrderNotes(
+    @CurrentUser() user: JwtUser,
     @Param('orderId') orderId: string,
     @Body() dto: UpdateAdminOrderNotesDto,
   ) {
-    return this.ordersService.updateAdminOrderNotes(orderId, dto);
+    return this.ordersService.updateAdminOrderNotes(
+      orderId,
+      dto,
+      user.tenantId,
+    );
   }
 
   @Roles(UserRole.SUPER_ADMIN)
@@ -112,13 +142,33 @@ export class OrdersController {
     @Param('orderId') orderId: string,
     @Body() dto: ReviewDisputeDto,
   ) {
-    return this.ordersService.reviewDispute(user.sub, orderId, dto);
+    return this.ordersService.reviewDispute(
+      user.sub,
+      orderId,
+      dto,
+      user.tenantId,
+    );
+  }
+
+  @Roles(UserRole.SUPER_ADMIN)
+  @Patch('admin/:orderId/dispute-financial-follow-up')
+  reviewAdminOrderDisputeFinancialFollowUp(
+    @CurrentUser() user: JwtUser,
+    @Param('orderId') orderId: string,
+    @Body() dto: ReviewDisputeFinancialFollowUpDto,
+  ) {
+    return this.ordersService.reviewDisputeFinancialFollowUp(
+      user.sub,
+      orderId,
+      dto,
+      user.tenantId,
+    );
   }
 
   @Roles(UserRole.CBT_CENTER)
   @Get('cbt/dashboard')
   getCbtDashboard(@CurrentUser() user: JwtUser) {
-    return this.ordersService.getCbtDashboard(user.sub);
+    return this.ordersService.getCbtDashboard(user.sub, user.tenantId);
   }
 
   @Roles(UserRole.CBT_CENTER)
@@ -127,7 +177,7 @@ export class OrdersController {
     @CurrentUser() user: JwtUser,
     @Query() query: GetCbtJobPoolQueryDto,
   ) {
-    return this.ordersService.getCbtJobPool(user.sub, query);
+    return this.ordersService.getCbtJobPool(user.sub, query, user.tenantId);
   }
 
   @Roles(UserRole.CBT_CENTER)
@@ -136,7 +186,7 @@ export class OrdersController {
     @CurrentUser() user: JwtUser,
     @Query() query: GetCbtMyJobsQueryDto,
   ) {
-    return this.ordersService.getCbtMyJobs(user.sub, query);
+    return this.ordersService.getCbtMyJobs(user.sub, query, user.tenantId);
   }
 
   @Roles(UserRole.CBT_CENTER)
@@ -145,19 +195,23 @@ export class OrdersController {
     @CurrentUser() user: JwtUser,
     @Param('orderId') orderId: string,
   ) {
-    return this.ordersService.getCbtOrderDetail(user.sub, orderId);
+    return this.ordersService.getCbtOrderDetail(
+      user.sub,
+      orderId,
+      user.tenantId,
+    );
   }
 
   @Roles(UserRole.CBT_CENTER)
   @Post('cbt/:orderId/claim')
   claimCbtJob(@CurrentUser() user: JwtUser, @Param('orderId') orderId: string) {
-    return this.ordersService.claimCbtJob(user.sub, orderId);
+    return this.ordersService.claimCbtJob(user.sub, orderId, user.tenantId);
   }
 
   @Roles(UserRole.CBT_CENTER)
   @Post('cbt/:orderId/start')
   startCbtJob(@CurrentUser() user: JwtUser, @Param('orderId') orderId: string) {
-    return this.ordersService.startCbtJob(user.sub, orderId);
+    return this.ordersService.startCbtJob(user.sub, orderId, user.tenantId);
   }
 
   @Roles(UserRole.CBT_CENTER)
@@ -169,7 +223,13 @@ export class OrdersController {
     @UploadedFile() file: UploadedDocumentFile | undefined,
     @Body() dto: CompleteCbtJobDto,
   ) {
-    return this.ordersService.completeCbtJob(user.sub, orderId, file, dto);
+    return this.ordersService.completeCbtJob(
+      user.sub,
+      orderId,
+      file,
+      dto,
+      user.tenantId,
+    );
   }
 
   @Post('uploads')
@@ -183,6 +243,6 @@ export class OrdersController {
 
   @Post()
   createOrder(@CurrentUser() user: JwtUser, @Body() dto: CreateOrderDto) {
-    return this.ordersService.createOrder(user.sub, dto);
+    return this.ordersService.createOrder(user.sub, dto, user.tenantId);
   }
 }

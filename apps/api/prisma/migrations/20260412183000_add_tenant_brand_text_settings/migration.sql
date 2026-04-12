@@ -1,0 +1,3 @@
+ALTER TABLE "tenants"
+ADD COLUMN "textColor" TEXT NOT NULL DEFAULT '#10203C',
+ADD COLUMN "fontStyle" TEXT NOT NULL DEFAULT 'modern';

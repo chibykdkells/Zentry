@@ -17,6 +17,7 @@ import {
 import { Queue } from 'bull';
 import { generateTransactionRef } from '@zentry/utils';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   buildReleaseEscrowJobId,
   RELEASE_ESCROW_JOB_NAME,
@@ -36,6 +37,7 @@ export class OrdersReleaseQueueService implements OnModuleInit {
     private readonly prisma: PrismaService,
     @InjectQueue(RELEASE_ESCROW_QUEUE_NAME)
     private readonly releaseQueue: Queue<ReleaseEscrowJobData>,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async onModuleInit() {
@@ -424,6 +426,7 @@ export class OrdersReleaseQueueService implements OnModuleInit {
         orderNumber: order.orderNumber,
         cbtCommission: order.cbtCommission.toString(),
         platformNet: platformNet.toString(),
+        cbtId: order.assignedCbt.id,
       };
     });
 
@@ -438,6 +441,11 @@ export class OrdersReleaseQueueService implements OnModuleInit {
         }`,
       );
       return result;
+    }
+
+    // Real-time: notify CBT their earnings landed
+    if (result.cbtId) {
+      this.notificationsService.broadcastWalletUpdated(result.cbtId);
     }
 
     this.logger.log(`Escrow released successfully for ${result.orderNumber}`);

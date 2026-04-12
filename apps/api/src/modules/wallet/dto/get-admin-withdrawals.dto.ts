@@ -20,4 +20,8 @@ export class GetAdminWithdrawalsQueryDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @IsOptional()
+  @IsString()
+  tenantId?: string;
 }

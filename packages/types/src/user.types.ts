@@ -4,8 +4,22 @@ export interface JwtUser {
   sub: string;
   email: string;
   role: UserRole;
+  tenantId: string | null;
   iat: number;
   exp: number;
+}
+
+export interface TenantPublic {
+  id: string;
+  name: string;
+  slug: string;
+  logoUrl: string | null;
+  primaryColor: string;
+  accentColor: string;
+  textColor: string;
+  buttonColor: string;
+  fontStyle: string;
+  customDomain: string | null;
 }
 
 export interface UserPublic {

@@ -3,9 +3,12 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import * as crypto from 'crypto';
 import type {
+  BankListItem,
   IPaymentProvider,
   InitiatePaymentInput,
   InitiatePaymentResult,
+  InitiateTransferInput,
+  InitiateTransferResult,
   VerifyPaymentResult,
   WebhookParseResult,
 } from '../interfaces';
@@ -91,6 +94,71 @@ export class FintavapayProvider implements IPaymentProvider {
       gatewayRef: data.id,
       paidAt: data.paid_at ? new Date(data.paid_at) : undefined,
     };
+  }
+
+  async initiateTransfer(
+    input: InitiateTransferInput,
+  ): Promise<InitiateTransferResult> {
+    const response = await axios.post(
+      `${this.baseUrl}/v1/transfer/initiate`,
+      {
+        amount: Number(input.amountKobo),
+        account_number: input.accountNumber,
+        bank_code: input.bankCode,
+        account_name: input.accountName,
+        reference: input.reference,
+        narration: input.narration,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${this.secretKey}`,
+          'Content-Type': 'application/json',
+        },
+      },
+    );
+
+    const { data } = response.data as {
+      data: {
+        reference: string;
+        transfer_code: string;
+        status: string;
+      };
+    };
+
+    const status =
+      data.status?.toLowerCase() === 'success' ? 'SUCCESS' : 'PENDING';
+
+    return {
+      transferRef: data.reference ?? input.reference,
+      gatewayRef: data.transfer_code ?? data.reference,
+      status,
+    };
+  }
+
+  async getBanks(): Promise<BankListItem[]> {
+    const response = await axios.get(`${this.baseUrl}/v1/banks`, {
+      headers: { Authorization: `Bearer ${this.secretKey}` },
+    });
+
+    const raw: unknown = response.data;
+    let list: { code: string; name: string }[] = [];
+
+    if (Array.isArray(raw)) {
+      list = raw as { code: string; name: string }[];
+    } else if (
+      raw !== null &&
+      typeof raw === 'object' &&
+      'data' in raw &&
+      Array.isArray((raw as { data: unknown }).data)
+    ) {
+      list = (raw as { data: { code: string; name: string }[] }).data;
+    }
+
+    return list
+      .filter(
+        (b) => b && typeof b.code === 'string' && typeof b.name === 'string',
+      )
+      .map((b) => ({ code: b.code.trim(), name: b.name.trim() }));
   }
 
   parseWebhook(rawBody: Buffer, signatureHeader: string): WebhookParseResult {

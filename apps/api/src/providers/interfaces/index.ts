@@ -44,6 +44,31 @@ export interface WebhookParseResult {
   gatewayRef: string;
 }
 
+export interface InitiateTransferInput {
+  /** Amount in Kobo */
+  amountKobo: bigint;
+  accountNumber: string;
+  bankCode: string;
+  accountName: string;
+  /** Internal unique reference (ZEN-WDR-...) */
+  reference: string;
+  narration: string;
+}
+
+export interface InitiateTransferResult {
+  /** Our internal reference */
+  transferRef: string;
+  /** Gateway's own transfer identifier */
+  gatewayRef: string;
+  /** PENDING = gateway accepted but not yet settled, SUCCESS = immediately settled */
+  status: 'PENDING' | 'SUCCESS';
+}
+
+export interface BankListItem {
+  code: string;
+  name: string;
+}
+
 export interface IPaymentProvider {
   /** Human-readable name matching PaymentGateway enum value */
   readonly gatewayName: string;
@@ -51,6 +76,12 @@ export interface IPaymentProvider {
   verifyPayment(reference: string): Promise<VerifyPaymentResult>;
   /** Verify HMAC/hash signature and parse webhook body — synchronous */
   parseWebhook(rawBody: Buffer, signatureHeader: string): WebhookParseResult;
+  /** Initiate a bank transfer payout. Throws on gateway error. */
+  initiateTransfer(
+    input: InitiateTransferInput,
+  ): Promise<InitiateTransferResult>;
+  /** Returns list of supported banks for recipient account resolution. */
+  getBanks(): Promise<BankListItem[]>;
 }
 
 export const PAYMENT_PROVIDER = 'PAYMENT_PROVIDER';
@@ -60,6 +91,7 @@ export interface AirtimePurchaseInput {
   network: string;
   amountKobo: bigint;
   reference: string;
+  tenantId?: string | null;
 }
 
 export interface DataPurchaseInput {
@@ -67,6 +99,76 @@ export interface DataPurchaseInput {
   planCode: string;
   amountKobo: bigint;
   reference: string;
+  tenantId?: string | null;
+}
+
+export interface VtuDataPlan {
+  code: string;
+  name: string;
+  amountKobo: bigint;
+  validity: string;
+}
+
+export interface CablePlan {
+  code: string;
+  name: string;
+  amountKobo: bigint;
+  duration: string;
+}
+
+export interface VerifyCableSmartcardInput {
+  provider: string;
+  smartcardNumber: string;
+  tenantId?: string | null;
+}
+
+export interface VerifyCableSmartcardResult {
+  success: boolean;
+  provider: string;
+  smartcardNumber: string;
+  customerName: string;
+  currentPlan?: string;
+  dueDate?: string;
+  status: 'VALID' | 'INVALID';
+}
+
+export interface CablePurchaseInput {
+  provider: string;
+  smartcardNumber: string;
+  planCode: string;
+  amountKobo: bigint;
+  reference: string;
+  tenantId?: string | null;
+}
+
+export interface VerifyElectricityMeterInput {
+  disco: string;
+  meterNumber: string;
+  meterType: 'PREPAID' | 'POSTPAID';
+  tenantId?: string | null;
+}
+
+export interface VerifyElectricityMeterResult {
+  success: boolean;
+  disco: string;
+  meterNumber: string;
+  meterType: 'PREPAID' | 'POSTPAID';
+  customerName: string;
+  address?: string;
+  status: 'VALID' | 'INVALID';
+}
+
+export interface ElectricityPurchaseInput {
+  disco: string;
+  meterNumber: string;
+  meterType: 'PREPAID' | 'POSTPAID';
+  amountKobo: bigint;
+  reference: string;
+  tenantId?: string | null;
+}
+
+export interface VtuScopeInput {
+  tenantId?: string | null;
 }
 
 export interface VtuPurchaseResult {
@@ -74,12 +176,62 @@ export interface VtuPurchaseResult {
   reference: string;
   providerReference: string;
   status: 'PENDING' | 'SUCCESS' | 'FAILED';
+  metadata?: Record<string, unknown>;
+}
+
+export interface VtuProviderReadiness {
+  providerName: string;
+  mode: 'live' | 'mock';
+  resolvedScope: {
+    type: 'PLATFORM' | 'TENANT';
+    key: string;
+  };
+  configured: boolean;
+  supportsLiveTransport: boolean;
+  missingConfig: string[];
+  endpoints: {
+    health?: string | null;
+    airtime: string;
+    dataPurchase: string;
+    dataPlans: string;
+    cablePlans: string;
+    cableVerify: string;
+    cablePurchase: string;
+    electricityVerify: string;
+    electricityPurchase: string;
+  };
+  probe: {
+    attempted: boolean;
+    status: 'not_applicable' | 'healthy' | 'unreachable' | 'error';
+    message: string;
+    checkedAt: string;
+  };
 }
 
 export interface IVtuProvider {
   readonly providerName: string;
+  readonly providerMode: 'live' | 'mock';
+  getReadiness(input?: VtuScopeInput): Promise<VtuProviderReadiness>;
   purchaseAirtime(input: AirtimePurchaseInput): Promise<VtuPurchaseResult>;
   purchaseData(input: DataPurchaseInput): Promise<VtuPurchaseResult>;
+  getDataPlans(
+    network: string,
+    tenantId?: string | null,
+  ): Promise<VtuDataPlan[]>;
+  getCablePlans(
+    provider: string,
+    tenantId?: string | null,
+  ): Promise<CablePlan[]>;
+  verifyCableSmartcard(
+    input: VerifyCableSmartcardInput,
+  ): Promise<VerifyCableSmartcardResult>;
+  purchaseCable(input: CablePurchaseInput): Promise<VtuPurchaseResult>;
+  verifyElectricityMeter(
+    input: VerifyElectricityMeterInput,
+  ): Promise<VerifyElectricityMeterResult>;
+  purchaseElectricity(
+    input: ElectricityPurchaseInput,
+  ): Promise<VtuPurchaseResult>;
 }
 
 export const VTU_PROVIDER = 'VTU_PROVIDER';

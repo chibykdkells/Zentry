@@ -1,7 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 import {
+  BankListItem,
   InitiatePaymentInput,
   InitiatePaymentResult,
+  InitiateTransferInput,
+  InitiateTransferResult,
   IPaymentProvider,
   PAYMENT_PROVIDER,
   VerifyPaymentResult,
@@ -58,5 +61,15 @@ export class PaymentService {
 
   parseWebhook(rawBody: Buffer, signatureHeader: string): WebhookParseResult {
     return this.provider.parseWebhook(rawBody, signatureHeader);
+  }
+
+  initiateTransfer(
+    input: InitiateTransferInput,
+  ): Promise<InitiateTransferResult> {
+    return this.provider.initiateTransfer(input);
+  }
+
+  getBanks(): Promise<BankListItem[]> {
+    return this.provider.getBanks();
   }
 }

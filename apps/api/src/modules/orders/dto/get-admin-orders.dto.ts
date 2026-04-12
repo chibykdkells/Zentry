@@ -37,6 +37,10 @@ export class GetAdminOrdersQueryDto {
   search?: string;
 
   @IsOptional()
+  @IsString()
+  tenantId?: string;
+
+  @IsOptional()
   @IsEnum(OrderStatus)
   status?: OrderStatus;
 

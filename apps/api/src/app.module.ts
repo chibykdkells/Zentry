@@ -1,4 +1,9 @@
-import { Module } from '@nestjs/common';
+import {
+  Module,
+  MiddlewareConsumer,
+  NestModule,
+  RequestMethod,
+} from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD, APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
@@ -11,12 +16,17 @@ import { UsersModule } from './modules/users/users.module';
 import { WalletModule } from './modules/wallet/wallet.module';
 import { ServicesModule } from './modules/services/services.module';
 import { OrdersModule } from './modules/orders/orders.module';
+import { TenantModule } from './modules/tenant/tenant.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { SystemConfigModule } from './modules/system-config/system-config.module';
 import { ProvidersModule } from './providers/providers.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
+import { TenantContextMiddleware } from './common/middleware/tenant-context.middleware';
 
 @Module({
   imports: [
@@ -49,11 +59,15 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     PrismaModule,
     RedisModule,
     ProvidersModule,
+    TenantModule,
     AuthModule,
     UsersModule,
     WalletModule,
     ServicesModule,
     OrdersModule,
+    NotificationsModule,
+    AnalyticsModule,
+    SystemConfigModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
@@ -64,4 +78,11 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     { provide: APP_INTERCEPTOR, useClass: AuditLogInterceptor },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    // Apply tenant resolution to every route
+    consumer
+      .apply(TenantContextMiddleware)
+      .forRoutes({ path: '*', method: RequestMethod.ALL });
+  }
+}

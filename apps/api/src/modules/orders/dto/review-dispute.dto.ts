@@ -11,6 +11,9 @@ export const adminDisputeActions = [
   'RESOLVED_FOR_REQUESTER',
   'RESOLVED_FOR_CBT',
   'REQUEST_REDO',
+  'COMPLETE_MANUAL_REFUND',
+  'EXECUTE_CBT_PENALTY',
+  'WAIVE_CBT_PENALTY',
 ] as const;
 
 export type AdminDisputeAction = (typeof adminDisputeActions)[number];

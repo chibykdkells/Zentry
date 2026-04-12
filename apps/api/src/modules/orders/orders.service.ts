@@ -8,16 +8,23 @@ import {
 import {
   CbtApprovalStatus,
   DisputeStatus,
+  FulfillmentType,
   NotificationType,
   OrderStatus,
+  ServiceDeliveryMode,
   TransactionStatus,
   TransactionType,
+  UserRole,
 } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import { generateOrderNumber, generateTransactionRef } from '@zentry/utils';
+import { nairaToKobo } from '@zentry/utils';
 import { StorageService } from '../../providers/storage/storage.service';
+import { VtuService } from '../../providers/vtu/vtu.service';
+import { EmailService } from '../../providers/email/email.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { OrdersReleaseQueueService } from './orders-release-queue.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { CompleteCbtJobDto } from './dto/complete-cbt-job.dto';
 import { CreateDisputeDto } from './dto/create-dispute.dto';
@@ -37,6 +44,7 @@ import {
   RELEASE_ESCROW_QUEUE_NAME,
 } from './release-queue.constants';
 import { AdminDisputeAction, ReviewDisputeDto } from './dto/review-dispute.dto';
+import { ReviewDisputeFinancialFollowUpDto } from './dto/review-dispute-financial-follow-up.dto';
 import { UpdateAdminOrderNotesDto } from './dto/update-admin-order-notes.dto';
 
 type RequiredFieldDefinition = {
@@ -52,6 +60,34 @@ type RequiredDocumentDefinition = {
   required?: boolean;
   acceptedTypes?: string[];
   description?: string;
+};
+
+type OrderRequesterWithWallet = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  wallet: {
+    id: string;
+    availableBalance: bigint;
+    escrowBalance: bigint;
+  };
+};
+
+type AutomatedServiceDefinition = {
+  id: string;
+  name: string;
+  slug: string;
+  totalPrice: bigint;
+  platformFee: bigint;
+  cbtCommission: bigint;
+  providerKey: string | null;
+  deliveryMode: ServiceDeliveryMode;
+  fulfillmentType: FulfillmentType;
+  category: {
+    name: string;
+    slug: string;
+  };
 };
 
 export type UploadedDocumentFile = {
@@ -96,6 +132,13 @@ const orderListSelect = Prisma.validator<Prisma.OrderSelect>()({
 
 const adminOrderListSelect = Prisma.validator<Prisma.OrderSelect>()({
   ...orderListSelect,
+  tenant: {
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+    },
+  },
   requester: {
     select: {
       id: true,
@@ -154,6 +197,13 @@ const orderDetailSelect = Prisma.validator<Prisma.OrderSelect>()({
           slug: true,
         },
       },
+    },
+  },
+  tenant: {
+    select: {
+      id: true,
+      name: true,
+      slug: true,
     },
   },
   requester: {
@@ -302,6 +352,13 @@ const adminDisputeListSelect = Prisma.validator<Prisma.DisputeSelect>()({
           email: true,
         },
       },
+      tenant: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+        },
+      },
       transactions: {
         where: {
           type: {
@@ -411,6 +468,9 @@ export class OrdersService {
     private readonly prisma: PrismaService,
     private readonly storageService: StorageService,
     private readonly ordersReleaseQueueService: OrdersReleaseQueueService,
+    private readonly vtuService: VtuService,
+    private readonly notificationsService: NotificationsService,
+    private readonly emailService: EmailService,
   ) {}
 
   private readonly maxUploadSizeBytes = 5 * 1024 * 1024;
@@ -433,9 +493,122 @@ export class OrdersService {
     OrderStatus.REFUNDED,
   ];
 
-  async getMyOrders(userId: string) {
+  private formatEventDate(date: Date | string | null | undefined) {
+    if (!date) {
+      return null;
+    }
+
+    return new Date(date).toLocaleString('en-NG', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
+  }
+
+  private async sendEmailSafely(input: {
+    to: string;
+    subject: string;
+    html: string;
+    text: string;
+  }) {
+    await this.emailService.sendEmail(input).catch(() => undefined);
+  }
+
+  private sendOrderPlacedEmail(input: {
+    email: string;
+    firstName: string;
+    serviceName: string;
+    orderNumber: string;
+    automated?: boolean;
+  }) {
+    const greetingName = input.firstName || 'there';
+    const statusLine = input.automated
+      ? 'Your purchase was processed instantly and is now available in your order history.'
+      : 'Your request has been received and is now waiting for fulfillment.';
+
+    return this.sendEmailSafely({
+      to: input.email,
+      subject: `${input.serviceName} request confirmed`,
+      text: [
+        `Hi ${greetingName},`,
+        '',
+        `Your ${input.serviceName} request has been recorded successfully.`,
+        `Order number: ${input.orderNumber}`,
+        statusLine,
+      ].join('\n'),
+      html: `
+        <p>Hi ${greetingName},</p>
+        <p>Your <strong>${input.serviceName}</strong> request has been recorded successfully.</p>
+        <p><strong>Order number:</strong> ${input.orderNumber}</p>
+        <p>${statusLine}</p>
+      `,
+    });
+  }
+
+  private sendOrderCompletedEmail(input: {
+    email: string;
+    firstName: string;
+    serviceName: string;
+    orderNumber: string;
+    disputeWindowExpiresAt?: Date | string | null;
+    automated?: boolean;
+  }) {
+    const greetingName = input.firstName || 'there';
+    const deadline = this.formatEventDate(input.disputeWindowExpiresAt);
+    const bodyLine = input.automated
+      ? 'Your order was completed instantly and the delivery details are now available in your dashboard.'
+      : deadline
+        ? `Your result is ready. Please review it before ${deadline}.`
+        : 'Your result is ready and available in your dashboard.';
+
+    return this.sendEmailSafely({
+      to: input.email,
+      subject: `${input.serviceName} is ready`,
+      text: [
+        `Hi ${greetingName},`,
+        '',
+        `Your order for ${input.serviceName} is now complete.`,
+        `Order number: ${input.orderNumber}`,
+        bodyLine,
+      ].join('\n'),
+      html: `
+        <p>Hi ${greetingName},</p>
+        <p>Your order for <strong>${input.serviceName}</strong> is now complete.</p>
+        <p><strong>Order number:</strong> ${input.orderNumber}</p>
+        <p>${bodyLine}</p>
+      `,
+    });
+  }
+
+  private sendDisputeUpdateEmail(input: {
+    email: string;
+    firstName: string;
+    serviceName: string;
+    orderNumber: string;
+    subject: string;
+    message: string;
+  }) {
+    const greetingName = input.firstName || 'there';
+
+    return this.sendEmailSafely({
+      to: input.email,
+      subject: input.subject,
+      text: [
+        `Hi ${greetingName},`,
+        '',
+        `${input.serviceName} (${input.orderNumber})`,
+        input.message,
+      ].join('\n'),
+      html: `
+        <p>Hi ${greetingName},</p>
+        <p><strong>${input.serviceName}</strong> (${input.orderNumber})</p>
+        <p>${input.message}</p>
+      `,
+    });
+  }
+
+  async getMyOrders(userId: string, tenantId: string | null) {
     const orders = await this.prisma.order.findMany({
-      where: { requesterId: userId },
+      where: { requesterId: userId, ...(tenantId ? { tenantId } : {}) },
       orderBy: { createdAt: 'desc' },
       select: orderListSelect,
     });
@@ -462,11 +635,16 @@ export class OrdersService {
     };
   }
 
-  async getMyOrderDetail(userId: string, orderId: string) {
+  async getMyOrderDetail(
+    userId: string,
+    orderId: string,
+    tenantId: string | null,
+  ) {
     const order = await this.prisma.order.findFirst({
       where: {
         id: orderId,
         requesterId: userId,
+        ...(tenantId ? { tenantId } : {}),
       },
       select: orderDetailSelect,
     });
@@ -481,12 +659,17 @@ export class OrdersService {
     };
   }
 
-  async getMyDisputes(userId: string, query: GetMyDisputesQueryDto) {
+  async getMyDisputes(
+    userId: string,
+    query: GetMyDisputesQueryDto,
+    tenantId: string | null,
+  ) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const where: Prisma.DisputeWhereInput = {
       order: {
         requesterId: userId,
+        ...(tenantId ? { tenantId } : {}),
       },
     };
 
@@ -548,7 +731,12 @@ export class OrdersService {
     };
   }
 
-  async createDispute(userId: string, orderId: string, dto: CreateDisputeDto) {
+  async createDispute(
+    userId: string,
+    orderId: string,
+    dto: CreateDisputeDto,
+    tenantId: string | null,
+  ) {
     const now = new Date();
     const reason = dto.reason.trim();
     const evidenceUrls = this.normalizeRequesterDocUrls(dto.evidenceUrls);
@@ -557,6 +745,7 @@ export class OrdersService {
       where: {
         id: orderId,
         requesterId: userId,
+        ...(tenantId ? { tenantId } : {}),
       },
       select: orderDetailSelect,
     });
@@ -611,6 +800,7 @@ export class OrdersService {
         data: {
           orderId: order.id,
           raisedById: userId,
+          tenantId,
           reason,
           evidenceUrls,
           status: DisputeStatus.OPEN,
@@ -683,13 +873,27 @@ export class OrdersService {
       .removeScheduledReleaseForOrder(order.id)
       .catch(() => undefined);
 
+    // Real-time: notify both parties
+    this.notificationsService.pushNotificationToUser(userId, {
+      type: 'DISPUTE_RAISED',
+      title: 'Dispute submitted',
+      message: `Your dispute for ${order.orderNumber} has been opened and is awaiting review.`,
+      orderId: order.id,
+    });
+    this.notificationsService.pushNotificationToUser(assignedCbt.id, {
+      type: 'DISPUTE_RAISED',
+      title: 'A dispute was raised on your job',
+      message: `${order.orderNumber} is now under dispute review.`,
+      orderId: order.id,
+    });
+
     return {
       message: 'Dispute created successfully.',
       data: this.serializeOrderDetail(updatedOrder),
     };
   }
 
-  async getAdminOrders(query: GetAdminOrdersQueryDto) {
+  async getAdminOrders(query: GetAdminOrdersQueryDto, tenantId: string | null) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const search = query.search?.trim() || undefined;
@@ -697,6 +901,8 @@ export class OrdersService {
     const releaseWhere = this.buildReleaseStateWhere(query.releaseState, now);
 
     const where = {
+      ...(tenantId ? { tenantId } : {}),
+      ...(query.tenantId ? { tenantId: query.tenantId } : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(query.fulfillmentType
         ? { fulfillmentType: query.fulfillmentType }
@@ -801,6 +1007,7 @@ export class OrdersService {
         },
         filters: {
           search: search ?? null,
+          tenantId: query.tenantId ?? null,
           status: query.status ?? null,
           fulfillmentType: query.fulfillmentType ?? null,
           requesterRole: query.requesterRole ?? null,
@@ -810,12 +1017,16 @@ export class OrdersService {
     };
   }
 
-  async getAdminDisputes(query: GetAdminDisputesQueryDto) {
+  async getAdminDisputes(
+    query: GetAdminDisputesQueryDto,
+    tenantId: string | null,
+  ) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const search = query.search?.trim() || undefined;
 
     const where: Prisma.DisputeWhereInput = {
+      ...(tenantId ? { tenantId } : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(search
         ? {
@@ -917,10 +1128,15 @@ export class OrdersService {
     };
   }
 
-  async getAdminOperationsOverview() {
+  async getAdminOperationsOverview(tenantId: string | null) {
     const now = new Date();
+    const tf = tenantId ? { tenantId } : {};
+    const connectionStats = this.notificationsService.getConnectionStats();
     const [
+      totalTenants,
+      totalIndividualUsers,
       approvedCbtCenters,
+      totalTransactions,
       pendingPoolJobs,
       assignedJobs,
       inProgressJobs,
@@ -929,11 +1145,22 @@ export class OrdersService {
       disputeConfig,
       completedManualOrders,
     ] = await Promise.all([
+      this.prisma.tenant.count(),
+      this.prisma.user.count({
+        where: {
+          ...tf,
+          role: UserRole.INDIVIDUAL,
+        },
+      }),
       this.prisma.cbtProfile.count({
-        where: { approvalStatus: CbtApprovalStatus.APPROVED },
+        where: { ...tf, approvalStatus: CbtApprovalStatus.APPROVED },
+      }),
+      this.prisma.transaction.count({
+        where: tf,
       }),
       this.prisma.order.count({
         where: {
+          ...tf,
           fulfillmentType: 'MANUAL',
           status: OrderStatus.PENDING,
           assignedCbtId: null,
@@ -941,24 +1168,28 @@ export class OrdersService {
       }),
       this.prisma.order.count({
         where: {
+          ...tf,
           fulfillmentType: 'MANUAL',
           status: OrderStatus.ASSIGNED,
         },
       }),
       this.prisma.order.count({
         where: {
+          ...tf,
           fulfillmentType: 'MANUAL',
           status: OrderStatus.IN_PROGRESS,
         },
       }),
       this.prisma.order.count({
         where: {
+          ...tf,
           fulfillmentType: 'MANUAL',
           status: OrderStatus.COMPLETED,
         },
       }),
       this.prisma.order.findMany({
         where: {
+          ...tf,
           fulfillmentType: 'MANUAL',
           status: OrderStatus.PENDING,
           assignedCbtId: null,
@@ -973,6 +1204,7 @@ export class OrdersService {
       }),
       this.prisma.order.findMany({
         where: {
+          ...tf,
           fulfillmentType: 'MANUAL',
           status: OrderStatus.COMPLETED,
           escrowReleasedAt: null,
@@ -1012,7 +1244,11 @@ export class OrdersService {
       message: 'Admin operations overview retrieved',
       data: {
         metrics: {
+          totalTenants,
+          totalIndividualUsers,
           approvedCbtCenters,
+          totalTransactions,
+          activeUsers: connectionStats.totalConnectedUsers,
           pendingPoolJobs,
           assignedJobs,
           inProgressJobs,
@@ -1045,10 +1281,12 @@ export class OrdersService {
     };
   }
 
-  async getAdminReleaseSchedulerPreview() {
+  async getAdminReleaseSchedulerPreview(tenantId: string | null) {
     const now = new Date();
+    const tf = tenantId ? { tenantId } : {};
     const orders = await this.prisma.order.findMany({
       where: {
+        ...tf,
         fulfillmentType: 'MANUAL',
         status: OrderStatus.COMPLETED,
         escrowReleasedAt: null,
@@ -1100,9 +1338,9 @@ export class OrdersService {
     };
   }
 
-  async getAdminOrderDetail(orderId: string) {
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
+  async getAdminOrderDetail(orderId: string, tenantId: string | null) {
+    const order = await this.prisma.order.findFirst({
+      where: { id: orderId, ...(tenantId ? { tenantId } : {}) },
       select: orderDetailSelect,
     });
 
@@ -1116,9 +1354,9 @@ export class OrdersService {
     };
   }
 
-  async getAdminOrderReleasePreview(orderId: string) {
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
+  async getAdminOrderReleasePreview(orderId: string, tenantId: string | null) {
+    const order = await this.prisma.order.findFirst({
+      where: { id: orderId, ...(tenantId ? { tenantId } : {}) },
       select: orderDetailSelect,
     });
 
@@ -1132,12 +1370,14 @@ export class OrdersService {
     };
   }
 
-  async updateAdminOrderNotes(orderId: string, dto: UpdateAdminOrderNotesDto) {
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
-      select: {
-        id: true,
-      },
+  async updateAdminOrderNotes(
+    orderId: string,
+    dto: UpdateAdminOrderNotesDto,
+    tenantId: string | null,
+  ) {
+    const order = await this.prisma.order.findFirst({
+      where: { id: orderId, ...(tenantId ? { tenantId } : {}) },
+      select: { id: true },
     });
 
     if (!order) {
@@ -1162,7 +1402,19 @@ export class OrdersService {
     adminUserId: string,
     orderId: string,
     dto: ReviewDisputeDto,
+    tenantId: string | null = null,
   ) {
+    if (
+      dto.action === 'COMPLETE_MANUAL_REFUND' ||
+      dto.action === 'EXECUTE_CBT_PENALTY' ||
+      dto.action === 'WAIVE_CBT_PENALTY'
+    ) {
+      return this.reviewDisputeFinancialFollowUp(adminUserId, orderId, {
+        action: dto.action,
+        note: dto.resolutionNote,
+      });
+    }
+
     const now = new Date();
     const resolutionNote = dto.resolutionNote?.trim() || null;
 
@@ -1175,8 +1427,8 @@ export class OrdersService {
       );
     }
 
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
+    const order = await this.prisma.order.findFirst({
+      where: { id: orderId, ...(tenantId ? { tenantId } : {}) },
       select: orderDetailSelect,
     });
 
@@ -1520,14 +1772,378 @@ export class OrdersService {
       }
     }
 
+    // Real-time: push dispute resolution notifications to both parties
+    this.notificationsService.pushNotificationToUser(order.requester.id, {
+      type: 'DISPUTE_RESOLVED',
+      title:
+        outcome.disputeStatus === 'UNDER_REVIEW'
+          ? 'Dispute moved into review'
+          : 'Dispute decision recorded',
+      message: outcome.requesterMessage,
+      orderId: order.id,
+    });
+    if (order.assignedCbt) {
+      this.notificationsService.pushNotificationToUser(order.assignedCbt.id, {
+        type: 'DISPUTE_RESOLVED',
+        title:
+          outcome.disputeStatus === 'UNDER_REVIEW'
+            ? 'Dispute moved into review'
+            : 'Dispute decision recorded',
+        message: outcome.cbtMessage,
+        orderId: order.id,
+      });
+    }
+    await this.sendDisputeUpdateEmail({
+      email: order.requester.email,
+      firstName: order.requester.firstName,
+      serviceName: order.service.name,
+      orderNumber: order.orderNumber,
+      subject:
+        outcome.disputeStatus === DisputeStatus.UNDER_REVIEW
+          ? `${order.service.name} dispute moved into review`
+          : `${order.service.name} dispute update`,
+      message: outcome.requesterMessage,
+    });
+    if (order.assignedCbt) {
+      await this.sendDisputeUpdateEmail({
+        email: order.assignedCbt.email,
+        firstName: order.assignedCbt.firstName,
+        serviceName: order.service.name,
+        orderNumber: order.orderNumber,
+        subject:
+          outcome.disputeStatus === DisputeStatus.UNDER_REVIEW
+            ? `${order.service.name} dispute moved into review`
+            : `${order.service.name} dispute update`,
+        message: outcome.cbtMessage,
+      });
+    }
+
     return {
       message: outcome.successMessage,
       data: this.serializeOrderDetail(updatedOrder),
     };
   }
 
-  async getCbtDashboard(userId: string) {
-    const cbtUser = await this.ensureApprovedCbtUser(userId);
+  async reviewDisputeFinancialFollowUp(
+    adminUserId: string,
+    orderId: string,
+    dto: ReviewDisputeFinancialFollowUpDto,
+    tenantId: string | null = null,
+  ) {
+    const now = new Date();
+    const note = dto.note?.trim() || null;
+
+    const order = await this.prisma.order.findFirst({
+      where: { id: orderId, ...(tenantId ? { tenantId } : {}) },
+      select: orderDetailSelect,
+    });
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    if (!order.dispute) {
+      throw new NotFoundException('No dispute exists on this order.');
+    }
+
+    if (order.dispute.status !== DisputeStatus.RESOLVED_FOR_REQUESTER) {
+      throw new ConflictException(
+        'Financial follow-up only applies after a requester-favor dispute decision.',
+      );
+    }
+
+    const existingRefundTransaction =
+      order.transactions.find(
+        (transaction) => transaction.type === TransactionType.REFUND,
+      ) ?? null;
+    const existingPenaltyTransaction =
+      order.transactions.find(
+        (transaction) => transaction.type === TransactionType.PENALTY,
+      ) ?? null;
+
+    if (
+      dto.action === 'COMPLETE_MANUAL_REFUND' &&
+      (!order.escrowReleasedAt || existingRefundTransaction)
+    ) {
+      throw new ConflictException(
+        'Manual refund follow-up is only available for released orders that do not already have a refund record.',
+      );
+    }
+
+    if (
+      (dto.action === 'EXECUTE_CBT_PENALTY' ||
+        dto.action === 'WAIVE_CBT_PENALTY') &&
+      (!existingPenaltyTransaction ||
+        existingPenaltyTransaction.status !== TransactionStatus.PENDING ||
+        !order.assignedCbt)
+    ) {
+      throw new ConflictException(
+        'There is no pending CBT penalty review to process for this order.',
+      );
+    }
+
+    const updatedOrder = await this.prisma.$transaction(async (tx) => {
+      let followUpMessage = 'Financial follow-up recorded.';
+      let refundReference: string | null = null;
+      let penaltyReference: string | null = null;
+
+      if (dto.action === 'COMPLETE_MANUAL_REFUND') {
+        const requesterWallet = await tx.wallet.findUnique({
+          where: { userId: order.requester.id },
+          select: {
+            id: true,
+            availableBalance: true,
+          },
+        });
+
+        if (!requesterWallet) {
+          throw new NotFoundException('Requester wallet not found.');
+        }
+
+        refundReference = generateTransactionRef();
+
+        await tx.transaction.create({
+          data: {
+            walletId: requesterWallet.id,
+            userId: order.requester.id,
+            orderId: order.id,
+            type: TransactionType.REFUND,
+            status: TransactionStatus.SUCCESS,
+            amount: order.totalAmount,
+            balanceBefore: requesterWallet.availableBalance,
+            balanceAfter: requesterWallet.availableBalance,
+            reference: refundReference,
+            description: `Manual refund reconciliation completed for ${order.orderNumber}`,
+            metadata: {
+              orderNumber: order.orderNumber,
+              refundSource: 'manual-reconciliation',
+              reconciledBy: adminUserId,
+              reconciledAt: now.toISOString(),
+              note,
+            },
+          },
+        });
+
+        await tx.order.update({
+          where: { id: order.id },
+          data: {
+            status: OrderStatus.REFUNDED,
+          },
+        });
+
+        await tx.notification.create({
+          data: {
+            userId: order.requester.id,
+            orderId: order.id,
+            type: NotificationType.DISPUTE_RESOLVED,
+            title: 'Refund follow-up completed',
+            message:
+              'Your dispute refund has been marked as completed through manual reconciliation.',
+            metadata: {
+              orderNumber: order.orderNumber,
+              refundReference,
+            },
+          },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            userId: adminUserId,
+            action: 'ORDER_DISPUTE_MANUAL_REFUND_COMPLETED',
+            entity: 'Order',
+            entityId: order.id,
+            oldValues: {
+              orderStatus: order.status,
+              refundReference: null,
+            },
+            newValues: {
+              orderNumber: order.orderNumber,
+              orderStatus: OrderStatus.REFUNDED,
+              refundReference,
+              note,
+            },
+          },
+        });
+
+        followUpMessage = 'Manual refund reconciliation completed.';
+      }
+
+      if (
+        dto.action === 'EXECUTE_CBT_PENALTY' ||
+        dto.action === 'WAIVE_CBT_PENALTY'
+      ) {
+        const cbtWallet = await tx.wallet.findUnique({
+          where: { userId: order.assignedCbt!.id },
+          select: {
+            id: true,
+            availableBalance: true,
+            totalEarned: true,
+          },
+        });
+
+        if (!cbtWallet) {
+          throw new NotFoundException('CBT wallet not found.');
+        }
+
+        penaltyReference = existingPenaltyTransaction!.reference;
+
+        if (dto.action === 'EXECUTE_CBT_PENALTY') {
+          if (cbtWallet.availableBalance < order.cbtCommission) {
+            throw new ConflictException(
+              'The CBT wallet does not have enough available balance to apply this penalty yet.',
+            );
+          }
+
+          await tx.wallet.update({
+            where: { id: cbtWallet.id },
+            data: {
+              availableBalance:
+                cbtWallet.availableBalance - order.cbtCommission,
+              totalEarned:
+                cbtWallet.totalEarned >= order.cbtCommission
+                  ? cbtWallet.totalEarned - order.cbtCommission
+                  : cbtWallet.totalEarned,
+            },
+          });
+
+          await tx.transaction.update({
+            where: { id: existingPenaltyTransaction!.id },
+            data: {
+              status: TransactionStatus.SUCCESS,
+              balanceBefore: cbtWallet.availableBalance,
+              balanceAfter: cbtWallet.availableBalance - order.cbtCommission,
+              description: `Penalty applied for ${order.orderNumber}`,
+              metadata: {
+                ...(
+                  existingPenaltyTransaction as unknown as {
+                    metadata?: Record<string, unknown>;
+                  }
+                ).metadata,
+                execution: 'applied',
+                executedBy: adminUserId,
+                executedAt: now.toISOString(),
+                note,
+              },
+            },
+          });
+
+          await tx.notification.create({
+            data: {
+              userId: order.assignedCbt!.id,
+              orderId: order.id,
+              type: NotificationType.DISPUTE_RESOLVED,
+              title: 'Penalty applied',
+              message:
+                'A penalty has been applied to this CBT order after dispute review.',
+              metadata: {
+                orderNumber: order.orderNumber,
+                penaltyReference,
+              },
+            },
+          });
+
+          await tx.auditLog.create({
+            data: {
+              userId: adminUserId,
+              action: 'ORDER_DISPUTE_PENALTY_EXECUTED',
+              entity: 'Order',
+              entityId: order.id,
+              oldValues: {
+                penaltyStatus: TransactionStatus.PENDING,
+              },
+              newValues: {
+                orderNumber: order.orderNumber,
+                penaltyStatus: TransactionStatus.SUCCESS,
+                penaltyReference,
+                note,
+              },
+            },
+          });
+
+          followUpMessage = 'CBT penalty applied successfully.';
+        }
+
+        if (dto.action === 'WAIVE_CBT_PENALTY') {
+          await tx.transaction.update({
+            where: { id: existingPenaltyTransaction!.id },
+            data: {
+              status: TransactionStatus.REVERSED,
+              description: `Penalty review waived for ${order.orderNumber}`,
+              metadata: {
+                ...(
+                  existingPenaltyTransaction as unknown as {
+                    metadata?: Record<string, unknown>;
+                  }
+                ).metadata,
+                execution: 'waived',
+                waivedBy: adminUserId,
+                waivedAt: now.toISOString(),
+                note,
+              },
+            },
+          });
+
+          await tx.notification.create({
+            data: {
+              userId: order.assignedCbt!.id,
+              orderId: order.id,
+              type: NotificationType.DISPUTE_RESOLVED,
+              title: 'Penalty review waived',
+              message:
+                'The pending penalty review for this CBT order has been waived.',
+              metadata: {
+                orderNumber: order.orderNumber,
+                penaltyReference,
+              },
+            },
+          });
+
+          await tx.auditLog.create({
+            data: {
+              userId: adminUserId,
+              action: 'ORDER_DISPUTE_PENALTY_WAIVED',
+              entity: 'Order',
+              entityId: order.id,
+              oldValues: {
+                penaltyStatus: TransactionStatus.PENDING,
+              },
+              newValues: {
+                orderNumber: order.orderNumber,
+                penaltyStatus: TransactionStatus.REVERSED,
+                penaltyReference,
+                note,
+              },
+            },
+          });
+
+          followUpMessage = 'CBT penalty review waived.';
+        }
+      }
+
+      const refreshedOrder = await tx.order.findUnique({
+        where: { id: order.id },
+        select: orderDetailSelect,
+      });
+
+      if (!refreshedOrder) {
+        throw new NotFoundException('Order not found');
+      }
+
+      return {
+        refreshedOrder,
+        followUpMessage,
+      };
+    });
+
+    return {
+      message: updatedOrder.followUpMessage,
+      data: this.serializeOrderDetail(updatedOrder.refreshedOrder),
+    };
+  }
+
+  async getCbtDashboard(userId: string, tenantId: string | null) {
+    const cbtUser = await this.ensureApprovedCbtUser(userId, tenantId);
+    const tenantFilter = tenantId ? { tenantId } : {};
 
     const [
       availableCount,
@@ -1542,6 +2158,7 @@ export class OrdersService {
           fulfillmentType: 'MANUAL',
           assignedCbtId: null,
           status: OrderStatus.PENDING,
+          ...tenantFilter,
         },
       }),
       this.prisma.order.count({
@@ -1561,6 +2178,7 @@ export class OrdersService {
           fulfillmentType: 'MANUAL',
           assignedCbtId: null,
           status: OrderStatus.PENDING,
+          ...tenantFilter,
         },
         orderBy: { createdAt: 'desc' },
         take: 3,
@@ -1603,8 +2221,12 @@ export class OrdersService {
     };
   }
 
-  async getCbtJobPool(userId: string, query: GetCbtJobPoolQueryDto) {
-    await this.ensureApprovedCbtUser(userId);
+  async getCbtJobPool(
+    userId: string,
+    query: GetCbtJobPoolQueryDto,
+    tenantId: string | null,
+  ) {
+    await this.ensureApprovedCbtUser(userId, tenantId);
 
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
@@ -1614,6 +2236,7 @@ export class OrdersService {
       fulfillmentType: 'MANUAL',
       assignedCbtId: null,
       status: OrderStatus.PENDING,
+      ...(tenantId ? { tenantId } : {}),
       ...(query.categorySlug
         ? { service: { category: { slug: query.categorySlug } } }
         : {}),
@@ -1660,8 +2283,12 @@ export class OrdersService {
     };
   }
 
-  async getCbtMyJobs(userId: string, query: GetCbtMyJobsQueryDto) {
-    await this.ensureApprovedCbtUser(userId);
+  async getCbtMyJobs(
+    userId: string,
+    query: GetCbtMyJobsQueryDto,
+    tenantId: string | null,
+  ) {
+    await this.ensureApprovedCbtUser(userId, tenantId);
 
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
@@ -1669,6 +2296,7 @@ export class OrdersService {
 
     const where: Prisma.OrderWhereInput = {
       assignedCbtId: userId,
+      ...(tenantId ? { tenantId } : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(search
         ? {
@@ -1695,7 +2323,10 @@ export class OrdersService {
       this.prisma.order.groupBy({
         by: ['status'],
         _count: { _all: true },
-        where: { assignedCbtId: userId },
+        where: {
+          assignedCbtId: userId,
+          ...(tenantId ? { tenantId } : {}),
+        },
       }),
     ]);
 
@@ -1729,13 +2360,18 @@ export class OrdersService {
     };
   }
 
-  async getCbtOrderDetail(userId: string, orderId: string) {
-    await this.ensureApprovedCbtUser(userId);
+  async getCbtOrderDetail(
+    userId: string,
+    orderId: string,
+    tenantId: string | null,
+  ) {
+    await this.ensureApprovedCbtUser(userId, tenantId);
 
     const order = await this.prisma.order.findFirst({
       where: {
         id: orderId,
         fulfillmentType: 'MANUAL',
+        ...(tenantId ? { tenantId } : {}),
         OR: [
           { assignedCbtId: null, status: OrderStatus.PENDING },
           { assignedCbtId: userId },
@@ -1754,8 +2390,8 @@ export class OrdersService {
     };
   }
 
-  async claimCbtJob(userId: string, orderId: string) {
-    const cbtUser = await this.ensureApprovedCbtUser(userId);
+  async claimCbtJob(userId: string, orderId: string, tenantId: string | null) {
+    const cbtUser = await this.ensureApprovedCbtUser(userId, tenantId);
     const claimedAt = new Date();
 
     const order = await this.prisma.$transaction(async (tx) => {
@@ -1765,6 +2401,7 @@ export class OrdersService {
           fulfillmentType: 'MANUAL',
           assignedCbtId: null,
           status: OrderStatus.PENDING,
+          ...(tenantId ? { tenantId } : {}),
         },
         data: {
           assignedCbtId: userId,
@@ -1778,6 +2415,7 @@ export class OrdersService {
           where: { id: orderId },
           select: {
             id: true,
+            tenantId: true,
             fulfillmentType: true,
             status: true,
             assignedCbtId: true,
@@ -1785,6 +2423,10 @@ export class OrdersService {
         });
 
         if (!existingOrder) {
+          throw new NotFoundException('Job not found');
+        }
+
+        if ((existingOrder.tenantId ?? null) !== (tenantId ?? null)) {
           throw new NotFoundException('Job not found');
         }
 
@@ -1864,14 +2506,29 @@ export class OrdersService {
       return claimedOrder;
     });
 
+    // Real-time: notify requester their order was assigned
+    this.notificationsService.pushNotificationToUser(order.requester.id, {
+      type: 'ORDER_ASSIGNED',
+      title: 'Your order has been assigned',
+      message: `${order.service.name} is now assigned to ${cbtUser.cbtProfile!.centerName}.`,
+      orderId: order.id,
+    });
+    this.notificationsService.broadcastClaimedJob({
+      orderId: order.id,
+      serviceId: order.service.id,
+      serviceName: order.service.name,
+      tenantId,
+      assignedCbtId: userId,
+    });
+
     return {
       message: 'Job claimed successfully.',
       data: this.serializeOrderDetail(order),
     };
   }
 
-  async startCbtJob(userId: string, orderId: string) {
-    await this.ensureApprovedCbtUser(userId);
+  async startCbtJob(userId: string, orderId: string, tenantId: string | null) {
+    await this.ensureApprovedCbtUser(userId, tenantId);
 
     const order = await this.prisma.$transaction(async (tx) => {
       const updateResult = await tx.order.updateMany({
@@ -1879,6 +2536,7 @@ export class OrdersService {
           id: orderId,
           assignedCbtId: userId,
           status: OrderStatus.ASSIGNED,
+          ...(tenantId ? { tenantId } : {}),
         },
         data: {
           status: OrderStatus.IN_PROGRESS,
@@ -1890,12 +2548,17 @@ export class OrdersService {
           where: { id: orderId },
           select: {
             id: true,
+            tenantId: true,
             assignedCbtId: true,
             status: true,
           },
         });
 
         if (!existingOrder) {
+          throw new NotFoundException('Job not found');
+        }
+
+        if ((existingOrder.tenantId ?? null) !== (tenantId ?? null)) {
           throw new NotFoundException('Job not found');
         }
 
@@ -1953,8 +2616,9 @@ export class OrdersService {
     orderId: string,
     file: UploadedDocumentFile | undefined,
     dto: CompleteCbtJobDto,
+    tenantId: string | null,
   ) {
-    await this.ensureApprovedCbtUser(userId);
+    await this.ensureApprovedCbtUser(userId, tenantId);
 
     if (!file) {
       throw new BadRequestException(
@@ -1973,6 +2637,7 @@ export class OrdersService {
       where: { id: orderId },
       select: {
         id: true,
+        tenantId: true,
         assignedCbtId: true,
         status: true,
         dispute: {
@@ -1984,6 +2649,10 @@ export class OrdersService {
     });
 
     if (!currentOrder) {
+      throw new NotFoundException('Job not found');
+    }
+
+    if ((currentOrder.tenantId ?? null) !== (tenantId ?? null)) {
       throw new NotFoundException('Job not found');
     }
 
@@ -2021,6 +2690,7 @@ export class OrdersService {
           where: {
             id: orderId,
             assignedCbtId: userId,
+            ...(tenantId ? { tenantId } : {}),
             status: {
               in: [OrderStatus.ASSIGNED, OrderStatus.IN_PROGRESS],
             },
@@ -2040,12 +2710,17 @@ export class OrdersService {
             where: { id: orderId },
             select: {
               id: true,
+              tenantId: true,
               assignedCbtId: true,
               status: true,
             },
           });
 
           if (!existingOrder) {
+            throw new NotFoundException('Job not found');
+          }
+
+          if ((existingOrder.tenantId ?? null) !== (tenantId ?? null)) {
             throw new NotFoundException('Job not found');
           }
 
@@ -2140,6 +2815,42 @@ export class OrdersService {
         // should not undo the completed result submission.
       }
 
+      // Real-time: notify requester that the result is ready
+      this.notificationsService.pushNotificationToUser(order.requester.id, {
+        type: 'ORDER_COMPLETED',
+        title: 'Your result is ready',
+        message: `${order.service.name} has been completed. Review the result before ${disputeWindowExpiresAt.toLocaleString()}.`,
+        orderId: order.id,
+      });
+      this.notificationsService.emitEventToUser(
+        order.requester.id,
+        'order:completed',
+        {
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          serviceName: order.service.name,
+          disputeWindowExpiresAt: disputeWindowExpiresAt.toISOString(),
+        },
+      );
+      if (order.assignedCbt) {
+        this.notificationsService.emitEventToUser(
+          order.assignedCbt.id,
+          'order:completed',
+          {
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            serviceName: order.service.name,
+          },
+        );
+      }
+      await this.sendOrderCompletedEmail({
+        email: order.requester.email,
+        firstName: order.requester.firstName,
+        serviceName: order.service.name,
+        orderNumber: order.orderNumber,
+        disputeWindowExpiresAt,
+      });
+
       return {
         message: 'Result uploaded and job completed successfully.',
         data: this.serializeOrderDetail(order),
@@ -2152,7 +2863,11 @@ export class OrdersService {
     }
   }
 
-  async createOrder(userId: string, dto: CreateOrderDto) {
+  async createOrder(
+    userId: string,
+    dto: CreateOrderDto,
+    tenantId: string | null,
+  ) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -2174,8 +2889,13 @@ export class OrdersService {
       throw new NotFoundException('Wallet not found');
     }
 
-    const service = await this.prisma.service.findUnique({
-      where: { id: dto.serviceId },
+    const service = await this.prisma.service.findFirst({
+      where: {
+        id: dto.serviceId,
+        ...(tenantId
+          ? { OR: [{ tenantId: null }, { tenantId }] }
+          : { tenantId: null }),
+      },
       select: {
         id: true,
         name: true,
@@ -2183,6 +2903,7 @@ export class OrdersService {
         totalPrice: true,
         platformFee: true,
         cbtCommission: true,
+        providerKey: true,
         deliveryMode: true,
         fulfillmentType: true,
         isActive: true,
@@ -2199,12 +2920,6 @@ export class OrdersService {
 
     if (!service || !service.isActive) {
       throw new NotFoundException('Service not found');
-    }
-
-    if (user.wallet.availableBalance < service.totalPrice) {
-      throw new BadRequestException(
-        'Your wallet balance is not enough for this request.',
-      );
     }
 
     const requiredFields = Array.isArray(service.requiredFields)
@@ -2226,6 +2941,27 @@ export class OrdersService {
       normalizedRequesterDocUrls,
     );
 
+    if (
+      service.fulfillmentType === 'AUTOMATED' &&
+      service.deliveryMode === 'API_AUTOMATED'
+    ) {
+      return this.createAutomatedOrder(
+        {
+          ...user,
+          wallet: user.wallet,
+        },
+        service,
+        normalizedSubmittedData,
+        tenantId,
+      );
+    }
+
+    if (user.wallet.availableBalance < service.totalPrice) {
+      throw new BadRequestException(
+        'Your wallet balance is not enough for this request.',
+      );
+    }
+
     const balanceBefore = user.wallet.availableBalance;
     const balanceAfter = balanceBefore - service.totalPrice;
     const escrowAfter = user.wallet.escrowBalance + service.totalPrice;
@@ -2238,6 +2974,7 @@ export class OrdersService {
           orderNumber,
           requesterId: user.id,
           serviceId: service.id,
+          tenantId,
           status: OrderStatus.PENDING,
           deliveryMode: service.deliveryMode,
           fulfillmentType: service.fulfillmentType,
@@ -2283,6 +3020,7 @@ export class OrdersService {
           walletId: user.wallet!.id,
           userId: user.id,
           orderId: createdOrder.id,
+          tenantId,
           type: TransactionType.ESCROW_LOCK,
           status: TransactionStatus.SUCCESS,
           amount: service.totalPrice,
@@ -2301,6 +3039,7 @@ export class OrdersService {
       await tx.notification.create({
         data: {
           userId: user.id,
+          tenantId,
           type: NotificationType.ORDER_PLACED,
           title: 'Order placed successfully',
           message: `${service.name} has been submitted and moved into escrow.`,
@@ -2310,6 +3049,7 @@ export class OrdersService {
       await tx.auditLog.create({
         data: {
           userId: user.id,
+          tenantId,
           action: 'ORDER_CREATED',
           entity: 'Order',
           entityId: createdOrder.id,
@@ -2323,6 +3063,28 @@ export class OrdersService {
       });
 
       return createdOrder;
+    });
+
+    // Real-time: notify requester wallet changed + broadcast new job to CBT pool
+    this.notificationsService.broadcastWalletUpdated(userId);
+    if (service.fulfillmentType === 'MANUAL') {
+      this.notificationsService.broadcastNewJob({
+        orderId: order.id,
+        serviceId: service.id,
+        serviceName: service.name,
+        tenantId,
+      });
+    }
+    this.notificationsService.pushNotificationToUser(userId, {
+      type: 'ORDER_PLACED',
+      title: 'Order placed successfully',
+      message: `${service.name} has been submitted and moved into escrow.`,
+    });
+    await this.sendOrderPlacedEmail({
+      email: user.email,
+      firstName: user.firstName,
+      serviceName: service.name,
+      orderNumber: order.orderNumber,
     });
 
     return {
@@ -2345,6 +3107,453 @@ export class OrdersService {
           escrowBalance: escrowAfter.toString(),
         },
       },
+    };
+  }
+
+  private async createAutomatedOrder(
+    user: OrderRequesterWithWallet,
+    service: AutomatedServiceDefinition,
+    submittedData: Record<string, string>,
+    tenantId: string | null,
+  ) {
+    const providerReference = generateTransactionRef();
+    const orderNumber = generateOrderNumber();
+    const categorySlug = service.category.slug;
+    const providerKey = service.providerKey?.trim().toUpperCase() ?? null;
+
+    if (!providerKey) {
+      throw new BadRequestException(
+        'This automated service is not fully configured for provider delivery yet.',
+      );
+    }
+
+    let providerCost = service.totalPrice;
+    let providerResult:
+      | {
+          providerReference: string;
+          providerResponse: Record<string, unknown>;
+          success: boolean;
+        }
+      | undefined;
+
+    if (categorySlug === 'vtu-airtime') {
+      const phone = submittedData.phone?.trim();
+      const amountNaira = Number(
+        submittedData.amountNaira ?? submittedData.amount,
+      );
+
+      if (!phone || phone.length < 10) {
+        throw new BadRequestException(
+          'Please enter a valid phone number for this airtime purchase.',
+        );
+      }
+
+      if (!Number.isFinite(amountNaira) || amountNaira < 50) {
+        throw new BadRequestException('Airtime amount must be at least ₦50.');
+      }
+
+      providerCost = nairaToKobo(amountNaira);
+      const purchase = await this.vtuService.purchaseAirtime({
+        phone,
+        network: providerKey,
+        amountKobo: providerCost,
+        reference: providerReference,
+        tenantId,
+      });
+
+      providerResult = {
+        providerReference: purchase.providerReference,
+        success: purchase.success,
+        providerResponse: {
+          provider: this.vtuService.providerName,
+          providerStatus: purchase.status,
+          category: 'AIRTIME',
+          network: providerKey,
+          phone,
+          amountKobo: providerCost.toString(),
+          deliveredAt: new Date().toISOString(),
+        },
+      };
+    } else if (categorySlug === 'vtu-data') {
+      const phone = submittedData.phone?.trim();
+      const planCode = submittedData.planCode?.trim();
+
+      if (!phone || phone.length < 10) {
+        throw new BadRequestException(
+          'Please enter a valid phone number for this data purchase.',
+        );
+      }
+
+      if (!planCode) {
+        throw new BadRequestException('Please select a data plan first.');
+      }
+
+      const plans = await this.vtuService.getDataPlans(providerKey, tenantId);
+      const selectedPlan = plans.find((plan) => plan.code === planCode);
+
+      if (!selectedPlan) {
+        throw new BadRequestException(
+          'The selected data plan is no longer available.',
+        );
+      }
+
+      providerCost = selectedPlan.amountKobo;
+
+      const purchase = await this.vtuService.purchaseData({
+        phone,
+        planCode: selectedPlan.code,
+        amountKobo: selectedPlan.amountKobo,
+        reference: providerReference,
+        tenantId,
+      });
+
+      providerResult = {
+        providerReference: purchase.providerReference,
+        success: purchase.success,
+        providerResponse: {
+          provider: this.vtuService.providerName,
+          providerStatus: purchase.status,
+          category: 'DATA',
+          network: providerKey,
+          phone,
+          planCode: selectedPlan.code,
+          planName: selectedPlan.name,
+          validity: selectedPlan.validity,
+          amountKobo: selectedPlan.amountKobo.toString(),
+          deliveredAt: new Date().toISOString(),
+        },
+      };
+    } else if (categorySlug === 'vtu-cable') {
+      const smartcardNumber = submittedData.smartcardNumber?.trim();
+      const bouquetCode = submittedData.bouquetCode?.trim();
+
+      if (!smartcardNumber || smartcardNumber.length < 6) {
+        throw new BadRequestException(
+          'Please enter a valid smartcard or IUC number.',
+        );
+      }
+
+      if (!bouquetCode) {
+        throw new BadRequestException('Please select a bouquet first.');
+      }
+
+      const verification = await this.vtuService.verifyCableSmartcard({
+        provider: providerKey,
+        smartcardNumber,
+        tenantId,
+      });
+
+      if (!verification.success || verification.status !== 'VALID') {
+        throw new BadRequestException(
+          'We could not verify this smartcard number right now.',
+        );
+      }
+
+      const plans = await this.vtuService.getCablePlans(providerKey, tenantId);
+      const selectedPlan = plans.find((plan) => plan.code === bouquetCode);
+
+      if (!selectedPlan) {
+        throw new BadRequestException(
+          'The selected cable bouquet is no longer available.',
+        );
+      }
+
+      providerCost = selectedPlan.amountKobo;
+
+      const purchase = await this.vtuService.purchaseCable({
+        provider: providerKey,
+        smartcardNumber,
+        planCode: selectedPlan.code,
+        amountKobo: selectedPlan.amountKobo,
+        reference: providerReference,
+        tenantId,
+      });
+
+      providerResult = {
+        providerReference: purchase.providerReference,
+        success: purchase.success,
+        providerResponse: {
+          provider: this.vtuService.providerName,
+          providerStatus: purchase.status,
+          category: 'CABLE',
+          providerKey,
+          smartcardNumber,
+          customerName: verification.customerName,
+          currentPlan: verification.currentPlan ?? null,
+          dueDate: verification.dueDate ?? null,
+          bouquetCode: selectedPlan.code,
+          bouquetName: selectedPlan.name,
+          duration: selectedPlan.duration,
+          amountKobo: selectedPlan.amountKobo.toString(),
+          deliveredAt: new Date().toISOString(),
+        },
+      };
+    } else if (categorySlug === 'vtu-electricity') {
+      const meterNumber = submittedData.meterNumber?.trim();
+      const meterType = submittedData.meterType?.trim().toUpperCase();
+      const amountNaira = Number(
+        submittedData.amountNaira ?? submittedData.amount,
+      );
+
+      if (!meterNumber || meterNumber.length < 6) {
+        throw new BadRequestException('Please enter a valid meter number.');
+      }
+
+      if (meterType !== 'PREPAID' && meterType !== 'POSTPAID') {
+        throw new BadRequestException(
+          'Please choose either prepaid or postpaid meter type.',
+        );
+      }
+
+      if (!Number.isFinite(amountNaira) || amountNaira < 500) {
+        throw new BadRequestException(
+          'Electricity amount must be at least ₦500.',
+        );
+      }
+
+      const verification = await this.vtuService.verifyElectricityMeter({
+        disco: providerKey,
+        meterNumber,
+        meterType,
+        tenantId,
+      });
+
+      if (!verification.success || verification.status !== 'VALID') {
+        throw new BadRequestException(
+          'We could not verify this meter number right now.',
+        );
+      }
+
+      providerCost = nairaToKobo(amountNaira);
+
+      const purchase = await this.vtuService.purchaseElectricity({
+        disco: providerKey,
+        meterNumber,
+        meterType,
+        amountKobo: providerCost,
+        reference: providerReference,
+        tenantId,
+      });
+
+      providerResult = {
+        providerReference: purchase.providerReference,
+        success: purchase.success,
+        providerResponse: {
+          provider: this.vtuService.providerName,
+          providerStatus: purchase.status,
+          category: 'ELECTRICITY',
+          disco: providerKey,
+          meterNumber,
+          meterType,
+          customerName: verification.customerName,
+          address: verification.address ?? null,
+          amountKobo: providerCost.toString(),
+          token:
+            typeof purchase.metadata?.token === 'string'
+              ? purchase.metadata.token
+              : null,
+          units:
+            typeof purchase.metadata?.units === 'number'
+              ? purchase.metadata.units
+              : null,
+          deliveredAt: new Date().toISOString(),
+        },
+      };
+    } else {
+      throw new BadRequestException(
+        'This automated service category will be completed in the next VTU batch.',
+      );
+    }
+
+    if (!providerResult?.success) {
+      throw new BadRequestException(
+        'This automated purchase could not be completed right now.',
+      );
+    }
+
+    const totalAmount = providerCost + service.platformFee;
+
+    if (user.wallet.availableBalance < totalAmount) {
+      throw new BadRequestException(
+        'Your wallet balance is not enough for this purchase.',
+      );
+    }
+
+    const balanceBefore = user.wallet.availableBalance;
+    const balanceAfter = balanceBefore - totalAmount;
+    const servicePurchaseReference = generateTransactionRef();
+
+    const order = await this.prisma.$transaction(async (tx) => {
+      const createdOrder = await tx.order.create({
+        data: {
+          orderNumber,
+          requesterId: user.id,
+          serviceId: service.id,
+          tenantId,
+          status: providerResult?.success
+            ? OrderStatus.COMPLETED
+            : OrderStatus.CANCELLED,
+          deliveryMode: service.deliveryMode,
+          fulfillmentType: service.fulfillmentType,
+          submittedData,
+          requesterDocUrls: [],
+          totalAmount,
+          platformFee: service.platformFee,
+          cbtCommission: service.cbtCommission,
+          providerReference:
+            providerResult?.providerReference ?? providerReference,
+          providerResponse:
+            (providerResult?.providerResponse as Prisma.InputJsonValue) ?? null,
+          completedAt: providerResult?.success ? new Date() : null,
+        },
+        select: orderDetailSelect,
+      });
+
+      await tx.wallet.update({
+        where: { id: user.wallet.id },
+        data: {
+          availableBalance: balanceAfter,
+        },
+      });
+
+      await tx.transaction.create({
+        data: {
+          walletId: user.wallet.id,
+          userId: user.id,
+          orderId: createdOrder.id,
+          tenantId,
+          type: 'SERVICE_PURCHASE',
+          status: TransactionStatus.SUCCESS,
+          amount: totalAmount,
+          balanceBefore,
+          balanceAfter,
+          reference: servicePurchaseReference,
+          description: `Wallet charged for ${service.name}`,
+          metadata: {
+            orderNumber,
+            serviceSlug: service.slug,
+            serviceCategorySlug: service.category.slug,
+            providerReference:
+              providerResult?.providerReference ?? providerReference,
+            providerCost: providerCost.toString(),
+            platformFee: service.platformFee.toString(),
+          },
+        },
+      });
+
+      const platformWallet = await tx.wallet.findFirst({
+        where: {
+          user: {
+            role: UserRole.SUPER_ADMIN,
+          },
+        },
+        select: {
+          id: true,
+          userId: true,
+          availableBalance: true,
+        },
+      });
+
+      if (!platformWallet) {
+        throw new NotFoundException('Platform wallet not found.');
+      }
+
+      await tx.wallet.update({
+        where: { id: platformWallet.id },
+        data: {
+          availableBalance:
+            platformWallet.availableBalance + service.platformFee,
+        },
+      });
+
+      await tx.transaction.create({
+        data: {
+          walletId: platformWallet.id,
+          userId: platformWallet.userId,
+          orderId: createdOrder.id,
+          type: TransactionType.PLATFORM_COMMISSION,
+          status: TransactionStatus.SUCCESS,
+          amount: service.platformFee,
+          balanceBefore: platformWallet.availableBalance,
+          balanceAfter: platformWallet.availableBalance + service.platformFee,
+          reference: generateTransactionRef(),
+          description: `Platform commission recognised for ${service.name}`,
+          metadata: {
+            orderNumber,
+            serviceSlug: service.slug,
+            serviceCategorySlug: service.category.slug,
+            automated: true,
+          },
+        },
+      });
+
+      await tx.notification.create({
+        data: {
+          userId: user.id,
+          orderId: createdOrder.id,
+          type: NotificationType.ORDER_COMPLETED,
+          title: 'Purchase delivered successfully',
+          message: `${service.name} was processed instantly and is now available in your order history.`,
+          metadata: {
+            orderNumber,
+            providerReference:
+              providerResult?.providerReference ?? providerReference,
+          },
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId: user.id,
+          action: 'ORDER_AUTOMATED_CREATED',
+          entity: 'Order',
+          entityId: createdOrder.id,
+          newValues: {
+            orderNumber,
+            serviceId: service.id,
+            totalAmount: totalAmount.toString(),
+            providerReference:
+              providerResult?.providerReference ?? providerReference,
+            deliveryMode: service.deliveryMode,
+            providerCost: providerCost.toString(),
+          },
+        },
+      });
+
+      return createdOrder;
+    });
+
+    this.notificationsService.broadcastWalletUpdated(user.id);
+    this.notificationsService.pushNotificationToUser(user.id, {
+      type: 'ORDER_COMPLETED',
+      title: 'Purchase delivered successfully',
+      message: `${service.name} was processed instantly and is now available in your order history.`,
+      orderId: order.id,
+    });
+    this.notificationsService.emitEventToUser(user.id, 'order:completed', {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      serviceName: service.name,
+      automated: true,
+    });
+    await this.sendOrderPlacedEmail({
+      email: user.email,
+      firstName: user.firstName,
+      serviceName: service.name,
+      orderNumber: order.orderNumber,
+      automated: true,
+    });
+    await this.sendOrderCompletedEmail({
+      email: user.email,
+      firstName: user.firstName,
+      serviceName: service.name,
+      orderNumber: order.orderNumber,
+      automated: true,
+    });
+
+    return {
+      message: 'Purchase completed successfully and delivered instantly.',
+      data: this.serializeOrderDetail(order),
     };
   }
 
@@ -3007,7 +4216,9 @@ export class OrdersService {
       penaltyStatus: penaltyTransaction
         ? penaltyTransaction.status === TransactionStatus.PENDING
           ? 'PENDING_REVIEW'
-          : 'RECORDED'
+          : penaltyTransaction.status === TransactionStatus.SUCCESS
+            ? 'EXECUTED'
+            : 'WAIVED'
         : penaltyApplicable
           ? order.dispute?.status === DisputeStatus.RESOLVED_FOR_REQUESTER
             ? 'NOT_REQUESTED'
@@ -3087,6 +4298,13 @@ export class OrdersService {
         slug: order.service.slug,
         category: order.service.category,
       },
+      tenant: order.tenant
+        ? {
+            id: order.tenant.id,
+            name: order.tenant.name,
+            slug: order.tenant.slug,
+          }
+        : null,
       requester: {
         id: order.requester.id,
         firstName: order.requester.firstName,
@@ -3111,6 +4329,13 @@ export class OrdersService {
   ) {
     return {
       ...this.serializeOrderSummary(order),
+      tenant: order.tenant
+        ? {
+            id: order.tenant.id,
+            name: order.tenant.name,
+            slug: order.tenant.slug,
+          }
+        : null,
       requester: {
         id: order.requester.id,
         firstName: order.requester.firstName,
@@ -3130,9 +4355,12 @@ export class OrdersService {
     };
   }
 
-  private async ensureApprovedCbtUser(userId: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
+  private async ensureApprovedCbtUser(userId: string, tenantId: string | null) {
+    const user = await this.prisma.user.findFirst({
+      where: {
+        id: userId,
+        ...(tenantId ? { tenantId } : { tenantId: null }),
+      },
       select: {
         id: true,
         cbtProfile: {

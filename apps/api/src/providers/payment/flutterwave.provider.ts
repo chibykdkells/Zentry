@@ -3,9 +3,12 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import * as crypto from 'crypto';
 import type {
+  BankListItem,
   IPaymentProvider,
   InitiatePaymentInput,
   InitiatePaymentResult,
+  InitiateTransferInput,
+  InitiateTransferResult,
   VerifyPaymentResult,
   WebhookParseResult,
 } from '../interfaces';
@@ -98,6 +101,59 @@ export class FlutterwaveProvider implements IPaymentProvider {
       gatewayRef: tx.id.toString(),
       paidAt: tx.created_at ? new Date(tx.created_at) : undefined,
     };
+  }
+
+  async initiateTransfer(
+    input: InitiateTransferInput,
+  ): Promise<InitiateTransferResult> {
+    // Flutterwave transfer uses Naira
+    const amountNaira = Number(input.amountKobo) / 100;
+
+    const response = await axios.post(
+      `${this.baseUrl}/transfers`,
+      {
+        account_bank: input.bankCode,
+        account_number: input.accountNumber,
+        amount: amountNaira,
+        currency: 'NGN',
+        narration: input.narration,
+        reference: input.reference,
+        beneficiary_name: input.accountName,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${this.secretKey}`,
+          'Content-Type': 'application/json',
+        },
+      },
+    );
+
+    const { data } = response.data as {
+      data: { reference: string; id: number; status: string };
+    };
+
+    return {
+      transferRef: data.reference ?? input.reference,
+      gatewayRef: data.id?.toString() ?? data.reference,
+      status:
+        data.status?.toLowerCase() === 'successful' ? 'SUCCESS' : 'PENDING',
+    };
+  }
+
+  async getBanks(): Promise<BankListItem[]> {
+    const response = await axios.get(`${this.baseUrl}/banks/NG`, {
+      headers: { Authorization: `Bearer ${this.secretKey}` },
+    });
+
+    const { data } = response.data as {
+      data: { code: string; name: string }[];
+    };
+
+    return (data ?? [])
+      .filter(
+        (b) => b && typeof b.code === 'string' && typeof b.name === 'string',
+      )
+      .map((b) => ({ code: b.code.trim(), name: b.name.trim() }));
   }
 
   parseWebhook(rawBody: Buffer, signatureHeader: string): WebhookParseResult {

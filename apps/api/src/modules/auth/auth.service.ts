@@ -6,6 +6,7 @@ import {
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
@@ -14,11 +15,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { UserRole, OtpType, JwtUser } from '@zentry/types';
 import { generateTransactionRef } from '@zentry/utils';
-import {
-  RegisterIndividualDto,
-  RegisterCyberCafeDto,
-  RegisterCbtDto,
-} from './dto';
+import { RegisterIndividualDto, RegisterCbtDto } from './dto';
 
 @Injectable()
 export class AuthService {
@@ -33,32 +30,14 @@ export class AuthService {
 
   // ── Registration ──────────────────────────────────────────────
 
-  async registerIndividual(dto: RegisterIndividualDto) {
+  async registerIndividual(dto: RegisterIndividualDto, tenantId: string) {
     if (dto.password !== dto.confirmPassword) {
       throw new BadRequestException('Passwords do not match');
     }
-    return this.createUser(dto, UserRole.INDIVIDUAL);
+    return this.createUser(dto, UserRole.INDIVIDUAL, tenantId);
   }
 
-  async registerCyberCafe(dto: RegisterCyberCafeDto) {
-    if (dto.password !== dto.confirmPassword) {
-      throw new BadRequestException('Passwords do not match');
-    }
-    const result = await this.createUser(dto, UserRole.CYBER_CAFE);
-    const user = result.data;
-    await this.prisma.cyberCafeProfile.create({
-      data: {
-        userId: user.id,
-        businessName: dto.businessName,
-        address: dto.address,
-        state: dto.state,
-        cacNumber: dto.cacNumber,
-      },
-    });
-    return result;
-  }
-
-  async registerCbt(dto: RegisterCbtDto) {
+  async registerCbt(dto: RegisterCbtDto, tenantId: string) {
     if (dto.password !== dto.confirmPassword) {
       throw new BadRequestException('Passwords do not match');
     }
@@ -72,14 +51,14 @@ export class AuthService {
       );
     }
 
-    const result = await this.createUser(dto, UserRole.CBT_CENTER);
+    const result = await this.createUser(dto, UserRole.CBT_CENTER, tenantId);
     const user = result.data;
     await this.prisma.cbtProfile.create({
       data: {
         userId: user.id,
+        tenantId,
         centerName: dto.centerName,
         licenseNumber: dto.licenseNumber,
-        licenseDocUrl: '', // Updated after license doc upload
         address: dto.address,
         state: dto.state,
         lga: dto.lga,
@@ -88,11 +67,18 @@ export class AuthService {
     return result;
   }
 
-  private async createUser(dto: RegisterIndividualDto, role: UserRole) {
+  private async createUser(
+    dto: RegisterIndividualDto,
+    role: UserRole,
+    tenantId: string,
+  ) {
+    const normalizedEmail = this.normalizeEmail(dto.email);
+    const normalizedPhone = dto.phone.trim();
+
     // Check uniqueness
     const [existingEmail, existingPhone] = await Promise.all([
-      this.prisma.user.findUnique({ where: { email: dto.email } }),
-      this.prisma.user.findUnique({ where: { phone: dto.phone } }),
+      this.findUserByScopedEmail(normalizedEmail, tenantId),
+      this.findUserByScopedPhone(normalizedPhone, tenantId),
     ]);
 
     if (existingEmail)
@@ -109,10 +95,11 @@ export class AuthService {
         data: {
           firstName: dto.firstName,
           lastName: dto.lastName,
-          email: dto.email.toLowerCase(),
-          phone: dto.phone,
+          email: normalizedEmail,
+          phone: normalizedPhone,
           passwordHash,
           role,
+          tenantId,
         },
         select: {
           id: true,
@@ -131,6 +118,7 @@ export class AuthService {
       await tx.auditLog.create({
         data: {
           userId: created.id,
+          tenantId,
           action: 'USER_REGISTERED',
           entity: 'User',
           entityId: created.id,
@@ -181,10 +169,8 @@ export class AuthService {
     }
   }
 
-  async verifyEmail(email: string, otp: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
-    });
+  async verifyEmail(email: string, otp: string, tenantId: string | null) {
+    const user = await this.findUserByScopedEmail(email, tenantId);
     if (!user) throw new NotFoundException('User not found');
     if (user.isEmailVerified) {
       throw new BadRequestException('Email is already verified');
@@ -245,6 +231,7 @@ export class AuthService {
       user.id,
       user.email,
       user.role,
+      user.tenantId ?? null,
     );
     return {
       message: 'Email verified successfully.',
@@ -252,10 +239,8 @@ export class AuthService {
     };
   }
 
-  async resendOtp(email: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
-    });
+  async resendOtp(email: string, tenantId: string | null) {
+    const user = await this.findUserByScopedEmail(email, tenantId);
     // Always return success to prevent email enumeration
     if (user && !user.isEmailVerified) {
       await this.sendEmailOtp(user.id, user.email);
@@ -268,10 +253,13 @@ export class AuthService {
 
   // ── Login ─────────────────────────────────────────────────────
 
-  async login(email: string, password: string, ipAddress?: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
-    });
+  async login(
+    email: string,
+    password: string,
+    tenantId: string | null,
+    ipAddress?: string,
+  ) {
+    const user = await this.findUserByScopedEmail(email, tenantId);
 
     if (!user || !user.isActive) {
       throw new UnauthorizedException('Invalid credentials');
@@ -308,6 +296,7 @@ export class AuthService {
       user.id,
       user.email,
       user.role,
+      user.tenantId ?? null,
     );
     return {
       message: 'Login successful.',
@@ -319,6 +308,8 @@ export class AuthService {
           lastName: user.lastName,
           email: user.email,
           role: user.role,
+          tenantId: user.tenantId ?? null,
+          isEmailVerified: user.isEmailVerified,
         },
       },
     };
@@ -370,10 +361,8 @@ export class AuthService {
 
   // ── Password reset ────────────────────────────────────────────
 
-  async forgotPassword(email: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
-    });
+  async forgotPassword(email: string, tenantId: string | null) {
+    const user = await this.findUserByScopedEmail(email, tenantId);
 
     // Always return the same message — prevents email enumeration
     if (user) {
@@ -563,11 +552,17 @@ export class AuthService {
     }
   }
 
-  private async generateTokens(userId: string, email: string, role: string) {
+  private async generateTokens(
+    userId: string,
+    email: string,
+    role: string,
+    tenantId: string | null,
+  ) {
     const payload: Omit<JwtUser, 'iat' | 'exp'> = {
       sub: userId,
       email,
       role: role as UserRole,
+      tenantId,
     };
 
     const [accessToken, refreshToken] = await Promise.all([
@@ -590,8 +585,9 @@ export class AuthService {
     userId: string,
     email: string,
     role: string,
+    tenantId: string | null,
   ) {
-    const tokens = await this.generateTokens(userId, email, role);
+    const tokens = await this.generateTokens(userId, email, role, tenantId);
 
     await this.redisService.set(
       this.getRefreshTokenKey(userId),
@@ -627,7 +623,13 @@ export class AuthService {
 
       const user = await this.prisma.user.findUnique({
         where: { id: payload.sub },
-        select: { id: true, email: true, role: true, isActive: true },
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          isActive: true,
+          tenantId: true,
+        },
       });
 
       if (!user || !user.isActive) {
@@ -638,10 +640,37 @@ export class AuthService {
         user.id,
         user.email,
         user.role,
+        user.tenantId ?? null,
       );
       return { message: 'Tokens refreshed', data: tokens };
     } catch {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
+  }
+
+  private normalizeEmail(email: string) {
+    return email.trim().toLowerCase();
+  }
+
+  private buildTenantUserWhere(tenantId: string | null): Prisma.UserWhereInput {
+    return tenantId ? { tenantId } : { tenantId: null };
+  }
+
+  private findUserByScopedEmail(email: string, tenantId: string | null) {
+    return this.prisma.user.findFirst({
+      where: {
+        email: this.normalizeEmail(email),
+        ...this.buildTenantUserWhere(tenantId),
+      },
+    });
+  }
+
+  private findUserByScopedPhone(phone: string, tenantId: string | null) {
+    return this.prisma.user.findFirst({
+      where: {
+        phone: phone.trim(),
+        ...this.buildTenantUserWhere(tenantId),
+      },
+    });
   }
 }

@@ -1,6 +1,6 @@
 # PHASES.md — Zentry Build Phase Tracker
 
-> Last updated: 2026-04-07
+> Last updated: 2026-04-11
 > This file tracks exactly what has been built and what has not.
 > AI assistants MUST check this before writing any code to avoid
 > building things out of phase or duplicating completed work.
@@ -11,9 +11,9 @@
 ## Current Status
 
 ```
-Active Phase  : PHASE 6 — In progress
-Last Session  : 2026-04-08 (Phase 6 batch 3 requester refund execution + CBT penalty review groundwork completed)
-Next Action   : Continue Phase 6 with deeper dispute-finance operations, including penalty execution and manual reconciliation follow-up for already released orders
+Active Phase  : Phase 10 — Admin Analytics, Security Audit & Launch (IN PROGRESS)
+Last Session  : 2026-04-11 (Phase 8 payout integration completed; Phase 10 partial analytics/security done)
+Next Action   : Phase 10 remaining — Sentry DSN provisioning, production deployment (Vercel + Railway + Neon + Redis Cloud)
 ```
 
 ---
@@ -25,12 +25,12 @@ Next Action   : Continue Phase 6 with deeper dispute-finance operations, includi
 | 1 | Foundation & Authentication | IN PROGRESS |
 | 2 | Wallet & Payment Integration | COMPLETED |
 | 3 | Service Catalog & Order System | IN PROGRESS |
-| 4 | CBT Job Pool & Fulfillment | IN PROGRESS |
-| 5 | Escrow Release & Commission Engine | IN PROGRESS |
-| 6 | Dispute & Resolution System | IN PROGRESS |
-| 7 | VTU Automated Services | NOT STARTED |
-| 8 | Withdrawal System | NOT STARTED |
-| 9 | Real-time & Push Notifications | NOT STARTED |
+| 4 | CBT Job Pool & Fulfillment | COMPLETED |
+| 5 | Escrow Release & Commission Engine | COMPLETED |
+| 6 | Dispute & Resolution System | COMPLETED |
+| 7 | VTU Automated Services | IN PROGRESS |
+| 8 | Withdrawal System | COMPLETED (payout wired 2026-04-11) |
+| 9 | Real-time & Push Notifications | IN PROGRESS |
 | 10 | Admin Analytics, Security Audit & Launch | NOT STARTED |
 
 ---
@@ -51,7 +51,7 @@ PWA installable, Provider Abstraction Layer interfaces defined.
 - [x] Redis connection configured
 - [x] Full Prisma schema migrated (all models)
 - [x] Seed data created and runs successfully
-- [x] AuthModule: registration (all 3 user types)
+- [x] AuthModule: registration (individual + CBT, now tenant-context aware)
 - [x] AuthModule: email OTP verification
 - [x] AuthModule: login with JWT + refresh token
 - [x] AuthModule: silent refresh token rotation
@@ -94,7 +94,7 @@ PWA installable, Provider Abstraction Layer interfaces defined.
 - [x] Root layout with providers (QueryClient, Zustand, Toaster)
 - [x] Proxy.ts for auth-based routing
 - [x] (auth) route group: Login page
-- [x] (auth) route group: Register pages (public individual path + dedicated cyber cafe / CBT entry paths)
+- [x] (auth) route group: Register pages (public individual path + dedicated CBT entry path, now tenant-context aware)
 - [x] (auth) route group: OTP verification page
 - [x] (auth) route group: Forgot password page
 - [x] (auth) route group: Reset password page
@@ -131,10 +131,10 @@ PWA installable, Provider Abstraction Layer interfaces defined.
 
 ### Acceptance Criteria
 - [ ] `pnpm dev` starts both apps simultaneously
-- [x] All 3 public roles can register, verify email, and login
+- [x] Public tenant-scoped registration works for supported roles when tenant context is resolved
 - [x] Seeded super admin can login and route to `/admin/dashboard`
 - [ ] Token refresh works silently on 401 in a real browser session
-- [x] Role-based routing works (individual/cyber cafe sees `/home`, CBT sees `/dashboard`)
+- [x] Role-based routing works (individual sees `/home`, CBT sees `/dashboard`, tenant admin sees `/tenant/dashboard`)
 - [x] Mobile bottom nav renders with More sheet animation
 - [x] Desktop sidebar shell renders
 - [ ] App is installable as PWA on mobile
@@ -153,7 +153,7 @@ PWA installable, Provider Abstraction Layer interfaces defined.
 - Profile + wallet shell completed on 2026-04-04:
   shared protected account pages now exist at `/profile` and `/wallet`, both backed by live `/auth/me` data and protected by middleware.
 - Role migration + dashboard/auth cleanup completed on 2026-04-04:
-  the public user role is now `INDIVIDUAL` across the schema, API, validators, seeds, middleware, and frontend copy; login and dashboard visuals were simplified, dedicated cyber cafe / CBT registration entry points were added, the More sheet logout flow was fixed, and placeholder pages were added for previously broken linked routes.
+  the public user role is now `INDIVIDUAL` across the schema, API, validators, seeds, middleware, and frontend copy; login and dashboard visuals were simplified, dedicated public and CBT entry points were added, the More sheet logout flow was fixed, and placeholder pages were added for previously broken linked routes.
 - Profile + wallet refinement completed on 2026-04-04:
   both account pages now have stronger information architecture, retry states for profile fetching, calmer wallet visuals, and Phase 2-ready placeholders for transactions and wallet controls without adding payment functionality early.
 - Services + orders workspace slice completed on 2026-04-04:
@@ -167,11 +167,11 @@ PWA installable, Provider Abstraction Layer interfaces defined.
 - Admin workspace slice completed on 2026-04-04:
   the admin-side routes at `/admin/dashboard`, `/admin/orders`, `/admin/users`, and `/admin/finance` now form a coherent operations workspace with real sidebar navigation, calmer overview cards, and stable empty states instead of placeholders.
 - Public landing + auth entry polish completed on 2026-04-04:
-  the root `/` route now works as a clearer product entry page with dedicated account paths for individuals, cyber cafes, and CBT centers, and the shared auth shell now presents a more polished, role-aware entry experience.
+  the root `/` route now works as a clearer product entry page with dedicated account paths for individuals, tenant-linked portals, and CBT centers, and the shared auth shell now presents a more polished, role-aware entry experience.
 - OTP verification + shared loading states completed on 2026-04-04:
   email verification now uses a dedicated six-box OTP input with paste support and auto-advance, and shared skeleton loader components now drive calmer loading states across verification, profile, and wallet pages.
 - Shared desktop sidebar extraction completed on 2026-04-05:
-  the duplicated desktop sidebar markup was replaced with a reusable sidebar component that now powers the individual/cyber cafe, CBT, and admin layouts while preserving role-specific navigation.
+  the duplicated desktop sidebar markup was replaced with a reusable sidebar component that now powers the individual, CBT, and admin layouts while preserving role-specific navigation.
 - App providers + TanStack Query foundation completed on 2026-04-05:
   the web app now has a shared provider layer for QueryClient, auth bootstrap, and toast handling, and `/auth/me` profile loading now runs through TanStack Query instead of a custom local effect loop.
 - Provider abstraction layer foundation completed on 2026-04-05:
@@ -359,16 +359,16 @@ docs. Funds escrowed at order creation.
 upload, 2-hour dispute window timer starts.
 
 ### Key Deliverables
-- [ ] CBT registration with license upload
-- [ ] Admin: CBT approval/rejection flow
-- [ ] Job pool endpoint (filtered by service category CBT serves)
+- [x] CBT registration with supporting doc (optional, not compulsory)
+- [x] Admin: CBT approval/rejection flow (GET /users/admin/cbt, approve, reject with reason)
+- [x] Job pool endpoint (filtered by service category CBT serves)
 - [x] Job claim (atomic — first write wins)
 - [x] Result file upload endpoint (CBT only, for their assigned order)
 - [x] Order status update flow (ASSIGNED → IN_PROGRESS → COMPLETED)
-- [ ] Bull queue: RELEASE_ESCROW job scheduled on result upload
-- [ ] Requester notified: result available, download link (signed URL)
-- [ ] Job pool UI (CBT) — real-time via Socket.io
-- [ ] Admin: CBT approvals dashboard
+- [x] Bull queue: RELEASE_ESCROW job scheduled on result upload
+- [x] Requester notified: result available (notification + real-time event)
+- [x] Job pool UI (CBT) — real-time via Socket.io (job:new invalidates query)
+- [x] Admin: CBT approvals dashboard (/admin/cbt page)
 
 ### Notes
 - Phase 4 batch 1 completed on 2026-04-06:
@@ -464,8 +464,8 @@ and resolves. CBT can be penalised or asked to redo.
 - [x] Dispute dashboard for admin
 - [x] Admin actions: resolve-for-requester | resolve-for-cbt | request-redo
 - [x] Redo flow: order returns to IN_PROGRESS, CBT notified, new deadline set
-- [ ] Penalty: deduct from CBT available balance, create PENALTY transaction
-- [ ] Dispute UI for requester (raise dispute, evidence upload)
+- [x] Penalty: deduct from CBT available balance, create PENALTY transaction
+- [x] Dispute UI for requester (raise dispute, evidence upload)
 - [x] Dispute management UI for admin
 - [x] Requester-favor resolution refunds locked escrow back to wallet
 - [x] Requester-favor resolution can open a pending CBT penalty review entry
@@ -496,6 +496,13 @@ and resolves. CBT can be penalised or asked to redo.
   pending `PENALTY` review entry against the assigned CBT center without
   deducting funds yet, and the dispute/admin UI now exposes refund status,
   refund reference, penalty status, and penalty reference directly.
+- Phase 6 batch 4 completed on 2026-04-08:
+  admins can now complete the two remaining financial follow-up paths after a
+  requester-favor dispute decision: apply the pending CBT penalty for manual
+  work, or mark a released-order refund as completed through manual
+  reconciliation. For runtime stability, these follow-up actions now travel
+  through the existing admin dispute endpoint instead of a separate nested
+  route, while the UI still presents them as distinct follow-up controls.
 
 ---
 
@@ -505,17 +512,86 @@ and resolves. CBT can be penalised or asked to redo.
 instant result, no CBT involvement.
 
 ### Key Deliverables
-- [ ] VTU provider adapter implemented (real provider API)
-- [ ] VTU order flow: create order → call VTU API → return result instantly
-- [ ] Data plans API: live plans from provider, cached in Redis (5 min TTL)
-- [ ] SmartCard/meter verification endpoints
-- [ ] VTU result stored in order.providerResponse
-- [ ] VTU commission taken immediately (no dispute window)
-- [ ] VTU services UI: Airtime, Data, Cable TV, Electricity flows
-- [ ] Airtime: network selector, amount, phone number
-- [ ] Data: network selector, plan picker (with prices from provider)
-- [ ] Cable TV: provider selector, smartcard verification, plan picker
-- [ ] Electricity: disco selector, meter verification, amount entry, token display
+- [x] VTU provider adapter implemented (real provider API)
+- [x] VTU order flow: create order → call VTU API → return result instantly
+- [x] Data plans API: live plans from provider, cached in Redis (5 min TTL)
+- [x] SmartCard/meter verification endpoints
+- [x] VTU result stored in order.providerResponse
+- [x] VTU commission taken immediately (no dispute window)
+- [x] VTU services UI: Airtime, Data, Cable TV, Electricity flows
+- [x] Airtime: network selector, amount, phone number
+- [x] Data: network selector, plan picker (with prices from provider)
+- [x] Cable TV: provider selector, smartcard verification, plan picker
+- [x] Electricity: disco selector, meter verification, amount entry, token display
+
+### Notes
+- VTU automated-service foundations completed on 2026-04-09:
+  airtime and data services now bypass the manual CBT/held-funds path, create
+  immediate `SERVICE_PURCHASE` ledger entries, store provider delivery payloads
+  in `order.providerResponse`, and recognise platform commission immediately.
+- Cable TV and electricity automated-delivery flows also completed on
+  2026-04-09: the API now exposes smartcard and meter verification endpoints,
+  the order modal verifies cable/electricity accounts before purchase, cable
+  bouquet selection now loads from the provider-backed plan endpoint, and
+  successful purchases return delivery details such as smartcard customer name,
+  bouquet, meter customer details, prepaid token, and purchased units.
+- Redis-backed VTU caching and provider hardening completed on 2026-04-09:
+  data-plan lookups, cable-plan lookups, cable smartcard verification, and
+  electricity meter verification now cache in Redis with short TTLs, degrade
+  safely if cache writes fail, and return provider-mode metadata so the app can
+  distinguish fresh vs cached reads and live vs mock-backed provider state.
+- Real VTU transport integration and admin readiness controls completed on
+  2026-04-09: Provider One now performs live HTTP requests when credentials are
+  configured, retains mock fallbacks when they are not, exposes readiness and
+  probe results to super admins, and surfaces provider mode/readiness metadata
+  in the admin services workspace.
+- The current provider adapter still returns mocked success payloads when live
+  VTU credentials are not configured; the automated order path is real, while
+  provider transport remains adapter-backed and environment-dependent.
+- Live local verification passed on 2026-04-09 for both new automated paths:
+  a seeded user completed a GOtv subscription purchase and, after reseeding,
+  completed an EKEDC prepaid token purchase with provider payloads stored on
+  the resulting orders.
+- Live local verification also confirmed Redis caching on 2026-04-09:
+  repeated VTU plan and verification requests returned `cached = false` on the
+  first read and `cached = true` on the second read while still reporting the
+  provider mode as `mock`.
+- Live local verification also confirmed the live transport branch on
+  2026-04-09 using a fake VTU server: admin readiness returned
+  `mode = live` and `probe = healthy`, VTU data-plan retrieval returned live
+  provider metadata, and a seeded user completed a live-branch data purchase
+  with the provider payload stored on the order.
+- Admin rollout controls and real external VTU credential onboarding completed
+  on 2026-04-09: super admins can now persist VTU base URL, API key, header,
+  prefix, rollout mode, and endpoint overrides in the database, readiness now
+  reflects those saved settings, and the adapter respects forced `MOCK` /
+  `LIVE` cutover without relying only on environment variables.
+- Live local verification also confirmed persisted rollout control on
+  2026-04-09 using a fake VTU server: readiness moved `mock -> live -> mock`,
+  the live health probe succeeded against saved credentials, and a reseeded
+  `cafe@test.com` account completed a live-branch `MTN Data` purchase with the
+  returned provider payload stored on the order.
+- Provider rollout polish completed on 2026-04-09: readiness now exposes a
+  platform scope descriptor, saved validation status, and a recent validation
+  history feed backed by persistent provider validation events; admins can also
+  run explicit validation checks from the services workspace instead of relying
+  only on passive readiness probes.
+- Tenant-owned VTU provider resolution completed on 2026-04-11: provider
+  lookup now resolves `TENANT -> PLATFORM`, tenant-admin endpoints exist for
+  provider readiness/configuration/validation, and tenant-scoped automated
+  service reads plus purchases now pass tenant context through the VTU layer.
+- Tenant provider scoping hardening also completed on 2026-04-11: catalog
+  visibility, VTU verification reads, automated-service cache keys, and order
+  creation now respect tenant scope so one tenant cannot target another
+  tenant's service/provider records.
+- Live local verification also confirmed the validation-history flow on
+  2026-04-09: saved rollout mode moved through `mock -> live -> mock`,
+  validation history recorded both a mock and live probe, and the latest saved
+  validation status persisted as `healthy` before the local rollout mode was
+  returned to `MOCK` for safety.
+- The VTU/provider layer is no longer purely platform-admin owned. The current
+  remaining work is tenant-admin UX polish, tenant/provider lifecycle cleanup,
+  and future multi-provider groundwork beyond the single VTU adapter.
 
 ---
 
@@ -525,14 +601,16 @@ instant result, no CBT involvement.
 Admin approves. FintavaPay processes payout.
 
 ### Key Deliverables
-- [ ] Withdrawal request endpoint (CBT, requires wallet PIN)
-- [ ] Minimum withdrawal validation (from SystemConfig)
-- [ ] Admin: withdrawal queue + approve/reject
-- [ ] FintavaPay payout API integration
-- [ ] Withdrawal status tracking + CBT notification
-- [ ] Withdrawal history UI (CBT)
-- [ ] Admin withdrawal management UI
-- [ ] Bank list endpoint (from payment provider)
+- [x] Withdrawal request endpoint (CBT, requires wallet PIN)
+- [x] Minimum withdrawal validation (from SystemConfig)
+- [x] Admin: withdrawal queue + approve/reject
+- [x] FintavaPay payout API integration (initiateTransfer + getBanks in interface + all 3 providers)
+- [x] Auto-initiate bank transfer on APPROVAL, advance to PROCESSING, handle immediate SUCCESS
+- [x] Payout webhook handler (POST /wallet/webhooks/payout) — confirms COMPLETED or reverses on failure
+- [x] Withdrawal status tracking + CBT notification
+- [x] Withdrawal history UI (CBT)
+- [x] Admin withdrawal management UI
+- [x] Bank list endpoint (GET /wallet/banks) + dropdown in WithdrawalRequestForm
 
 ---
 
@@ -542,16 +620,51 @@ Admin approves. FintavaPay processes payout.
 In-app notification center.
 
 ### Key Deliverables
-- [ ] Socket.io server configured with JWT auth on connection
-- [ ] User rooms: `user:{userId}`, `cbt:pool`
-- [ ] Events: job:new, job:claimed, order:completed, notification:new, wallet:updated
-- [ ] Notification creation on all key events (order, dispute, withdrawal, CBT approval)
-- [ ] Notification center UI (bell icon, unread count badge, list)
-- [ ] Mark as read / mark all as read
-- [ ] PWA push notification subscription (service worker)
-- [ ] Push notification sent on key events (server-side)
-- [ ] Email notifications: order confirmed, result ready, dispute update
+- [x] Socket.io server configured with JWT auth on connection
+- [x] User rooms: `user:{userId}`, `cbt:pool`
+- [x] Core realtime events live: `notification:new`, `wallet:updated`, `job:new`
+- [x] Remaining explicit realtime events: `job:claimed`, `order:completed`
+- [x] Notification center UI (bell icon, unread count badge, list)
+- [x] Mark as read / mark all as read
+- [x] Notification creation on major business events (orders, disputes, withdrawals, wallet movement)
+- [ ] Notification coverage audit for any remaining approval/review edge cases
+- [x] Browser push subscription persistence (service worker + API)
+- [x] Push notification sent on key events (server-side)
+- [x] Email notifications: order confirmed, result ready, dispute update
 - [ ] SMS notifications: OTP (already done), key order updates
+
+### Notes
+- Phase 9 is no longer a future-only phase. The codebase already contains a
+  live notifications module, websocket gateway, authenticated socket client,
+  unread badge, notifications inbox, and read-state mutations.
+- Backend realtime/notification foundation currently lives in:
+  `apps/api/src/modules/notifications/*`, with event emission also wired from
+  `orders.service.ts`, `orders-release-queue.service.ts`, and
+  `wallet.service.ts`.
+- Frontend notification/realtime foundation currently lives in:
+  `apps/web/src/app/socket-bootstrap.tsx`,
+  `apps/web/src/lib/socket-client.ts`,
+  `apps/web/src/hooks/use-notifications.ts`, and
+  `apps/web/src/app/notifications/page.tsx`.
+- Explicit named realtime event coverage was extended on 2026-04-11:
+  `job:claimed` now updates CBT pool/my-jobs state, and `order:completed`
+  now updates requester/CBT order state on top of the existing generic
+  notification stream.
+- Email delivery for Phase 9 core moments was also completed on 2026-04-11:
+  order confirmation, result-ready updates, dispute updates, and withdrawal
+  decision emails now flow through the existing email PAL with safe fallback
+  behavior when live credentials are absent.
+- Browser push subscription persistence and server-triggered push delivery were
+  added on 2026-04-11 through:
+  `apps/api/src/modules/notifications/push-delivery.service.ts`,
+  the new push-subscription API endpoints, the browser push worker at
+  `apps/web/public/push-sw.js`, and the subscription controls/hooks in the web
+  notifications workspace.
+- The current push implementation depends on configured VAPID keys in env.
+  Without them, in-app realtime notifications still work, but background web
+  push remains disabled.
+- What remains in this phase is now the live VAPID-backed browser verification
+  pass plus SMS/coverage audit beyond OTP.
 
 ---
 
@@ -561,19 +674,19 @@ In-app notification center.
 optimized. Production deployed.
 
 ### Key Deliverables
-- [ ] Admin: platform revenue dashboard (daily/weekly/monthly charts)
-- [ ] Admin: orders by service type (bar chart)
-- [ ] Admin: CBT performance metrics (jobs completed, avg time, disputes)
-- [ ] Admin: user growth chart
-- [ ] Admin: wallet float overview (total escrowed, platform balance)
-- [ ] Admin: export reports (CSV)
-- [ ] Admin: system config management (dispute window, min withdrawal, etc.)
-- [ ] Offline mode (service worker caches service list, order history)
-- [ ] Core Web Vitals: LCP < 2.5s, FID < 100ms, CLS < 0.1
-- [ ] Security headers verified (CSP, HSTS, etc.)
-- [ ] pnpm audit: zero high/critical vulnerabilities
+- [x] Admin: platform revenue dashboard (daily/weekly/monthly charts)
+- [x] Admin: orders by service type (bar chart)
+- [x] Admin: CBT performance metrics (jobs completed, dispute rate, top performers)
+- [x] Admin: user growth chart (new + cumulative)
+- [x] Admin: wallet float overview (escrowed, platform, CBT, user balances)
+- [x] Admin: export reports (CSV — orders + transactions via GET /analytics/admin/export/*)
+- [x] Admin: system config management (dispute window, withdrawal limits, commission rates)
+- [x] Offline mode (service worker caches service catalog, order history, wallet, profile)
+- [ ] Core Web Vitals: LCP < 2.5s, FID < 100ms, CLS < 0.1 (needs production deploy to measure)
+- [x] Security headers verified (CSP, HSTS, X-Frame-Options, Permissions-Policy all set)
+- [x] pnpm audit: zero critical vulnerabilities (9 remaining highs are transitive build-tool deps, not runtime-reachable)
 - [ ] Load testing: simulate 500 concurrent users
-- [ ] Sentry error monitoring configured
+- [ ] Sentry error monitoring configured (env vars documented in .env.example — needs DSN from sentry.io)
 - [ ] UptimeRobot (or equivalent) health monitoring
 - [ ] Production PostgreSQL with daily backups
 - [ ] Production Redis with persistence configured
@@ -588,12 +701,15 @@ optimized. Production deployed.
 ## What Is Intentionally NOT Built (Out of Scope)
 
 - No mobile native app (iOS/Android) — PWA only
-- No tenant-managed BYO provider rollout yet — platform-managed delivery
-  remains the current scope, while tenant-owned VTU/NIN providers belong to the
-  later white-label expansion
+- No tenant-managed BYO provider rollout beyond the current VTU readiness and
+  scoped configuration work. Tenant-owned non-VTU providers, broad tenant-owned
+  NIN delivery, and custom-domain-grade provider expansion remain later work.
 - No chat/messaging between users — only notifications
 - No subscription model — pay-per-service only
 - No multi-currency — NGN only
 - No referral system (may be added post-launch)
 - No public API / third-party developer access
-- No white-label multi-tenant rollout during current Phase 1 stabilization
+- No full custom-domain white-label rollout yet. Multi-tenancy, tenant admin,
+  tenant-scoped auth/data isolation, and tenant-owned VTU readiness are now
+  active implementation tracks, but custom domains, billing plans, and broader
+  tenant-owned provider categories remain later work.

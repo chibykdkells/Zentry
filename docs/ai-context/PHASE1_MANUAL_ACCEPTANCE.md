@@ -59,11 +59,10 @@ Seeded PIN for all accounts:
 
 Repeat these for:
 - `/register`
-- `/register/cyber-cafe`
 - `/register/cbt`
 
 Expected flow:
-1. Submit registration.
+1. Submit registration inside a resolved tenant context.
 2. Copy the OTP from the API terminal log.
 3. Complete `/verify-email`.
 4. Sign in successfully after verification.

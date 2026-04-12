@@ -36,32 +36,41 @@ export class WalletController {
 
   @Roles(UserRole.SUPER_ADMIN)
   @Get('admin/overview')
-  getAdminWalletOverview() {
-    return this.walletService.getAdminWalletOverview();
+  getAdminWalletOverview(@CurrentUser() user: JwtUser) {
+    return this.walletService.getAdminWalletOverview(user.tenantId);
   }
 
   @Roles(UserRole.SUPER_ADMIN)
   @Get('admin/cbt-earnings')
-  getAdminCbtEarningsOverview() {
-    return this.walletService.getAdminCbtEarningsOverview();
+  getAdminCbtEarningsOverview(@CurrentUser() user: JwtUser) {
+    return this.walletService.getAdminCbtEarningsOverview(user.tenantId);
   }
 
   @Roles(UserRole.SUPER_ADMIN)
   @Get('admin/wallets')
-  getAdminWallets(@Query() query: GetAdminWalletsQueryDto) {
-    return this.walletService.getAdminWallets(query);
+  getAdminWallets(
+    @Query() query: GetAdminWalletsQueryDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.walletService.getAdminWallets(query, user.tenantId);
   }
 
   @Roles(UserRole.SUPER_ADMIN)
   @Get('admin/transactions')
-  getAdminTransactions(@Query() query: GetAdminWalletTransactionsQueryDto) {
-    return this.walletService.getAdminTransactions(query);
+  getAdminTransactions(
+    @Query() query: GetAdminWalletTransactionsQueryDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.walletService.getAdminTransactions(query, user.tenantId);
   }
 
   @Roles(UserRole.SUPER_ADMIN)
   @Get('admin/withdrawals')
-  getAdminWithdrawals(@Query() query: GetAdminWithdrawalsQueryDto) {
-    return this.walletService.getAdminWithdrawals(query);
+  getAdminWithdrawals(
+    @Query() query: GetAdminWithdrawalsQueryDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.walletService.getAdminWithdrawals(query, user.tenantId);
   }
 
   @Roles(UserRole.SUPER_ADMIN)
@@ -75,12 +84,13 @@ export class WalletController {
       user.sub,
       withdrawalRequestId,
       dto,
+      user.tenantId,
     );
   }
 
   @Get('me')
   getMyWallet(@CurrentUser() user: JwtUser) {
-    return this.walletService.getMyWalletOverview(user.sub);
+    return this.walletService.getMyWalletOverview(user.sub, user.tenantId);
   }
 
   @Get('transactions')
@@ -88,7 +98,7 @@ export class WalletController {
     @CurrentUser() user: JwtUser,
     @Query() query: GetWalletTransactionsQueryDto,
   ) {
-    return this.walletService.getMyTransactions(user.sub, query);
+    return this.walletService.getMyTransactions(user.sub, query, user.tenantId);
   }
 
   @Roles(UserRole.CBT_CENTER)
@@ -97,25 +107,35 @@ export class WalletController {
     @CurrentUser() user: JwtUser,
     @Query() query: GetCbtEarningsQueryDto,
   ) {
-    return this.walletService.getCbtEarnings(user.sub, query);
+    return this.walletService.getCbtEarnings(user.sub, query, user.tenantId);
   }
 
-  @Roles(UserRole.CBT_CENTER)
+  @Roles(UserRole.CBT_CENTER, UserRole.SUPER_ADMIN)
   @Get('withdrawals')
   getMyWithdrawals(
     @CurrentUser() user: JwtUser,
     @Query() query: GetMyWithdrawalsQueryDto,
   ) {
-    return this.walletService.getMyWithdrawals(user.sub, query);
+    return this.walletService.getMyWithdrawals(user.sub, query, user.tenantId);
   }
 
   @Roles(UserRole.CBT_CENTER)
+  @Get('banks')
+  getBanks() {
+    return this.walletService.getBanks();
+  }
+
+  @Roles(UserRole.CBT_CENTER, UserRole.SUPER_ADMIN)
   @Post('withdrawals')
   createWithdrawalRequest(
     @CurrentUser() user: JwtUser,
     @Body() dto: CreateWithdrawalRequestDto,
   ) {
-    return this.walletService.createWithdrawalRequest(user.sub, dto);
+    return this.walletService.createWithdrawalRequest(
+      user.sub,
+      dto,
+      user.tenantId,
+    );
   }
 
   @Post('fund')
@@ -140,5 +160,12 @@ export class WalletController {
   @HttpCode(HttpStatus.OK)
   handlePaymentWebhook(@Req() request: Request & { rawBody?: Buffer }) {
     return this.walletService.handlePaymentWebhook(request);
+  }
+
+  @Public()
+  @Post('webhooks/payout')
+  @HttpCode(HttpStatus.OK)
+  handlePayoutWebhook(@Req() request: Request & { rawBody?: Buffer }) {
+    return this.walletService.handlePayoutWebhook(request);
   }
 }

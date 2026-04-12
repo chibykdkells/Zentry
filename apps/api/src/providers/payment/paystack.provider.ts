@@ -3,9 +3,12 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import * as crypto from 'crypto';
 import type {
+  BankListItem,
   IPaymentProvider,
   InitiatePaymentInput,
   InitiatePaymentResult,
+  InitiateTransferInput,
+  InitiateTransferResult,
   VerifyPaymentResult,
   WebhookParseResult,
 } from '../interfaces';
@@ -88,6 +91,53 @@ export class PaystackProvider implements IPaymentProvider {
       gatewayRef: data.id.toString(),
       paidAt: data.paid_at ? new Date(data.paid_at) : undefined,
     };
+  }
+
+  async initiateTransfer(
+    input: InitiateTransferInput,
+  ): Promise<InitiateTransferResult> {
+    const response = await axios.post(
+      `${this.baseUrl}/transfer`,
+      {
+        source: 'balance',
+        amount: Number(input.amountKobo),
+        recipient: input.accountNumber,
+        reason: input.narration,
+        reference: input.reference,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${this.secretKey}`,
+          'Content-Type': 'application/json',
+        },
+      },
+    );
+
+    const { data } = response.data as {
+      data: { reference: string; transfer_code: string; status: string };
+    };
+
+    return {
+      transferRef: data.reference ?? input.reference,
+      gatewayRef: data.transfer_code ?? data.reference,
+      status: data.status?.toLowerCase() === 'success' ? 'SUCCESS' : 'PENDING',
+    };
+  }
+
+  async getBanks(): Promise<BankListItem[]> {
+    const response = await axios.get(`${this.baseUrl}/bank?currency=NGN`, {
+      headers: { Authorization: `Bearer ${this.secretKey}` },
+    });
+
+    const { data } = response.data as {
+      data: { code: string; name: string }[];
+    };
+
+    return (data ?? [])
+      .filter(
+        (b) => b && typeof b.code === 'string' && typeof b.name === 'string',
+      )
+      .map((b) => ({ code: b.code.trim(), name: b.name.trim() }));
   }
 
   parseWebhook(rawBody: Buffer, signatureHeader: string): WebhookParseResult {

@@ -1,15 +1,14 @@
 # WHITE_LABEL_ROADMAP.md — Multi-Tenant White-Label Expansion
 
-> Last updated: 2026-04-06
-> Status: Planned future expansion
-> Target window: Phase 2 / Phase 3 after core Zentry stabilization
+> Last updated: 2026-04-11
+> Status: Active re-architecture in progress
+> Target window: Multi-tenancy closeout during current platform hardening
 
 ---
 
 ## Purpose
 
-This document defines the future platform-first white-label expansion for
-Zentry.
+This document defines the platform-first white-label expansion for Zentry.
 
 The goal is for Zentry to operate as the infrastructure platform while tenant
 businesses run branded service portals on top of it. That includes the launch
@@ -17,6 +16,16 @@ business itself: the first live operating business must be modeled as a normal
 tenant, not a special-case app hardcoded into the platform.
 
 This is a true multi-tenant SaaS expansion, not a cosmetic branding feature.
+
+The roadmap below is no longer purely speculative. The codebase already has:
+- tenant-aware request resolution and local-dev tenant fallback
+- tenant-scoped registration/login/runtime verification
+- tenant admin routes and APIs
+- tenant-scoped catalog, order, wallet, dispute, and withdrawal flows
+- tenant-owned VTU readiness/configuration with platform fallback
+
+What remains is the rest of the closeout and the later-stage commercial/domain
+features.
 
 ---
 
@@ -94,15 +103,19 @@ Zentry will use a hybrid model:
 
 White-label rollout will happen in stages:
 
-1. First release:
-   - white-label tenants use Zentry-managed providers only
-2. Later release:
-   - tenants may bring their own providers for `VTU` and `NIN` services only
+1. Current implemented state:
+   - platform-managed delivery still works as the default
+   - tenant-owned VTU readiness/configuration is now implemented with
+     `TENANT -> PLATFORM` fallback
+2. Next later release:
+   - broaden tenant-managed delivery from VTU readiness/config into fully
+     owned operational rollout where the business model supports it
+   - add tenant-managed `NIN` only if the product still needs it
 3. Later expansion:
    - extend tenant-managed providers to other categories only if needed
 
-This means provider resolution must be tenant-aware from the beginning even
-though tenant-supplied credentials are initially disabled.
+This means provider resolution is already tenant-aware, but broader tenant-owned
+provider rollout is still intentionally narrow.
 
 ---
 
@@ -327,8 +340,9 @@ Ownership modes:
 - `platform-managed`
 - `tenant-managed`
 
-Initial white-label launch should keep all providers `platform-managed`.
-Later, only `VTU` and `NIN` should allow `tenant-managed` provider configs.
+Current implementation keeps most providers platform-managed while allowing
+tenant-scoped VTU readiness/configuration and tenant-first resolution. Broader
+tenant-managed rollout remains later work.
 
 ### Support and dispute workflows
 
@@ -410,11 +424,11 @@ This gives tenant isolation without giving up platform control.
 
 ### Stage 0 — Core stabilization first
 
-Do not begin white-label implementation until:
-- current Zentry core flows are stable
-- Phase 1 acceptance is materially complete
-- wallet/order/provider foundations are ready enough to support tenant scoping
-- PWA and security constraints are explicitly carried into the expansion design
+This stage is materially complete enough for active tenant work. The codebase
+already crossed the original “do not begin” threshold:
+- core auth, wallet, order, provider, and notification foundations exist
+- tenant-aware request resolution and registration are live
+- PWA/security constraints are already being carried into the tenant shape
 
 ### Stage 1 — Tenancy foundation
 
@@ -430,7 +444,11 @@ Also define in this stage:
 - PWA tenant-branding strategy
 - tenant-aware security and audit baseline
 
-Do not build custom domains or tenant-owned providers yet.
+Current state:
+- Stage 1 is largely implemented
+- custom domains are still not started
+- tenant-owned provider expansion is only partially implemented through VTU
+  readiness/configuration and fallback-aware resolution
 
 ### Stage 2 — Tenant admin and branded subdomain launch
 
@@ -443,7 +461,11 @@ Build:
 - isolated tenant users/staff dashboards
 - tenant service visibility and tenant pricing controls
 
-All providers remain Zentry-managed in this stage.
+Current state:
+- tenant mini-admin, subdomain/local tenant context, branding/settings shape,
+  and isolated tenant users are already underway
+- providers are no longer purely Zentry-managed because VTU now supports
+  tenant-scoped readiness/configuration and tenant-first resolution
 
 ### Stage 3 — Tenant operations depth
 
@@ -472,6 +494,12 @@ Build:
 - tenant-managed NIN provider support
 - audit and operational support around tenant-owned integrations
 
+Current state:
+- encrypted tenant provider credentials and tenant-managed VTU readiness are in
+- provider ownership/fallback resolution for VTU is in
+- broader tenant-managed VTU operations, NIN provider support, and commercial
+  rollout controls remain later work
+
 ### Stage 6 — Expand only if justified
 
 Possible later work:
@@ -482,20 +510,17 @@ Possible later work:
 
 ---
 
-## What Must Stay Out of Current Phase 1
+## What Still Stays Out of Scope For The Current Closeout
 
-Do not introduce these changes into current Phase 1 stabilization work:
-- tenant-aware auth rewrites
-- global `tenantId` schema migration
-- custom-domain routing
-- tenant mini-admin implementation
-- tenant-scoped wallets/orders/disputes
-- tenant-owned provider credentials
+The following are still later work even though the multi-tenant re-architecture
+itself is already active:
+- custom-domain routing and domain verification
+- tenant billing plans and white-label subscription management
+- broader tenant-owned provider categories beyond the current VTU scope
+- full tenant-managed NIN rollout
+- deeper tenant theming/webhook/partner automation layers
 
 Do not preserve a permanent direct-business shortcut outside the tenant model.
-
-Those belong to a dedicated future expansion track after the core platform is
-stable enough to carry multi-tenancy safely.
 
 ---
 
@@ -514,14 +539,15 @@ These are not blockers for the roadmap, but they must be answered before coding:
 
 ## Recommended Next Step
 
-Use this document as the future-state reference only.
+Use this document as the live-state expansion reference.
 
-Do not start white-label implementation yet.
+The next product work should keep finishing the current multi-tenancy closeout:
+- tenant-admin provider UX and readiness lifecycle polish
+- remaining platform-vs-tenant boundary tightening
+- final tenant-scoped query audits
+- doc/runtime reconciliation as the live architecture settles
 
-The next product work should continue stabilizing the current core Zentry
-platform. When the core is ready, convert this roadmap into:
-- concrete Prisma migrations
-- tenant-aware auth changes
-- tenant admin UX
+After that, the next major white-label steps are:
 - domain provisioning flows
-- staged provider-resolution changes
+- billing/commercial controls
+- broader tenant-owned provider rollout only where justified

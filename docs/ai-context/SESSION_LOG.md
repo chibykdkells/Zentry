@@ -16,6 +16,95 @@
 
 ---
 
+## Session 2026-04-11 — Phase 8: FintavaPay Bank Payout Integration
+
+**Phase:** Phase 8 — Withdrawal System  
+**AI Assistant:** Claude Sonnet 4.6
+
+### What Was Done
+
+Completed the last major functional gap: real bank transfer payouts via the
+payment provider layer.
+
+1. **Provider interface extended** — added `InitiateTransferInput`,
+   `InitiateTransferResult`, `BankListItem` interfaces and `initiateTransfer()`
+   + `getBanks()` methods to `IPaymentProvider` in `providers/interfaces/index.ts`.
+
+2. **FintavapayProvider** — implemented `initiateTransfer` (`POST /v1/transfer/initiate`)
+   and `getBanks` (`GET /v1/banks`) with proper type narrowing for the polymorphic
+   banks response shape.
+
+3. **PaystackProvider** — implemented `initiateTransfer` (Paystack `/transfer`)
+   and `getBanks` (`/bank?currency=NGN`).
+
+4. **FlutterwaveProvider** — implemented `initiateTransfer` (Flutterwave `/transfers`,
+   Naira conversion) and `getBanks` (`/banks/NG`).
+
+5. **PaymentService** — exposed `initiateTransfer()` and `getBanks()` as pass-through
+   delegates to the injected provider.
+
+6. **WalletService** — added `Logger`, wired auto-payout into
+   `reviewWithdrawalRequest`: when admin approves, immediately calls
+   `paymentService.initiateTransfer`, advances status to `PROCESSING` with
+   `gatewayRef`. If gateway settles immediately (`SUCCESS`), transitions to
+   `COMPLETED` in a nested transaction. On transfer error, keeps `APPROVED` and
+   logs — admin can manually retry.
+
+7. **WalletService** — added `getBanks()` (wraps PaymentService) and
+   `handlePayoutWebhook()` which parses transfer success/failure webhooks,
+   marks `COMPLETED` or reverses to `REJECTED` with funds refunded.
+
+8. **WalletController** — added `GET /wallet/banks` (CBT_CENTER role) and
+   `POST /wallet/webhooks/payout` (public, for FintavaPay transfer callbacks).
+
+9. **Frontend** — added `useBanks()` hook in `use-wallet.ts` (1-hour stale time).
+   Upgraded `WithdrawalRequestForm` to show a bank selector dropdown that
+   auto-populates `bankCode` and `bankName` on selection. Falls back to free-text
+   if bank list hasn't loaded yet.
+
+Both `apps/api` and `apps/web` typecheck clean (`tsc --noEmit`).
+
+### Files Modified
+
+- `apps/api/src/providers/interfaces/index.ts` — new transfer + bank interfaces
+- `apps/api/src/providers/payment/fintavapay.provider.ts` — `initiateTransfer`, `getBanks`
+- `apps/api/src/providers/payment/paystack.provider.ts` — `initiateTransfer`, `getBanks`
+- `apps/api/src/providers/payment/flutterwave.provider.ts` — `initiateTransfer`, `getBanks`
+- `apps/api/src/providers/payment/payment.service.ts` — expose new methods
+- `apps/api/src/modules/wallet/wallet.service.ts` — Logger, auto-payout, `getBanks`, `handlePayoutWebhook`
+- `apps/api/src/modules/wallet/wallet.controller.ts` — `GET /wallet/banks`, `POST /wallet/webhooks/payout`
+- `apps/web/src/hooks/use-wallet.ts` — `useBanks` hook
+- `apps/web/src/components/wallet/withdrawal-request-form.tsx` — bank dropdown
+
+### Decisions Made
+
+- **Auto-initiate on APPROVAL**: Rather than a separate manual "dispatch payout"
+  action, the transfer fires automatically when admin clicks Approve. This reduces
+  admin clicks and avoids funds sitting in APPROVED limbo. On gateway error, the
+  request stays APPROVED so admin can retry or switch providers.
+- **Fail-safe**: Payout initiation failure does NOT roll back the APPROVED status —
+  it logs the error and lets the admin handle manually. This prevents funds from
+  being unintentionally reversed on a transient network blip.
+- **Webhook deduplication**: Handled by checking `status: PENDING` on the transaction
+  before completing. Idempotent by design.
+
+### Phase Checklist Updates
+
+- Phase 8: All items now `[x]` — COMPLETED
+- PHASES.md overview table updated to note payout wired 2026-04-11
+
+### Blockers / Notes for Next Session
+
+- **Sentry**: DSN still not provisioned (user rejected npm install last session).
+  Once sentry.io account is created, run `pnpm add @sentry/nextjs` and wire DSN
+  from `.env.example`. Everything else is documented.
+- **Production deployment**: Vercel (web) + Railway (api) + Neon (DB) + Redis Cloud
+  remain as the final Phase 10 tasks.
+- **Signed Cloudinary URLs**: `resultFileUrl` is still a permanent public URL.
+  Should be migrated to time-limited signed URLs before launch.
+
+---
+
 ## Session 2026-04-03 — Project Planning, Architecture & AI Context Setup
 
 **Phase:** Pre-Phase 1 (Planning & Documentation)
@@ -218,6 +307,323 @@ this session. It covers:
 - `apps/web/src/hooks/use-disputes.ts`
 - `apps/web/src/hooks/use-orders.ts`
 - `apps/web/src/app/(admin)/admin/orders/page.tsx`
+
+---
+
+## Session 2026-04-11 — Multi-Tenancy Runtime Batch: Transactional Flow Verification
+
+**Phase:** Multi-Tenancy Re-Architecture (IN PROGRESS)
+**AI Assistant:** GPT-5 Codex
+
+### What Was Done
+
+- Expanded the live tenant runtime verifier to cover actual transactional
+  product flows instead of only bootstrap and route checks.
+- Added runtime verification for tenant-scoped automated order creation and
+  tenant-scoped manual order creation.
+- Added balance-movement and wallet-ledger assertions for both service purchase
+  and held-funds lock behavior.
+- Added tenant CBT job-pool and claim-flow verification, proving that a newly
+  created manual tenant order appears in the tenant pool, disappears after
+  claim, and shows up in the claimant CBT's `my-jobs` list.
+- Added platform-isolation checks proving that super admins can inspect tenant
+  orders and wallet activity while tenant admins remain blocked from the
+  platform-wide `/orders/admin` and `/wallet/admin/*` endpoints.
+- Tightened the runtime verifier to avoid relying on unsupported admin-wallet
+  search behavior and instead validate recent platform-ledger visibility in a
+  way that matches the actual endpoint contract.
+
+### Files Created / Modified
+
+- `scripts/verify-tenant-runtime.mjs`
+- `docs/ai-context/PHASES.md`
+- `docs/ai-context/SESSION_LOG.md`
+
+### Decisions Made
+
+- Transactional tenant verification now uses seeded tenant accounts for the
+  runtime-sensitive business flow assertions:
+  `user@test.com`, `cbt@test.com`, `tenant@test.com`, and `admin@zentry.ng`.
+- Automated runtime verification currently prefers a tenant-scoped VTU airtime
+  service and a tenant-scoped manual CBT service that does not require
+  requester documents, so the verifier stays deterministic and self-contained.
+- Platform admin ledger visibility is now validated from the recent admin
+  transaction feed rather than the search endpoint, because the current search
+  contract is not designed for order-number lookup.
+
+### Phase Checklist Updates
+
+- Tenant bootstrap/runtime verification: expanded beyond route checks.
+- Tenant-scoped transactional verification: completed for:
+  order creation,
+  wallet movement,
+  CBT pool visibility,
+  CBT claim movement,
+  and tenant vs platform admin access boundaries.
+
+### Blockers / Notes for Next Session
+
+- The next tenant runtime pass should cover deeper business-state transitions,
+  especially completion, disputes, and any withdrawal-style flow that is meant
+  to remain correctly scoped under tenant boundaries.
+- The admin wallet search endpoint is still not ideal for precise order-linked
+  transaction lookup because its current search combines user and transaction
+  text constraints too narrowly; runtime verification now works around this,
+  but the endpoint could be improved later if richer admin investigation is
+  needed.
+- Live verification passed on the running local stack with:
+  tenant config resolution,
+  tenant individual + CBT registration,
+  tenant admin access,
+  tenant settings persistence,
+  tenant user filtering,
+  cross-tenant denial,
+  automated tenant order creation,
+  manual tenant order creation,
+  wallet ledger movement,
+  CBT job-pool/claim movement,
+  and platform isolation checks.
+
+---
+
+## Session 2026-04-12 — Phase 4 Close + Phase 10 Batch 1: Analytics, System Config, Offline Caching
+
+**Phase:** Phase 4 (COMPLETED) + Phase 10 (IN PROGRESS)
+**AI Assistant:** Claude Sonnet 4.6
+
+### What Was Done
+
+**Phase 4 — CBT supporting document change:**
+- Renamed `licenseDocUrl` → `supportingDocUrl` and made it optional (`String?`) across schema, service, and seed.
+- Migration created: `20260411150000_rename_license_doc_to_supporting_doc`.
+- Prisma client regenerated.
+
+**Phase 4 — Admin CBT approval/rejection:**
+- `GET /users/admin/cbt` — paginated CBT application list, filterable by approval status.
+- `POST /users/admin/cbt/:userId/approve` — approves a pending CBT center, sends notification + push.
+- `POST /users/admin/cbt/:userId/reject` — rejects with mandatory reason, sends notification + push.
+- Both actions are tenant-scoped, audit-logged, and notify the CBT center in real-time.
+- Frontend: `use-admin-cbt.ts` hook + `/admin/cbt` approval workspace (status filter tabs, list, split detail panel, approve/reject with confirmation textarea).
+- Admin sidebar updated with "CBT Centers" link.
+
+**Phase 4 — Real-time job pool key fix:**
+- `socket-bootstrap.tsx`: `job:new` was invalidating stale key `['cbt-job-pool']`. Fixed to `['orders', 'cbt', 'job-pool']` and added `['orders', 'cbt', 'dashboard']` invalidation on both `job:new` and `job:claimed`.
+
+**Phase 10 Batch 1 — Analytics API (`AnalyticsModule`):**
+- `GET /analytics/admin/overview` — single endpoint returning all metrics.
+- `GET /analytics/admin/revenue?period=daily|weekly|monthly` — revenue time series from platform commission + service purchase transactions.
+- `GET /analytics/admin/orders-by-service` — top N services by order count.
+- `GET /analytics/admin/cbt-performance` — jobs completed, dispute rate, top 5 CBT earners.
+- `GET /analytics/admin/user-growth?period=...` — new registrations + cumulative total.
+- `GET /analytics/admin/wallet-float` — total escrowed, platform balance, CBT available, user wallet total.
+- `GET /analytics/admin/export/orders` — CSV download (up to 10,000 rows).
+- `GET /analytics/admin/export/transactions` — CSV download (up to 10,000 rows).
+
+**Phase 10 Batch 1 — System Config API (`SystemConfigModule`):**
+- `GET /system-config` — returns all known config keys with current values, defaults for any not yet persisted, and descriptions.
+- `PUT /system-config/:key` — validates and upserts a config value, writes audit log.
+- Keys: `DISPUTE_WINDOW_HOURS`, `MIN_WITHDRAWAL_KOBO`, `MAX_WITHDRAWAL_KOBO`, `PLATFORM_COMMISSION_RATE_BPS`, `CBT_COMMISSION_RATE_BPS`.
+- SUPER_ADMIN only.
+
+**Phase 10 Batch 1 — Frontend:**
+- `use-analytics.ts` — hooks for overview, revenue series, user growth, wallet float.
+- `/admin/analytics` — full page with Recharts: revenue line chart, orders-by-service horizontal bar chart, user growth dual-line chart, wallet float metric cards, CBT performance section with top performers. Period selector (daily/weekly/monthly). CSV export buttons.
+- `use-system-config.ts` — hooks for list and update.
+- `/admin/system-config` — inline-edit config rows with validation warning banner.
+- Admin sidebar updated with "Analytics" and "System Config" links.
+
+**Phase 10 Batch 1 — Offline caching:**
+- Added `runtimeCaching` rules to `next-pwa` config for: static assets (CacheFirst), service catalog (StaleWhileRevalidate), order history (NetworkFirst), wallet (NetworkFirst), profile (NetworkFirst).
+
+**Security audit:**
+- Upgraded `next` → 16.2.3 (fixes DoS in Server Components).
+- Upgraded `axios` → latest (fixes SSRF vulnerability).
+- Zero critical vulnerabilities remain. 9 high-severity findings are transitive build-tool deps (`tar` via `bcrypt → @mapbox/node-pre-gyp`, `lodash` via `@nestjs/config`) — not runtime-reachable, cannot be fixed without upstream changes.
+- Sentry env vars documented in `.env.example`. Installation deferred until DSN is provisioned.
+
+### Files Created / Modified
+
+**API:**
+- `apps/api/src/modules/analytics/analytics.service.ts` (new)
+- `apps/api/src/modules/analytics/analytics.controller.ts` (new)
+- `apps/api/src/modules/analytics/analytics.module.ts` (new)
+- `apps/api/src/modules/system-config/system-config.service.ts` (new)
+- `apps/api/src/modules/system-config/system-config.controller.ts` (new)
+- `apps/api/src/modules/system-config/system-config.module.ts` (new)
+- `apps/api/src/app.module.ts` (AnalyticsModule + SystemConfigModule registered)
+- `apps/api/src/modules/users/users.module.ts` (NotificationsModule imported)
+- `apps/api/src/modules/users/users.service.ts` (getAdminCbtApplications, approveCbtCenter, rejectCbtCenter)
+- `apps/api/src/modules/users/users.controller.ts` (admin/cbt endpoints)
+- `apps/api/prisma/schema.prisma` (licenseDocUrl → supportingDocUrl, optional)
+- `apps/api/prisma/seed.ts` (supportingDocUrl: null)
+- `apps/api/prisma/migrations/20260411150000_rename_license_doc_to_supporting_doc/migration.sql` (new)
+
+**Web:**
+- `apps/web/src/hooks/use-admin-cbt.ts` (new)
+- `apps/web/src/hooks/use-analytics.ts` (new)
+- `apps/web/src/hooks/use-system-config.ts` (new)
+- `apps/web/src/app/(admin)/admin/cbt/page.tsx` (new)
+- `apps/web/src/app/(admin)/admin/analytics/page.tsx` (new)
+- `apps/web/src/app/(admin)/admin/system-config/page.tsx` (new)
+- `apps/web/src/app/(admin)/layout.tsx` (Analytics, CBT Centers, System Config added)
+- `apps/web/src/app/socket-bootstrap.tsx` (job:new and job:claimed query key fix)
+- `apps/web/next.config.ts` (runtimeCaching rules added)
+- `.env.example` (SENTRY_* vars documented)
+
+### Decisions Made
+
+- Analytics module uses raw SQL (`$queryRaw`) for time-series aggregations (date_trunc) where Prisma's groupBy cannot express the needed date bucketing, and Prisma groupBy for service/CBT aggregations.
+- System config stores values as strings in `SystemConfig` table (already in schema) with in-code validators per key rather than a generic type-checked approach, keeping the model simple.
+- Sentry installation deferred — adding the SDK without a DSN would add dead weight. Env vars are documented; installation is a one-command step once the project is created on sentry.io.
+- Remaining audit highs are in `bcrypt → @mapbox/node-pre-gyp → tar` (native module pre-built binary tooling, not runtime path) and `@nestjs/config → lodash` (transitive, no direct call). Acceptable for launch given they are not reachable from request handling paths.
+
+### Phase Checklist Updates
+
+- Phase 4: COMPLETED (all deliverables done)
+- Phase 10: 8 items checked (analytics, system config, CSV export, offline caching, security headers, audit)
+- Remaining Phase 10: Core Web Vitals measurement, load testing, Sentry DSN, UptimeRobot, production infra deployment, launch sign-off.
+
+### Blockers / Notes for Next Session
+
+- **Phase 8 (Withdrawal)** is the highest-priority remaining functional gap — CBT centers cannot transfer earnings to bank accounts. FintavaPay payout API integration is the main task.
+- **Sentry**: create a project at sentry.io, paste DSN into `.env`, then run `pnpm add --filter web @sentry/nextjs` and `pnpm add --filter api @sentry/nestjs @sentry/node`.
+- **Production deployment** is the next major milestone after Phase 8. Vercel (web) + Railway (API) + Neon (Postgres) + Redis Cloud are the recommended stack.
+- Phase 10 remaining items (Core Web Vitals, load test, UptimeRobot) are all post-deployment tasks that require a live production URL.
+
+---
+
+## Session 2026-04-11 — Multi-Tenancy Runtime Batch: Completion, Disputes, and Withdrawals
+
+**Phase:** Multi-Tenancy Re-Architecture (IN PROGRESS)
+**AI Assistant:** GPT-5 Codex
+
+### What Was Done
+
+- Extended the live tenant runtime verifier beyond order creation into deeper
+  business-state transitions.
+- Added tenant CBT start and result-upload verification for claimed manual
+  jobs.
+- Added requester-side order-detail verification so completed tenant orders now
+  prove finished work visibility at runtime.
+- Added tenant dispute runtime verification from requester creation through
+  platform-admin review visibility and a `RESOLVED_FOR_CBT` decision.
+- Added tenant CBT withdrawal-request verification plus platform-admin review
+  handling and tenant-admin denial for platform payout-review endpoints.
+
+### Files Created / Modified
+
+- `scripts/verify-tenant-runtime.mjs`
+- `docs/ai-context/PHASES.md`
+- `docs/ai-context/SESSION_LOG.md`
+
+### Decisions Made
+
+- Tenant runtime verification now treats completion, disputes, and withdrawal
+  review as first-class scoping checks, not optional manual QA.
+- Runtime completion uploads use a generated PDF payload so the verifier
+  exercises the real accepted upload path instead of a mocked JSON shortcut.
+- Withdrawal verification currently uses the reject-and-restore path because it
+  proves both tenant CBT request creation and platform-only payout review
+  without leaving test funds in a partially processed state.
+
+### Phase Checklist Updates
+
+- Tenant-scoped business-state verification completed for:
+  CBT start,
+  CBT result upload,
+  requester finished-work visibility,
+  requester dispute creation,
+  platform dispute review,
+  CBT withdrawal request submission,
+  platform withdrawal review,
+  and tenant-admin denial on platform-only review routes.
+
+### Blockers / Notes for Next Session
+
+- The next useful tenant runtime batch is broader cross-role/admin-finance
+  coverage, especially tenant-scoped reporting surfaces and any remaining
+  platform-global endpoints that should stay inaccessible to tenant admins.
+- Live verification passed on the running local stack with:
+  tenant config resolution,
+  tenant registration,
+  tenant admin access,
+  tenant transactional order creation,
+  CBT claim/start/completion,
+  requester dispute creation,
+  platform admin dispute resolution,
+  CBT withdrawal submission,
+  platform withdrawal rejection,
+  and tenant/platform access isolation checks.
+
+---
+
+## Session 2026-04-11 — Multi-Tenancy Runtime Batch: Admin Finance and Reporting Isolation
+
+**Phase:** Multi-Tenancy Re-Architecture (IN PROGRESS)
+**AI Assistant:** GPT-5 Codex
+
+### What Was Done
+
+- Extended the live tenant runtime verifier to cover the remaining platform
+  admin-finance and reporting surfaces.
+- Added page-level runtime checks proving that super admins can load the
+  platform admin pages while tenant admins, CBT users, and individuals are
+  redirected away from them.
+- Added API-level runtime checks proving that platform-only finance,
+  operations, services, and reporting endpoints remain inaccessible to
+  tenant-scoped roles.
+- Added the reciprocal route check showing that a platform admin is redirected
+  away from tenant-admin pages instead of being allowed to drift into tenant
+  workspace routes.
+
+### Files Created / Modified
+
+- `scripts/verify-tenant-runtime.mjs`
+- `docs/ai-context/PHASES.md`
+- `docs/ai-context/SESSION_LOG.md`
+
+### Decisions Made
+
+- Platform admin runtime coverage now explicitly includes the reporting and
+  finance surfaces most likely to leak scope:
+  wallet overview,
+  CBT earnings overview,
+  wallet lists,
+  wallet transactions,
+  withdrawals,
+  admin operations overview,
+  release scheduler preview,
+  admin order queues,
+  admin dispute queue,
+  admin services,
+  and provider readiness.
+- Tenant-admin denial is now verified alongside CBT and individual denial for
+  those same platform-global APIs, so the runtime verifier checks the whole
+  role matrix instead of just one blocked role.
+
+### Phase Checklist Updates
+
+- Tenant runtime verification now covers:
+  tenant bootstrap,
+  tenant registration,
+  tenant transactional flows,
+  completion/dispute/withdrawal flows,
+  and platform admin finance/reporting isolation.
+
+### Blockers / Notes for Next Session
+
+- The next useful batch should shift from runtime surface proof to remaining
+  tenant data-model hardening, especially any database uniqueness or query
+  scoping rule that still assumes platform-global behavior where tenant-local
+  behavior is intended.
+- Live verification passed on the running local stack with:
+  tenant config resolution,
+  tenant registration,
+  tenant admin access,
+  tenant transactional order flows,
+  tenant completion/dispute/withdrawal flows,
+  and platform admin finance/reporting isolation across 6 admin pages and
+  12 platform-only APIs.
 - `apps/web/src/app/(admin)/admin/disputes/page.tsx`
 - `apps/web/src/app/(admin)/layout.tsx`
 - `apps/web/src/lib/admin-content.ts`
@@ -4323,3 +4729,1262 @@ This batch introduced the first real admin-side catalog controls.
   `/admin/finance` so it picks up the new withdrawal routes and review flow.
 - The next build should move into Phase 6: requester-side dispute creation and
   admin dispute-resolution groundwork on top of the live release engine.
+
+---
+
+## 2026-04-08 — Phase 6 batch 4: CBT penalty execution + manual reconciliation handling
+
+### Summary
+
+Finished the Phase 6 financial follow-up slice. Admins can now apply a pending
+CBT penalty after a requester-favor dispute decision, and they can also mark a
+released-order refund as completed through manual reconciliation when the money
+was already settled outside the still-held balance path. The admin dispute UI
+continues to show these as dedicated follow-up actions, but the runtime call now
+uses the existing stable admin dispute endpoint rather than a separate nested
+follow-up route.
+
+### Files Created / Modified
+
+**Created:**
+- `apps/api/src/modules/orders/dto/review-dispute-financial-follow-up.dto.ts`
+
+**Modified:**
+- `apps/api/src/modules/orders/dto/review-dispute.dto.ts`
+- `apps/api/src/modules/orders/orders.controller.ts`
+- `apps/api/src/modules/orders/orders.service.ts`
+- `apps/web/src/hooks/use-disputes.ts`
+- `apps/web/src/hooks/use-orders.ts`
+- `apps/web/src/components/admin/admin-dispute-review-panel.tsx`
+- `docs/ai-context/PHASES.md`
+- `docs/ai-context/SESSION_LOG.md`
+
+### Decisions Made
+
+- The dedicated nested follow-up route was not reliable in runtime verification,
+  so the financial follow-up actions are now accepted through the existing
+  `PATCH /orders/admin/:orderId/dispute` surface.
+- Manual refund reconciliation records a real `REFUND` transaction and moves the
+  order to `REFUNDED`, but it does not mutate wallet available balance again
+  because the refund is being confirmed as already completed off the still-held
+  path.
+- CBT penalty execution deducts from `availableBalance`, adjusts `totalEarned`
+  safely, and resolves the existing pending `PENALTY` ledger entry instead of
+  creating a duplicate transaction.
+
+### Verification
+
+- `pnpm --filter @zentry/api lint`
+- `pnpm --filter @zentry/api typecheck`
+- `pnpm --filter @zentry/api build`
+- `pnpm --filter @zentry/web typecheck`
+- `pnpm --filter @zentry/web build`
+- `pnpm db:seed`
+- Live verification on fresh local API `http://127.0.0.1:4301/api/v1` using
+  controlled DB fixtures:
+  - `ZTR-SEED-CAFE-001` moved from `penaltyStatus = PENDING_REVIEW` to
+    `penaltyStatus = EXECUTED` through the admin dispute endpoint
+  - `ZTR-SEED-READY-001` moved from
+    `refundStatus = MANUAL_RECONCILIATION_REQUIRED` to
+    `refundStatus = EXECUTED` through the same admin dispute endpoint
+  - both orders ended in `status = REFUNDED`
+- `pnpm db:seed` rerun after verification to restore the local demo baseline
+
+### Blockers / Notes for Next Session
+
+- Restart the normal API on `:4000` before testing the new admin follow-up
+  actions in the browser so it picks up the latest dispute controller/service
+  logic.
+- Phase 6 is effectively closed. The next build should move into Phase 7:
+  VTU automated-service delivery foundations.
+
+---
+
+## 2026-04-09 — Phase 7 batch 1: VTU airtime + data automated-delivery foundations
+
+### Summary
+
+Started Phase 7 with the first real automated-service delivery slice. Airtime
+and data purchases now complete instantly through the VTU provider layer,
+without entering the CBT pool or the manual held-funds flow. The system now
+records these as direct `SERVICE_PURCHASE` wallet debits, stores provider
+delivery details on the order, and recognises platform commission immediately.
+The order modal also now loads live data plans for VTU data services and shows
+an automated-purchase flow instead of the manual-order copy.
+
+### Files Created / Modified
+
+**Created:**
+- `apps/api/prisma/migrations/20260409090000_add_service_purchase_transaction/migration.sql`
+
+**Modified:**
+- `packages/types/src/enums.ts`
+- `apps/api/prisma/schema.prisma`
+- `apps/api/prisma/seed.ts`
+- `apps/api/src/providers/interfaces/index.ts`
+- `apps/api/src/providers/vtu/provider-one.provider.ts`
+- `apps/api/src/providers/vtu/vtu.service.ts`
+- `apps/api/src/modules/services/services.controller.ts`
+- `apps/api/src/modules/services/services.service.ts`
+- `apps/api/src/modules/orders/orders.service.ts`
+- `apps/web/src/hooks/use-service-catalog.ts`
+- `apps/web/src/components/orders/create-order-modal.tsx`
+- `apps/web/src/app/(dashboard)/orders/page.tsx`
+- `apps/web/src/app/wallet/page.tsx`
+- `apps/web/src/app/(admin)/admin/finance/page.tsx`
+- `docs/ai-context/PHASES.md`
+- `docs/ai-context/SESSION_LOG.md`
+
+### Decisions Made
+
+- Airtime and data now use the automated-provider path and must not create
+  manual CBT jobs or held-funds/escrow entries.
+- Automated VTU purchases record a new `SERVICE_PURCHASE` transaction type so
+  the wallet ledger can distinguish instant-service debits from manual-order
+  holds.
+- Platform commission for automated VTU services is recognised immediately at
+  order completion because there is no dispute window on this flow.
+- Cable TV and electricity remain in Phase 7 but were deliberately left for the
+  next slice so the first automated-delivery batch could land cleanly.
+- The current Provider One adapter returns mocked success when VTU credentials
+  are missing; the automated orchestration path is real, while external
+  transport remains adapter-controlled.
+
+### Verification
+
+- `pnpm --filter @zentry/api exec prisma generate`
+- `pnpm --filter @zentry/api typecheck`
+- `pnpm --filter @zentry/api lint`
+- `pnpm --filter @zentry/api build`
+- `pnpm --filter @zentry/web typecheck`
+- `pnpm --filter @zentry/web lint`
+- `pnpm --filter @zentry/web build`
+- `pnpm db:migrate`
+- `pnpm db:seed`
+- Live verification on a fresh local API at `http://127.0.0.1:4302/api/v1`:
+  - authenticated user purchased `MTN Airtime` successfully
+  - authenticated user purchased `MTN Data` successfully using the live plan
+    picker endpoint
+  - both orders returned `status = COMPLETED`
+  - both orders stored provider payloads in `order.providerResponse`
+  - user wallet ledger showed real `SERVICE_PURCHASE` entries for the new
+    automated purchases
+  - provider adapter logs confirmed mocked VTU success was used because live
+    VTU credentials were not configured in this environment
+
+### Blockers / Notes for Next Session
+
+- Restart the normal API on `:4000` before testing the new automated VTU flow
+  in the browser so it picks up the new transaction enum and service/order
+  logic.
+- The next Phase 7 slice should add cable TV and electricity verification
+  workflows, then reuse the same automated order foundation for their final
+  purchase execution.
+
+## 2026-04-09 — Phase 7 batch 2: VTU cable TV + electricity verification and purchase flows
+
+### Summary
+
+Extended the automated VTU foundation into cable TV and electricity. Cable
+services now verify smartcard/IUC details before purchase, load live bouquet
+options from the VTU provider layer, and complete instantly without touching
+the CBT queue. Electricity services now verify meter details before purchase,
+take prepaid amount input, and return delivered token/unit data directly to
+the requester. Both flows store their delivery payloads in
+`order.providerResponse` and continue to use immediate `SERVICE_PURCHASE`
+ledger debits plus instant platform commission recognition.
+
+### Files Created / Modified
+
+**Modified:**
+- `apps/api/prisma/seed.ts`
+- `apps/api/src/providers/interfaces/index.ts`
+- `apps/api/src/providers/vtu/provider-one.provider.ts`
+- `apps/api/src/providers/vtu/vtu.service.ts`
+- `apps/api/src/modules/services/services.controller.ts`
+- `apps/api/src/modules/services/services.service.ts`
+- `apps/api/src/modules/orders/orders.service.ts`
+- `apps/web/src/hooks/use-service-catalog.ts`
+- `apps/web/src/components/orders/create-order-modal.tsx`
+- `apps/web/src/app/(dashboard)/orders/page.tsx`
+- `docs/ai-context/PHASES.md`
+- `docs/ai-context/SESSION_LOG.md`
+
+### Decisions Made
+
+- Cable TV and electricity remain fully automated services and must never enter
+  the CBT job pool or manual held-funds flow.
+- Cable purchase requires smartcard verification before bouquet selection and
+  purchase confirmation.
+- Electricity purchase requires meter verification before amount submission,
+  and successful delivery must surface token and unit details to the requester.
+- Provider responses for cable and electricity should be rich enough for the
+  requester order detail page to act as the primary delivery receipt.
+- The current Provider One adapter continues to return mocked success payloads
+  when live VTU credentials are absent; the orchestration path is real, while
+  external transport remains adapter-controlled.
+
+### Verification
+
+- `pnpm --filter @zentry/api typecheck`
+- `pnpm --filter @zentry/api lint`
+- `pnpm --filter @zentry/api build`
+- `pnpm --filter @zentry/web typecheck`
+- `pnpm --filter @zentry/web lint`
+- `pnpm --filter @zentry/web build`
+- `pnpm db:seed`
+- Live verification on a fresh local API at `http://127.0.0.1:4302/api/v1`:
+  - authenticated user completed GOtv smartcard verification successfully
+  - authenticated user purchased `GOtv Jinja` successfully with
+    `status = COMPLETED`
+  - the resulting cable order stored provider delivery data including
+    customer name, current plan, bouquet, and due date
+  - after reseeding, authenticated user completed EKEDC meter verification
+    successfully
+  - authenticated user purchased an EKEDC prepaid token successfully with
+    `status = COMPLETED`
+  - the resulting electricity order stored provider delivery data including
+    customer details, meter details, token, and units
+
+### Blockers / Notes for Next Session
+
+- Restart the normal API on `:4000` before testing the cable/electricity VTU
+  flows in the browser so it picks up the new verification endpoints and
+  automated order logic.
+- The next Phase 7 slice should add Redis-backed plan/verification caching and
+  then harden the VTU adapter boundary for real provider credentials.
+
+## 2026-04-09 — Phase 7 batch 3: VTU Redis caching + provider-integration hardening
+
+### Summary
+
+Added Redis-backed caching to the VTU read/verify path so the app no longer
+hits the provider layer on every repeated plan or account-verification lookup.
+Data plans, cable bouquet plans, smartcard verification, and meter
+verification now cache with short TTLs, and the responses include provider
+metadata that tells the frontend whether the response was fresh or cached and
+whether the active VTU provider is running in `live` or `mock` mode. The VTU
+service boundary now also wraps provider failures in user-safe
+`ServiceUnavailable` responses instead of leaking lower-level transport errors.
+
+### Files Created / Modified
+
+**Modified:**
+- `apps/api/src/modules/redis/redis.service.ts`
+- `apps/api/src/providers/interfaces/index.ts`
+- `apps/api/src/providers/vtu/provider-one.provider.ts`
+- `apps/api/src/providers/vtu/vtu.service.ts`
+- `apps/api/src/modules/services/services.module.ts`
+- `apps/api/src/modules/services/services.service.ts`
+- `apps/web/src/hooks/use-service-catalog.ts`
+- `apps/web/src/components/orders/create-order-modal.tsx`
+- `docs/ai-context/PHASES.md`
+- `docs/ai-context/SESSION_LOG.md`
+
+### Decisions Made
+
+- VTU purchases remain uncached; only read/verification endpoints cache.
+- Plan lookups use a 5-minute Redis TTL, while cable/meter verification uses a
+  shorter 2-minute TTL.
+- Cache reads/writes are best-effort: if Redis is unavailable, VTU reads still
+  continue through the provider path instead of failing the user flow.
+- Provider metadata now travels with VTU read/verification responses so the
+  frontend can communicate mock vs live provider state cleanly during rollout.
+- Provider exceptions are normalized into a service-unavailable response to
+  avoid leaking raw transport details to users.
+
+### Verification
+
+- `pnpm --filter @zentry/api typecheck`
+- `pnpm --filter @zentry/api lint`
+- `pnpm --filter @zentry/api build`
+- `pnpm --filter @zentry/web typecheck`
+- `pnpm --filter @zentry/web lint`
+- `pnpm --filter @zentry/web build`
+- Live verification on a fresh local API at `http://127.0.0.1:4302/api/v1`:
+  - repeated `GET /services/vtu/data-plans/:serviceId` returned
+    `cached = false` on first read and `cached = true` on second read
+  - repeated `GET /services/vtu/cable-plans/:serviceId` returned
+    `cached = false` on first read and `cached = true` on second read
+  - repeated `POST /services/vtu/cable-verify/:serviceId` returned
+    `cached = false` on first read and `cached = true` on second read
+  - repeated `POST /services/vtu/electricity-verify/:serviceId` returned
+    `cached = false` on first read and `cached = true` on second read
+  - all VTU responses correctly reported `provider.name = PROVIDER_ONE` and
+    `provider.mode = mock` in this credential-less local environment
+
+### Blockers / Notes for Next Session
+
+- Restart the normal API on `:4000` before browser testing so it picks up the
+  Redis-backed VTU caching layer and provider-mode metadata.
+- The next Phase 7 slice should implement real VTU provider transport where
+  credentials are present and add admin-facing provider readiness/health
+  visibility for rollout operations.
+
+## 2026-04-09 — Phase 7 batch 4: real VTU transport integration + admin readiness controls
+
+### Summary
+
+Extended the Provider One VTU adapter beyond mock-only behavior. When live VTU
+credentials are configured, the adapter now performs real HTTP requests for
+health, plan lookups, verification, and purchase operations. When credentials
+are missing, it still falls back cleanly to the existing mocked path. On the
+admin side, the services workspace now exposes a provider-readiness panel that
+shows whether VTU is configured for live transport, whether the health probe
+is passing, which config values are missing, the cache TTLs, and which
+automated services are currently attached to that provider layer.
+
+### Files Created / Modified
+
+**Modified:**
+- `apps/api/src/providers/interfaces/index.ts`
+- `apps/api/src/providers/vtu/provider-one.provider.ts`
+- `apps/api/src/providers/vtu/vtu.service.ts`
+- `apps/api/src/modules/services/services.controller.ts`
+- `apps/api/src/modules/services/services.service.ts`
+- `apps/web/src/hooks/use-admin-services.ts`
+- `apps/web/src/app/(admin)/admin/services/page.tsx`
+- `docs/ai-context/PHASES.md`
+- `docs/ai-context/SESSION_LOG.md`
+
+### Decisions Made
+
+- The VTU adapter now has two deliberate modes:
+  - `mock` when live credentials are absent
+  - `live` when base URL and API key are present
+- VTU read/write transport is real only in `live` mode; purchases remain
+  adapter-mediated but now use actual HTTP transport instead of fixed mocked
+  success when the provider is configured.
+- Admin readiness was added to the services workspace rather than scattered
+  across the dashboard so catalog and provider operations stay in one place.
+- Provider readiness includes probe results and missing-config visibility so
+  rollout decisions can be made without opening server logs.
+
+### Verification
+
+- `pnpm --filter @zentry/api typecheck`
+- `pnpm --filter @zentry/api lint`
+- `pnpm --filter @zentry/api build`
+- `pnpm --filter @zentry/web typecheck`
+- `pnpm --filter @zentry/web lint`
+- `pnpm --filter @zentry/web build`
+- Live mock-mode readiness proof on a fresh local API at
+  `http://127.0.0.1:4304/api/v1`:
+  - admin readiness returned `mode = mock`
+  - readiness returned `configured = false`
+  - missing config reported `VTU_PROVIDER_ONE_BASE_URL` and
+    `VTU_PROVIDER_ONE_API_KEY`
+  - cache TTLs and automated-service counts returned correctly
+- Live transport proof on a second local API at `http://127.0.0.1:4305/api/v1`
+  backed by a fake VTU server on `http://127.0.0.1:4310`:
+  - admin readiness returned `mode = live`, `configured = true`, and
+    `probe = healthy`
+  - VTU data-plan retrieval returned live provider metadata
+  - a seeded user completed a live-branch `MTN Data` purchase successfully
+  - the resulting order returned `status = COMPLETED`
+  - the order stored live-branch provider payload details in
+    `order.providerResponse`
+
+### Blockers / Notes for Next Session
+
+- Restart the normal API on `:4000` before browser testing so it picks up the
+  new admin readiness endpoint and live-capable VTU transport layer.
+- Real external VTU credentials are still not configured in the normal local
+  environment, so the default app will continue to report `mock` mode until
+  those credentials are supplied.
+- The next Phase 7 slice should add admin rollout controls and formalize
+  onboarding for real external VTU credentials.
+
+## 2026-04-09 — Phase 7 batch 5: admin rollout controls + real external VTU credential onboarding
+
+### Summary
+
+Added persistent VTU rollout controls and real credential onboarding on top of
+the new readiness layer. Super admins can now save VTU base URL, API key,
+header, prefix, rollout mode, endpoint overrides, and notes from the admin
+services workspace, and the Provider One adapter now resolves its effective
+runtime config from those saved values instead of relying only on environment
+variables. This makes VTU cutover operationally real: admin can force `MOCK`,
+flip to `LIVE`, probe the provider, execute a live-branch purchase, and switch
+back to mock without redeploying the API.
+
+### Files Created / Modified
+
+**Created:**
+- `apps/api/prisma/migrations/20260409130000_add_platform_provider_configs/migration.sql`
+- `apps/api/src/providers/provider-credentials.service.ts`
+- `apps/api/src/modules/services/dto/update-vtu-provider-config.dto.ts`
+
+**Modified:**
+- `apps/api/prisma/schema.prisma`
+- `apps/api/src/providers/providers.module.ts`
+- `apps/api/src/providers/vtu/provider-one.provider.ts`
+- `apps/api/src/modules/services/services.controller.ts`
+- `apps/api/src/modules/services/services.service.ts`
+- `apps/web/src/hooks/use-admin-services.ts`
+- `apps/web/src/app/(admin)/admin/services/page.tsx`
+- `docs/ai-context/PHASES.md`
+- `docs/ai-context/SESSION_LOG.md`
+
+### Decisions Made
+
+- Platform-level VTU provider settings now persist in the database via
+  `PlatformProviderConfig` instead of living only in environment variables.
+- Provider secrets are encrypted at rest before persistence.
+- An explicitly blank API-key prefix must override the previous `Bearer `
+  default; it should not silently fall back to the env prefix.
+- Provider readiness now reports both the computed runtime state (`vtu`) and
+  the saved onboarding state (`savedConfig`) so admins can see what is
+  configured versus what is actively running.
+- Rollout mode is operational, not informational:
+  `MOCK` can force a safe fallback even when live credentials exist, and
+  `LIVE` can immediately cut traffic over when readiness is healthy.
+
+### Verification
+
+- `pnpm db:migrate`
+- `pnpm --filter @zentry/api exec prisma generate`
+- `pnpm --filter @zentry/api typecheck`
+- `pnpm --filter @zentry/api lint`
+- `pnpm --filter @zentry/api build`
+- `pnpm --filter @zentry/web typecheck`
+- `pnpm --filter @zentry/web lint`
+- `pnpm --filter @zentry/web build`
+- `pnpm db:seed`
+- Live proof on a fresh local API at `http://127.0.0.1:4307/api/v1` backed by
+  the fake VTU server at `http://127.0.0.1:4310`:
+  - readiness reported the persisted saved config including `baseUrl`,
+    `apiKeyLast4`, header, notes, and rollout mode
+  - forcing `MOCK` immediately returned `mode = mock`
+  - saving live credentials returned `mode = live` and `probe = healthy`
+  - a reseeded `cafe@test.com` account completed a live-branch `MTN Data`
+    order successfully
+  - the completed order stored provider delivery payload in
+    `order.providerResponse`
+  - forcing `MOCK` again immediately returned readiness to mock mode
+
+### Blockers / Notes for Next Session
+
+- Restart the normal API on `:4000` before browser testing so it picks up the
+  new persisted rollout controls and VTU credential onboarding endpoint.
+- The admin runtime proof leaves the saved rollout mode in `MOCK` after the
+  verification rollback, which is the safer default for local testing.
+- The next Phase 7 slice should refine provider operations further with
+  validation history, safer credential lifecycle UX, and tenant-ready provider
+  configuration groundwork.
+
+## 2026-04-09 — Phase 7 batch 6: provider validation history + tenant-ready config groundwork
+
+### Summary
+
+Extended the provider-operations layer so readiness is no longer just a
+moment-in-time probe. Provider config is now scope-aware for future tenant
+adoption, validation runs are recorded as first-class events, and the admin
+services workspace can trigger explicit VTU validation checks while showing the
+latest validation status and recent history. This makes live cutover safer
+because admins can now see whether a saved config was actually validated,
+whether the last result was healthy or mock-only, and when that happened.
+
+### Files Created / Modified
+
+**Created:**
+- `apps/api/prisma/migrations/20260409143000_add_provider_validation_history_and_scope/migration.sql`
+
+**Modified:**
+- `apps/api/prisma/schema.prisma`
+- `apps/api/src/modules/services/services.controller.ts`
+- `apps/api/src/modules/services/services.service.ts`
+- `apps/api/src/providers/vtu/provider-one.provider.ts`
+- `apps/web/src/app/(admin)/admin/services/page.tsx`
+- `apps/web/src/hooks/use-admin-services.ts`
+- `docs/ai-context/PHASES.md`
+- `docs/ai-context/SESSION_LOG.md`
+
+### Decisions Made
+
+- Provider config now carries an explicit scope descriptor:
+  `PLATFORM/platform` for the current live system, with a tenant-ready shape
+  that can grow into later white-label provider ownership without changing the
+  contract again.
+- Validation runs are stored separately from the provider config itself so the
+  admin UI can show history instead of only the latest probe result.
+- Saving credentials or rollout changes still clears the current “last
+  validated” status, and admins must now run a fresh explicit validation to
+  restore confidence before relying on live mode.
+- Local verification leaves the saved rollout mode back in `MOCK` after the
+  proof, which is safer for the default developer environment.
+
+### Verification
+
+- `pnpm --filter @zentry/api exec prisma generate`
+- `pnpm --filter @zentry/api typecheck`
+- `pnpm --filter @zentry/api lint`
+- `pnpm --filter @zentry/api build`
+- `pnpm --filter @zentry/web typecheck`
+- `pnpm --filter @zentry/web lint`
+- `pnpm db:migrate`
+- Live proof on a fresh local API at `http://127.0.0.1:4308/api/v1` backed by
+  the fake VTU server at `http://127.0.0.1:4310`:
+  - forced `MOCK` validation recorded a `not_applicable` validation event
+  - forced `LIVE` validation recorded a `healthy` validation event
+  - readiness returned `scope = PLATFORM/platform`
+  - readiness returned at least two recent validation-history entries
+  - saved config persisted `lastValidationStatus = healthy`
+  - saved rollout mode was switched back to `MOCK` after the proof
+
+### Blockers / Notes for Next Session
+
+- Restart the normal API on `:4000` before browser testing so it picks up the
+  new validation-history table and explicit validation endpoint.
+- The local DB now includes the new provider validation history migration, so
+  teammates need to run the latest migrations before using the admin provider
+  tools.
+- The next Phase 7 slice should refine provider operations further with better
+  validation-trigger UX, safer credential lifecycle controls, and groundwork
+  for supporting multiple provider adapters under the same rollout system.
+
+---
+
+## Session 2026-04-10 — Multi-Tenancy Re-Architecture (Batches 1–5)
+
+**Phase:** Multi-Tenancy Re-Architecture (Pre-Phase 8 pivot)
+**AI Assistant:** Claude Sonnet 4.6
+
+### What Was Done
+
+Full white-label SaaS multi-tenancy architecture implemented across all layers.
+
+**Batch 1 — Database Schema:**
+- Added `Tenant` model with slug, customDomain, branding colors, tenantMarginRate
+- Added `tenantId String?` to: User, Order, Transaction, Dispute, WithdrawalRequest, Notification, AuditLog, CbtProfile, ServiceCategoryModel, Service
+- Removed `CyberCafeProfile` model and `CYBER_CAFE` UserRole enum value
+- Added `TENANT_ADMIN` UserRole
+- Changed ServiceCategoryModel and Service unique constraints to composite `(slug, tenantId)`
+- New migration: `20260410000000_add_tenant_multi_tenancy`
+- Updated seed: testTenant, tenant@test.com (TENANT_ADMIN), all users linked to testTenant
+
+**Batch 2 — Backend Tenant Infrastructure:**
+- New `TenantModule` with TenantService, TenantResolverService (Redis-cached hostname resolution)
+- New `TenantContextMiddleware` — resolves tenant from HTTP `host` header on every request
+- JWT extended with `tenantId: string | null`
+- `RolesGuard` updated with tenant membership check
+- New `TenantGuard`, `@TenantContext()`, `@RequiresTenant()` decorators
+- `GET /tenants/config` — public endpoint for tenant branding from hostname
+
+**Batch 3 — Auth System Updates:**
+- Removed `POST /auth/register/cyber-cafe` endpoint and all related DTOs
+- `registerIndividual()` and `registerCbt()` now accept tenantId from request context
+- Registration endpoints decorated with `@RequiresTenant()`
+- Set-pin/change-pin roles updated: CYBER_CAFE → TENANT_ADMIN
+
+**Batch 4 — Feature Module Query Scoping:**
+- `createOrder`: orders, transactions, notifications, audit logs tagged with tenantId
+- `getCbtJobPool`, `getCbtDashboard`: CBT pool filtered by tenantId (CBTs only see tenant's orders)
+- `getMyOrders`, `getMyOrderDetail`, `getMyDisputes`, `createDispute`: tenantId filter added
+- `claimCbtJob`: tenantId filter on updateMany to prevent cross-tenant claim
+- `getCatalog`: returns platform-wide (tenantId: null) + tenant-specific services
+- `createCategory`, `createService`: platform-level creates (tenantId: null); composite unique checks fixed
+- `createAutomatedOrder`: tenantId propagated
+
+**Batch 5 — Frontend Tenant Infrastructure:**
+- Removed CYBER_CAFE from all 13 frontend files; deleted /register/cyber-cafe route
+- Added TENANT_ADMIN role to `auth-token.ts`, `auth-routes.ts` (routes to /tenant/dashboard)
+- Added `/tenant` protected prefix and matcher
+- `auth.store.ts`: added `tenantId: string | null` to `AuthUser`
+- Created `tenant.store.ts` (Zustand) with TenantConfig
+- Created `TenantBootstrap` component — loads tenant config, injects CSS variables
+- Added `TenantBootstrap` to `app-providers.tsx`
+- Created `(tenant-admin)` route group: layout + /tenant/dashboard page
+
+### Files Created / Modified
+
+**Created:**
+- `apps/api/prisma/migrations/20260410000000_add_tenant_multi_tenancy/migration.sql`
+- `apps/api/src/modules/tenant/` (5 files: module, service, resolver, controller, 2 DTOs)
+- `apps/api/src/common/middleware/tenant-context.middleware.ts`
+- `apps/api/src/common/guards/tenant.guard.ts`
+- `apps/api/src/common/decorators/tenant-context.decorator.ts`
+- `apps/api/src/common/decorators/requires-tenant.decorator.ts`
+- `apps/api/src/modules/orders/dto/review-dispute-financial-follow-up.dto.ts`
+- `apps/api/src/providers/provider-credentials.service.ts`
+- `apps/web/src/stores/tenant.store.ts`
+- `apps/web/src/app/tenant-bootstrap.tsx`
+- `apps/web/src/app/(tenant-admin)/layout.tsx`
+- `apps/web/src/app/(tenant-admin)/tenant/dashboard/page.tsx`
+
+**Modified:**
+- `apps/api/prisma/schema.prisma`
+- `apps/api/prisma/seed.ts`
+- `packages/types/src/enums.ts`
+- `packages/types/src/user.types.ts`
+- `packages/validators/src/auth.schema.ts`
+- `apps/api/src/app.module.ts`
+- `apps/api/src/modules/auth/auth.service.ts`
+- `apps/api/src/modules/auth/auth.controller.ts`
+- `apps/api/src/modules/auth/dto/index.ts`
+- `apps/api/src/common/guards/roles.guard.ts`
+- `apps/api/src/modules/orders/orders.service.ts`
+- `apps/api/src/modules/orders/orders.controller.ts`
+- `apps/api/src/modules/services/services.service.ts`
+- `apps/api/src/modules/services/services.controller.ts`
+- `apps/web/src/lib/auth-token.ts`
+- `apps/web/src/lib/auth-routes.ts`
+- `apps/web/src/lib/api-client.ts`
+- `apps/web/src/lib/landing-content.ts`
+- `apps/web/src/stores/auth.store.ts`
+- `apps/web/src/app/app-providers.tsx`
+- `apps/web/src/proxy.ts`
+- `apps/web/src/components/auth/auth-shell.tsx`
+- `apps/web/src/components/auth/registration-form.tsx`
+- `apps/web/src/components/layout/protected-shell.tsx`
+- `apps/web/src/app/(auth)/login/page.tsx`
+- `apps/web/src/app/wallet/page.tsx`
+- `apps/web/src/app/profile/page.tsx`
+- `apps/web/src/app/(admin)/admin/orders/page.tsx`
+- `apps/web/src/app/(admin)/admin/finance/page.tsx`
+
+**Deleted:**
+- `apps/api/src/modules/auth/dto/register-cyber-cafe.dto.ts`
+- `apps/web/src/app/(auth)/register/cyber-cafe/page.tsx`
+
+### Decisions Made
+
+- SUPER_ADMIN creates tenant accounts manually — no self-registration
+- Platform sets base commission rate (SystemConfig); tenants add margin on top
+- Tenant services use platform-wide services (tenantId: null) + tenant-specific (tenantId: tenant.id)
+- TenantResolverService: `*.zentry.ng` subdomain extraction + customDomain lookup; Redis TTL 60s
+- JWT includes `tenantId: string | null` (null = SUPER_ADMIN)
+- Registration endpoints require `@RequiresTenant()` — users register under a specific tenant
+- CBT job pool is tenant-scoped — CBTs only see orders from their own tenant
+
+### Phase Checklist Updates
+
+- Multi-tenancy architecture: IN PROGRESS (Batches 1-5 of 6 complete)
+- Batch 6 (documentation complete): SESSION_LOG updated, PHASES.md updated
+
+### Blockers / Notes for Next Session
+
+- Run `pnpm typecheck` to catch any remaining type errors
+- Run `pnpm db:migrate` to apply the new migration
+- Run `pnpm db:seed` to seed testTenant and TENANT_ADMIN user
+- TENANT_ADMIN management endpoints (POST /tenants/:id/admins) not yet implemented
+- Wallet service query scoping (admin wallet list) not yet tenant-filtered (lower priority, SUPER_ADMIN-only)
+- `createAutomatedOrder` still passes tenantId but the VTU service call is not tenant-provider-aware yet
+
+## 2026-04-10 — Multi-tenancy Batch 7 (Role model + Tenant Admin completion)
+
+### Completed
+
+- Fixed repo-health blockers carried into the tenant workflow batch and verified green checks
+- Added live TENANT_ADMIN backend endpoints:
+  - `GET /tenants/me`
+  - `GET /tenants/me/users`
+  - `PATCH /tenants/me`
+- Added tenant-admin frontend data hook:
+  - `apps/web/src/hooks/use-tenant-admin.ts`
+- Replaced the old tenant dashboard placeholder with a live tenant overview workspace
+- Added real tenant-admin pages:
+  - `/tenant/users`
+  - `/tenant/settings`
+- Updated tenant-admin layout and mobile navigation so TENANT_ADMIN no longer falls back to the individual nav model
+- Reconciled core product/docs copy away from stale cyber-cafe wording in the active architecture and phase tracker
+
+### Verification
+
+- `pnpm --filter @zentry/api typecheck`
+- `pnpm --filter @zentry/api lint`
+- `pnpm --filter @zentry/api build`
+- `pnpm --filter @zentry/web typecheck`
+- `pnpm --filter @zentry/web lint`
+- `pnpm --filter @zentry/web build`
+
+### Notes
+
+- Tenant-admin route ordering in `tenant.controller.ts` was corrected so `/tenants/me` does not get shadowed by `/:id`
+- The remaining `CYBER_CAFE` mentions are now mostly historical references in migrations and archival session history, not active runtime architecture
+
+## 2026-04-10 — Multi-tenancy Batch 8 (Tenant verification + archival cleanup)
+
+### Completed
+
+- Added tenant-aware backend unit coverage in:
+  - `apps/api/src/modules/tenant/tenant-resolver.service.spec.ts`
+  - `apps/api/src/modules/tenant/tenant.service.spec.ts`
+- Verification now covers:
+  - explicit tenant slug resolution for localhost development
+  - subdomain and custom-domain tenant resolution
+  - tenant overview authorization and metric shaping
+  - tenant settings updates plus cache invalidation
+- Cleaned active archival docs that still described the old cyber-cafe model as current:
+  - `docs/ai-context/DATABASE.md`
+  - `docs/ai-context/PHASES.md`
+  - `docs/ai-context/PHASE1_MANUAL_ACCEPTANCE.md`
+
+### Verification
+
+- `pnpm --filter @zentry/api typecheck`
+- `pnpm --filter @zentry/api test`
+- `pnpm --filter @zentry/api lint`
+- `pnpm --filter @zentry/web lint`
+
+### Notes
+
+- Current automated tenant coverage is now better than the previous hello-world-only baseline, but the next step should still add tenant-aware runtime probes and browser-path verification.
+
+## 2026-04-10 — Multi-tenancy Batch 9 (Tenant runtime verifier)
+
+### Completed
+
+- Added a live tenant runtime verifier at `scripts/verify-tenant-runtime.mjs`
+- Added root script:
+  - `pnpm verify:tenant:runtime`
+- Coverage now checks:
+  - tenant config resolution
+  - tenant-scoped individual registration
+  - tenant-scoped CBT registration
+  - tenant-admin login
+  - `/tenant/dashboard`, `/tenant/users`, `/tenant/settings`
+  - tenant-admin redirect safety against `/admin/dashboard`
+
+### Live Result
+
+- Running the verifier against the current local stack showed:
+  - tenant bootstrap, registration, login, and `/tenant/*` page access progressed
+  - direct `GET /api/v1/tenants/me` on `:4000` failed with `403 Forbidden resource`
+- This strongly indicates the currently running local API process is stale and needs a restart to pick up the corrected tenant controller route order.
+
+### Verification
+
+- `node --check scripts/verify-tenant-runtime.mjs`
+- `pnpm --filter @zentry/web lint`
+- `pnpm verify:tenant:runtime` (live run against local stack; failed on stale API process as described above)
+
+## 2026-04-11 — Multi-tenancy Batch 14 (Tenant data-model hardening)
+
+### Completed
+
+- Hardened tenant identity rules at the database layer by moving `User.email`
+  and `User.phone` from platform-global uniqueness to tenant-scoped composite
+  uniqueness in Prisma.
+- Added the matching Prisma migration:
+  `20260411091500_scope_user_identity_to_tenant`.
+- Updated auth flows to resolve users by tenant scope instead of global email:
+  registration, email verification, OTP resend, login, and forgot-password.
+- Updated user profile phone-conflict checks to use tenant scope instead of a
+  platform-global phone lookup.
+- Updated tenant-admin provisioning checks to use tenant-scoped email/phone
+  conflict detection.
+- Hardened audit-log user resolution so email-based audit lookups respect the
+  active request tenant instead of resolving globally.
+- Updated seed logic to stop assuming globally unique tenant users and to use
+  tenant-scoped identity keys for the seeded tenant accounts.
+- Added focused auth unit coverage for tenant-scoped identity behavior in:
+  - `apps/api/src/modules/auth/auth.service.spec.ts`
+- Extended the tenant runtime verifier with identity-hardening scenarios:
+  - same-tenant duplicate registration should fail
+  - cross-tenant duplicate registration should succeed
+  - wrong-tenant login should fail
+
+### Files Created / Modified
+
+- `apps/api/prisma/schema.prisma`
+- `apps/api/prisma/migrations/20260411091500_scope_user_identity_to_tenant/migration.sql`
+- `apps/api/prisma/seed.ts`
+- `apps/api/src/modules/auth/auth.controller.ts`
+- `apps/api/src/modules/auth/auth.service.ts`
+- `apps/api/src/modules/auth/auth.service.spec.ts`
+- `apps/api/src/modules/users/users.service.ts`
+- `apps/api/src/modules/tenant/tenant.service.ts`
+- `apps/api/src/common/interceptors/audit-log.interceptor.ts`
+- `scripts/verify-tenant-runtime.mjs`
+- `docs/ai-context/PHASES.md`
+- `docs/ai-context/SESSION_LOG.md`
+
+### Decisions Made
+
+- Tenant-owned users are now unique by `(tenantId, email)` and
+  `(tenantId, phone)`, not by global platform identity.
+- Platform-level users such as `SUPER_ADMIN` remain represented with
+  `tenantId = null`, and platform-only identity lookups must explicitly scope
+  to `tenantId: null` instead of relying on global uniqueness.
+- Query-level tenant scoping is now treated as a data-integrity rule, not just
+  a runtime-routing concern.
+
+### Verification
+
+- `pnpm --filter @zentry/api exec prisma generate`
+- `pnpm db:migrate`
+- `pnpm db:seed`
+- `pnpm --filter @zentry/api lint`
+- `pnpm --filter @zentry/api typecheck`
+- `pnpm --filter @zentry/api test`
+- `pnpm --filter @zentry/web lint`
+
+### Notes
+
+- The migration itself applied successfully, but local `prisma migrate dev`
+  later prompted for an extra migration name because the command was run in an
+  interactive development flow. The actual tenant-identity migration did apply.
+- A fresh temporary API with the new code was brought up successfully on
+  `:4304`, and `curl` confirmed both the API and web stack were reachable.
+- Final runtime proof from this sandbox is still limited by a local Node fetch
+  restriction (`connect EPERM` to `127.0.0.1:*`), so the updated
+  `pnpm verify:tenant:runtime` identity-hardening assertions should be rerun on
+  the normal local stack after restarting the API on `:4000`.
+
+## 2026-04-11 — Multi-tenancy Batch 15 (Tenant service/provider scoping hardening)
+
+### Completed
+
+- Hardened platform admin service-management queries so the admin services
+  workspace now operates on platform-default categories/services only instead of
+  potentially mixing in future tenant-scoped records.
+- Updated the public tenant service catalog to prefer tenant-scoped service and
+  category overrides by slug when both a platform-default record and a
+  tenant-specific record are visible.
+- Fixed tenant catalog category counts so they are derived from the final
+  visible deduped service set instead of raw category relation counts.
+- Scoped VTU read endpoints (`data plans`, `cable plans`, `cable verify`,
+  `electricity verify`) to the current tenant-visible service scope so a tenant
+  user cannot inspect or verify automated service IDs outside their own visible
+  tenant/platform blend.
+- Scoped automated-service cache keys by tenant scope so future tenant-specific
+  VTU rollout/config behavior does not bleed across tenants through shared
+  Redis keys.
+- Scoped order creation to the caller's visible tenant service set so a tenant
+  requester cannot create orders against another tenant's service IDs.
+- Added focused backend coverage for:
+  - tenant catalog override preference
+  - tenant-scoped VTU service access denial
+
+### Files Created / Modified
+
+- `apps/api/src/modules/services/services.controller.ts`
+- `apps/api/src/modules/services/services.service.ts`
+- `apps/api/src/modules/services/services.service.spec.ts`
+- `apps/api/src/modules/orders/orders.service.ts`
+- `docs/ai-context/PHASES.md`
+- `docs/ai-context/SESSION_LOG.md`
+
+### Decisions Made
+
+- The current super-admin service-management surface remains platform-default
+  only. Tenant-specific service management can be added later as a dedicated
+  tenant-admin/product slice instead of silently mixing scopes in the existing
+  admin workspace.
+- Tenant service visibility follows a clear precedence rule:
+  tenant-specific record by slug overrides platform-default record by the same
+  slug for tenant-facing catalog reads.
+- VTU read/verification endpoints should obey the same tenant-visibility rules
+  as order creation rather than trusting raw service IDs.
+
+### Verification
+
+- `pnpm --filter @zentry/api typecheck`
+- `pnpm --filter @zentry/api test -- --runInBand services.service.spec.ts`
+- `pnpm --filter @zentry/api lint`
+
+### Notes
+
+- Runtime verification from this sandbox still cannot drive the local Node
+  fetch-based verifier because of the same local `EPERM` restriction, so the
+  normal stack should rerun `pnpm verify:tenant:runtime` after these service
+  scoping changes.
+- This batch tightened service/provider scoping and cache isolation, but it did
+  not yet introduce tenant-owned VTU credential resolution. That remains the
+  next lower-level provider-scope slice.
+
+## 2026-04-11 — Multi-tenancy Batch 16 (Tenant-owned provider resolution)
+
+### Completed
+
+- Threaded tenant provider scope through the VTU abstraction layer so
+  automated-service plan reads, verification calls, and purchase calls can
+  resolve provider config with tenant awareness instead of always using the
+  platform-default config.
+- Updated the Provider One VTU adapter to resolve runtime config in this order:
+  `TENANT scope -> PLATFORM scope`.
+- Added resolved-scope reporting to VTU readiness so callers can see whether
+  runtime is using a tenant override or the platform fallback.
+- Added tenant-admin VTU provider endpoints:
+  - `GET /services/tenant/provider-readiness`
+  - `PATCH /services/tenant/provider-readiness/vtu`
+  - `POST /services/tenant/provider-readiness/vtu/validate`
+- Updated service-layer VTU reads and order-layer VTU purchases to pass
+  `tenantId` into provider resolution.
+- Added focused provider-level tests proving tenant-scope preference and
+  platform fallback.
+
+### Files Created / Modified
+
+- `apps/api/src/providers/interfaces/index.ts`
+- `apps/api/src/providers/vtu/vtu.service.ts`
+- `apps/api/src/providers/vtu/provider-one.provider.ts`
+- `apps/api/src/providers/vtu/provider-one.provider.spec.ts`
+- `apps/api/src/modules/services/services.controller.ts`
+- `apps/api/src/modules/services/services.service.ts`
+- `apps/api/src/modules/orders/orders.service.ts`
+- `docs/ai-context/PHASES.md`
+- `docs/ai-context/SESSION_LOG.md`
+
+### Verification
+
+- `pnpm --filter @zentry/api typecheck`
+- `pnpm --filter @zentry/api lint`
+- `pnpm --filter @zentry/api test -- --runInBand provider-one.provider.spec.ts services.service.spec.ts`
+
+### Notes
+
+- This slice establishes the backend/runtime foundation for tenant-owned VTU
+  configuration. Tenant-admin frontend wiring for provider readiness and config
+  management remains the next presentation-layer slice.
+- Live tenant runtime verification should be rerun after restarting the local
+  API so the new tenant-owned provider resolution path is exercised on the
+  normal stack.
+
+---
+
+## Session 2026-04-11 — Multi-Tenancy Batch 4 & 5: Admin Scoping + Frontend Tenant Pages
+
+**Phase:** Multi-Tenancy Re-Architecture
+**AI Assistant:** Claude Sonnet 4.6
+
+### What Was Done
+
+Completed all remaining Batch 4 (backend query scoping) items and the outstanding Batch 5 (frontend tenant-admin route group) items.
+
+**Batch 4 — Admin query scoping completed:**
+
+1. **Orders controller** — All 9 admin endpoints updated: `@Roles(UserRole.SUPER_ADMIN)` → `@Roles(UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN)`. Added `@CurrentUser()` to each and passed `user.tenantId` to every service call. Fixed two malformed `...tf` spreads in `orders.service.ts` that leaked onto `CbtProfile.count` top-level args and `SystemConfig.findUnique` args.
+
+2. **Services module** — Added `UserRole.TENANT_ADMIN` to `GET admin/categories` and `GET admin/services` controller endpoints. Service methods correctly retain `tenantId: null` (platform services), so both roles see the same catalog. All VTU, catalog, and provider endpoints were already tenant-aware from a previous session.
+
+3. **Users module** — Already fully tenant-scoped. `getMe`/`updateMe` use `userId` (UUID primary key, globally unique). Phone conflict check already uses `existingUser.tenantId`. No changes needed.
+
+**Batch 5 — Frontend tenant-admin pages:**
+
+CYBER_CAFE was already fully removed from frontend. Existing pages (`dashboard`, `settings`, `users`) and infrastructure (`tenant.store.ts`, `auth.store.ts`, `proxy.ts`, `auth-routes.ts`, `tenant-bootstrap.tsx`) were already complete.
+
+Added the three missing tenant-admin pages:
+
+- `tenant/cbt-management/page.tsx` — Lists CBT centers in the tenant using `useTenantUsers({ role: CBT_CENTER })`. Card grid with search, pagination.
+- `tenant/services/page.tsx` — Read-only view of platform services via `useAdminServices` (now accessible to TENANT_ADMIN). Category filter, search, pricing display.
+- `tenant/providers/page.tsx` — Full VTU provider config form scoped to tenant. Shows effective scope (tenant override vs platform default), health probe status, validation history. Uses new `useTenantProviderReadiness`, `useUpdateTenantVtuProviderConfig`, `useValidateTenantVtuProviderConfig` hooks.
+
+Created `apps/web/src/hooks/use-tenant-services.ts` with three hooks that call the tenant-scoped provider endpoints (`/services/tenant/provider-readiness`, `/services/tenant/provider-readiness/vtu`).
+
+Updated `(tenant-admin)/layout.tsx` nav to include all 6 items: Dashboard, Users, CBT centers, Services, Providers, Settings.
+
+### Files Created / Modified
+
+**Modified:**
+- `apps/api/src/modules/orders/orders.controller.ts` — all 9 admin endpoints dual-roled + tenantId passed through
+- `apps/api/src/modules/orders/orders.service.ts` — fixed two malformed `...tf` spreads
+- `apps/api/src/modules/services/services.controller.ts` — added TENANT_ADMIN to 2 read endpoints
+- `apps/web/src/hooks/use-admin-services.ts` — added `effectiveType?` and `effectiveKey?` to scope type
+- `apps/web/src/app/(tenant-admin)/layout.tsx` — added 3 new nav items
+
+**Created:**
+- `apps/web/src/hooks/use-tenant-services.ts`
+- `apps/web/src/app/(tenant-admin)/tenant/cbt-management/page.tsx`
+- `apps/web/src/app/(tenant-admin)/tenant/services/page.tsx`
+- `apps/web/src/app/(tenant-admin)/tenant/providers/page.tsx`
+
+### Phase Checklist Updates
+
+Multi-tenancy re-architecture Batch 4 (backend scoping) is fully complete. Batch 5 tenant-admin frontend is now complete.
+
+### Blockers / Notes for Next Session
+
+- `pnpm typecheck` passes with 0 errors after all changes.
+- Remaining work: Batch 6 (docs/PHASES.md/DECISIONS.md updates) — minor.
+- Phase 8 (Withdrawal System), Phase 9 (Real-time), Phase 10 (Analytics/Launch) not yet started.
+
+## Session 2026-04-11 — Documentation Reconciliation: Phase 9 Notification Status
+
+**Phase:** Tracker / Documentation Reconciliation
+**AI Assistant:** GPT-5 Codex
+
+### What Was Done
+
+- Re-audited the phase tracker against the actual notification and websocket
+  implementation in the repo.
+- Confirmed that Phase 9 is partially implemented already, not untouched.
+- Updated the phase tracker to reflect that the project already has:
+  - a live notifications module and API
+  - a JWT-authenticated Socket.IO gateway
+  - realtime user and CBT pool rooms
+  - active `notification:new`, `wallet:updated`, and `job:new` events
+  - a notification center UI with unread counts and read-state mutations
+- Reframed the remaining Phase 9 work as:
+  - explicit missing events such as `job:claimed` / `order:completed`
+  - true web push subscription and delivery
+  - final email/SMS notification coverage audit
+
+### Files Created / Modified
+
+- `docs/ai-context/PHASES.md`
+- `docs/ai-context/SESSION_LOG.md`
+
+### Decisions Made
+
+- Phase 9 should now be treated as `IN PROGRESS`, not `NOT STARTED`.
+- The next product decision point is no longer "whether notifications exist";
+  it is whether to finish Phase 9 now or continue closing multi-tenancy first
+  and then return for push + final realtime coverage.
+
+### Blockers / Notes for Next Session
+
+- The phase tracker had drifted behind the real codebase.
+- Multi-tenancy remains the active architecture stream, but the roadmap must no
+  longer describe realtime notifications as absent.
+
+## Session 2026-04-11 — Phase 9 Gap Closure Batch: Explicit Realtime Events + Email Delivery
+
+**Phase:** Phase 9 (IN PROGRESS)
+**AI Assistant:** GPT-5 Codex
+
+### What Was Done
+
+- Extended the realtime notification layer beyond the earlier generic socket
+  stream by adding explicit `job:claimed` and `order:completed` events.
+- Updated the web socket bootstrap so those events now invalidate the correct
+  order/job queries and surface clearer foreground/browser notifications.
+- Added a lightweight browser-alert permission entry point inside the
+  notifications workspace so users can opt into native browser alerts while the
+  app is open.
+- Added real email delivery for key Phase 9 notification moments using the
+  existing email PAL:
+  - order confirmed
+  - result ready
+  - dispute update
+  - withdrawal decision update
+- Kept all new email delivery fail-safe so provider/config issues never break
+  the primary business transaction flow.
+
+### Files Created / Modified
+
+- `apps/api/src/modules/notifications/notifications.service.ts`
+- `apps/api/src/modules/orders/orders.service.ts`
+- `apps/api/src/modules/wallet/wallet.service.ts`
+- `apps/web/src/app/socket-bootstrap.tsx`
+- `apps/web/src/app/notifications/page.tsx`
+- `docs/ai-context/PHASES.md`
+- `docs/ai-context/SESSION_LOG.md`
+
+### Decisions Made
+
+- The notification system should keep both:
+  - generic `notification:new` events for inbox/unread behavior
+  - explicit named business events where a screen needs stronger query
+    invalidation semantics
+- Browser-native alerts shown while the app is open are useful, but they do
+  not replace true web push. Phase 9 remains open until real push subscription
+  and server delivery exist.
+
+### Verification
+
+- `pnpm --filter @zentry/api typecheck`
+- `pnpm --filter @zentry/api lint`
+- `pnpm --filter @zentry/web typecheck`
+- `pnpm --filter @zentry/web lint`
+
+### Blockers / Notes for Next Session
+
+- The remaining Phase 9 work is now much narrower:
+  - background web push subscription
+  - server-side push delivery
+  - SMS follow-through for key order updates beyond OTP
+
+## Session 2026-04-11 — Phase 9 Push Delivery Batch: Persisted Browser Subscriptions
+
+**Phase:** Phase 9 (IN PROGRESS)
+**AI Assistant:** GPT-5 Codex
+
+### What Was Done
+
+- Added persisted browser push subscriptions to the Prisma schema and created a
+  migration for them.
+- Added notification API endpoints for:
+  - push config discovery
+  - push subscription status
+  - save browser subscription
+  - remove browser subscription
+- Added a dedicated push delivery service that sends real Web Push requests
+  using VAPID signing and safely prunes expired subscriptions.
+- Wired the existing notification flow so server-triggered notifications now
+  attempt background push delivery in addition to websocket/inbox updates.
+- Added a dedicated browser push worker at `apps/web/public/push-sw.js`.
+- The push worker uses the existing refresh-token flow to fetch the latest
+  unread notification and display a real browser notification body when a push
+  arrives.
+- Added frontend hooks and notifications-page controls to enable/disable
+  background push from the browser.
+- Added new VAPID env placeholders to `.env.example`.
+
+### Files Created / Modified
+
+- `apps/api/prisma/schema.prisma`
+- `apps/api/prisma/migrations/20260411133000_add_push_subscriptions/migration.sql`
+- `apps/api/src/modules/notifications/dto/save-push-subscription.dto.ts`
+- `apps/api/src/modules/notifications/dto/remove-push-subscription.dto.ts`
+- `apps/api/src/modules/notifications/push-delivery.service.ts`
+- `apps/api/src/modules/notifications/notifications.controller.ts`
+- `apps/api/src/modules/notifications/notifications.module.ts`
+- `apps/api/src/modules/notifications/notifications.service.ts`
+- `apps/web/public/push-sw.js`
+- `apps/web/src/hooks/use-push-notifications.ts`
+- `apps/web/src/app/notifications/page.tsx`
+- `.env.example`
+- `docs/ai-context/PHASES.md`
+- `docs/ai-context/SESSION_LOG.md`
+
+### Decisions Made
+
+- Background push should be treated as a complement to the existing socket
+  layer, not a replacement for it.
+- Push delivery currently uses payload-free Web Push plus a service-worker
+  refresh/fetch step to retrieve the latest unread notification safely from the
+  existing API surface.
+- Push delivery must fail safely: missing VAPID keys or stale subscriptions
+  must never break the primary business flow.
+
+### Verification
+
+- `pnpm --filter @zentry/api exec prisma generate`
+- `pnpm --filter @zentry/api typecheck`
+- `pnpm --filter @zentry/api lint`
+- `pnpm --filter @zentry/web typecheck`
+- `pnpm --filter @zentry/web lint`
+
+### Blockers / Notes for Next Session
+
+- `pnpm db:migrate` hit a local PostgreSQL advisory-lock timeout during this
+  session (`P1002`), so the checked-in migration exists but still needs to be
+  applied on the normal local stack once the lock is cleared.
+- Live browser verification of background push still requires configured VAPID
+  keys and a rerun on the normal stack.
+- SMS follow-through for key order updates is still the remaining Phase 9
+  delivery gap beyond OTP.
+
+## Session 2026-04-11 — Multi-Tenancy Closeout Batch: Tenant Provider UX + Doc Reality Pass
+
+**Phase:** MULTI-TENANCY RE-ARCHITECTURE (IN PROGRESS)
+**AI Assistant:** GPT-5 Codex
+
+### What Was Done
+
+- Polished the tenant-admin VTU provider workspace so it now reflects the full
+  backend readiness model instead of a thin subset.
+- Added tenant-facing visibility for:
+  - effective scope versus platform fallback
+  - credential state
+  - cache TTLs
+  - last validation state and timestamp
+  - resolved health endpoint
+  - automated-service coverage tied to the current provider path
+- Added the missing tenant-side `healthPath` input so tenant admins can manage
+  the full VTU validation surface from their own configuration page.
+- Reconciled the major roadmap/architecture docs so they stop describing
+  already-built multi-tenant capabilities as future-only work.
+
+### Files Created / Modified
+
+- `apps/web/src/app/(tenant-admin)/tenant/providers/page.tsx`
+- `docs/ai-context/PHASES.md`
+- `docs/ai-context/ARCHITECTURE.md`
+- `docs/ai-context/WHITE_LABEL_ROADMAP.md`
+- `docs/ai-context/SESSION_LOG.md`
+
+### Decisions Made
+
+- Tenant-admin provider UX should mirror the real backend readiness payload,
+  not force operators to infer fallback behavior from sparse fields.
+- The white-label roadmap now acts as a live-state expansion document, not only
+  a future-state placeholder, because tenant auth, tenant admin, tenant-scoped
+  business flows, and tenant-owned VTU readiness are already in the codebase.
+- Remaining “later work” should now focus on custom domains, billing/commercial
+  controls, and broader provider categories rather than pretending the
+  multi-tenant foundation itself has not started.
+
+### Verification
+
+- `pnpm --filter @zentry/web lint`
+- `pnpm --filter @zentry/web typecheck`
+
+### Blockers / Notes for Next Session
+
+- The next multi-tenancy slice should continue boundary tightening and final
+  tenant-scoped query audits, then follow with the remaining tenant-provider
+  lifecycle cleanup.
+- Phase 9 push still needs live VAPID/browser verification on the normal stack,
+  but the roadmap should no longer block active multi-tenancy closeout work.
+
+## Session 2026-04-11 — Multi-Tenancy Closeout Batch: Boundary Tightening + Final Scope Audit
+
+**Phase:** MULTI-TENANCY RE-ARCHITECTURE (IN PROGRESS)
+**AI Assistant:** GPT-5 Codex
+
+### What Was Done
+
+- Tightened CBT order flows so tenant scope is enforced explicitly, not only by
+  user ownership:
+  - CBT job list
+  - CBT job detail
+  - job start
+  - job completion
+  - shared approved-CBT guard path
+- Tightened wallet and withdrawal flows so tenant scope is enforced explicitly
+  in wallet overview, transaction history, CBT earnings, withdrawal history,
+  and withdrawal creation.
+- Updated withdrawal creation so tenant-scoped requests now persist `tenantId`
+  directly instead of relying on user ownership alone.
+- Closed fallback-branch leakage in CBT order claim/start/complete flows where
+  a tenant-mismatched order could previously be looked up by raw `id` during
+  conflict handling.
+
+### Files Created / Modified
+
+- `apps/api/src/modules/orders/orders.controller.ts`
+- `apps/api/src/modules/orders/orders.service.ts`
+- `apps/api/src/modules/wallet/wallet.controller.ts`
+- `apps/api/src/modules/wallet/wallet.service.ts`
+- `docs/ai-context/PHASES.md`
+- `docs/ai-context/SESSION_LOG.md`
+
+### Decisions Made
+
+- Tenant isolation should be enforced in the query layer even when the current
+  code path already keys off `userId`; ownership checks alone are not enough
+  for long-term multi-tenant safety.
+- Tenant mismatch on CBT operational routes should collapse to `Not found`
+  rather than leaking job existence through conflict/status branches.
+- The live tenant runtime verifier remains the closing proof for tenant
+  hardening work; when it fails after repeated runs, reseeding the local stack
+  is an acceptable way to distinguish state drift from real regressions.
+
+### Verification
+
+- `pnpm --filter @zentry/api typecheck`
+- `pnpm --filter @zentry/api lint`
+- `pnpm db:seed`
+- `pnpm verify:tenant:runtime`
+
+### Runtime Verification Result
+
+- tenant config resolved for `testbiz`
+- tenant registration passed for individual and CBT flows
+- tenant admin route access and tenant endpoints passed
+- tenant individual pages and core APIs passed
+- tenant settings persistence and restore passed
+- tenant user search/filter and cross-tenant denial passed
+- tenant transactional flows passed
+- tenant completion, dispute, and withdrawal flows passed
+- admin finance/reporting isolation passed
+
+### Blockers / Notes for Next Session
+
+- The multi-tenancy closeout is in a much stronger place now. The next
+  best batch is to return to Phase 9 live VAPID/browser verification for
+  background push delivery on the normal stack, then finish the remaining SMS
+  follow-through and notification coverage audit.

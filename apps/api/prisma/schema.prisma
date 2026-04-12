@@ -11,8 +11,8 @@ datasource db {
 
 enum UserRole {
   INDIVIDUAL
-  CYBER_CAFE
   CBT_CENTER
+  TENANT_ADMIN
   SUPER_ADMIN
 }
 
@@ -29,9 +29,11 @@ enum OrderStatus {
 
 enum TransactionType {
   WALLET_FUNDING
+  SERVICE_PURCHASE
   ESCROW_LOCK
   ESCROW_RELEASE
   PLATFORM_COMMISSION
+  TENANT_COMMISSION
   CBT_COMMISSION
   WITHDRAWAL
   REFUND
@@ -106,14 +108,59 @@ enum OtpType {
   LOGIN_2FA
 }
 
+enum ProviderRolloutMode {
+  AUTO
+  MOCK
+  LIVE
+}
+
+enum ProviderConfigScope {
+  PLATFORM
+  TENANT
+}
+
 // ── Models ───────────────────────────────────────────────────────
+
+model Tenant {
+  id                   String    @id @default(uuid())
+  name                 String
+  slug                 String    @unique
+  customDomain         String?   @unique
+  customDomainVerified Boolean   @default(false)
+  logoUrl              String?
+  primaryColor         String    @default("#0D1B3E")
+  accentColor          String    @default("#F5A623")
+  textColor            String    @default("#10203C")
+  buttonColor          String    @default("#0D1B3E")
+  fontStyle            String    @default("modern")
+  tenantMarginRate     Int       @default(0)
+  usesCustomServiceSelection Boolean @default(false)
+  isActive             Boolean   @default(true)
+  createdById          String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  users              User[]
+  orders             Order[]
+  serviceCategories  ServiceCategoryModel[]
+  services           Service[]
+  serviceSelections  TenantServiceSelection[]
+  withdrawalRequests WithdrawalRequest[]
+  auditLogs          AuditLog[]
+  cbtProfiles        CbtProfile[]
+  tenantAdminAccesses TenantAdminAccess[]
+
+  @@map("tenants")
+}
 
 model User {
   id               String    @id @default(uuid())
+  tenantId         String?
+  tenant           Tenant?   @relation(fields: [tenantId], references: [id], onDelete: SetNull)
   firstName        String
   lastName         String
-  email            String    @unique
-  phone            String    @unique
+  email            String
+  phone            String
   passwordHash     String
   walletPin        String?
   role             UserRole
@@ -124,24 +171,28 @@ model User {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  wallet            Wallet?
-  cbtProfile        CbtProfile?
-  cyberCafeProfile  CyberCafeProfile?
-  ordersPlaced      Order[]            @relation("OrderRequester")
-  ordersAssigned    Order[]            @relation("OrderCbt")
-  transactions      Transaction[]
-  disputesRaised    Dispute[]          @relation("DisputeRaiser")
-  disputesResolved  Dispute[]          @relation("DisputeResolver")
-  withdrawals       WithdrawalRequest[]
-  notifications     Notification[]
-  auditLogs         AuditLog[]
-  otpTokens         OtpToken[]
-  passwordResets    PasswordReset[]
+  wallet           Wallet?
+  cbtProfile       CbtProfile?
+  ordersPlaced     Order[]            @relation("OrderRequester")
+  ordersAssigned   Order[]            @relation("OrderCbt")
+  transactions     Transaction[]
+  disputesRaised   Dispute[]          @relation("DisputeRaiser")
+  disputesResolved Dispute[]          @relation("DisputeResolver")
+  withdrawals      WithdrawalRequest[]
+  notifications    Notification[]
+  pushSubscriptions PushSubscription[]
+  auditLogs        AuditLog[]
+  otpTokens        OtpToken[]
+  passwordResets   PasswordReset[]
+  tenantAdminAccesses TenantAdminAccess[]
 
   @@index([email])
   @@index([phone])
   @@index([role])
   @@index([isActive])
+  @@index([tenantId])
+  @@unique([tenantId, email])
+  @@unique([tenantId, phone])
 }
 
 model Wallet {
@@ -162,6 +213,7 @@ model Wallet {
 
 model Transaction {
   id            String            @id @default(uuid())
+  tenantId      String?
   walletId      String
   wallet        Wallet            @relation(fields: [walletId], references: [id])
   userId        String
@@ -187,47 +239,41 @@ model Transaction {
   @@index([status])
   @@index([type])
   @@index([createdAt])
+  @@index([tenantId])
 }
 
 model CbtProfile {
-  id               String            @id @default(uuid())
-  userId           String            @unique
-  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  centerName       String
-  licenseNumber    String            @unique
-  licenseDocUrl    String
-  address          String
-  state            String
-  lga              String
-  approvalStatus   CbtApprovalStatus @default(PENDING)
-  approvedAt       DateTime?
-  approvedById     String?
-  rejectionReason  String?
-  isOnline         Boolean           @default(false)
-  lastSeenAt       DateTime?
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  id              String            @id @default(uuid())
+  tenantId        String?
+  tenant          Tenant?           @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  userId          String            @unique
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  centerName      String
+  licenseNumber   String            @unique
+  supportingDocUrl String?
+  address         String
+  state           String
+  lga             String
+  approvalStatus  CbtApprovalStatus @default(PENDING)
+  approvedAt      DateTime?
+  approvedById    String?
+  rejectionReason String?
+  isOnline        Boolean           @default(false)
+  lastSeenAt      DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
 
   @@index([approvalStatus])
   @@index([licenseNumber])
-}
-
-model CyberCafeProfile {
-  id           String   @id @default(uuid())
-  userId       String   @unique
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  businessName String
-  address      String
-  state        String
-  cacNumber    String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  @@index([tenantId])
 }
 
 model ServiceCategoryModel {
   id          String    @id @default(uuid())
-  name        String    @unique
-  slug        String    @unique
+  tenantId    String?
+  tenant      Tenant?   @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  name        String
+  slug        String
   description String?
   iconUrl     String?
   isActive    Boolean   @default(true)
@@ -236,15 +282,20 @@ model ServiceCategoryModel {
   updatedAt   DateTime  @updatedAt
   services    Service[]
 
+  @@unique([slug, tenantId])
+  @@unique([name, tenantId])
+  @@index([tenantId])
   @@map("service_categories")
 }
 
 model Service {
   id                  String               @id @default(uuid())
+  tenantId            String?
+  tenant              Tenant?              @relation(fields: [tenantId], references: [id], onDelete: SetNull)
   categoryId          String
   category            ServiceCategoryModel @relation(fields: [categoryId], references: [id])
   name                String
-  slug                String               @unique
+  slug                String
   description         String?
   requiredDocuments   Json                 @default("[]")
   requiredFields      Json                 @default("[]")
@@ -252,6 +303,7 @@ model Service {
   fulfillmentType     FulfillmentType
   providerCost        BigInt               @default(0)
   platformFee         BigInt
+  tenantFee           BigInt               @default(0)
   totalPrice          BigInt
   cbtCommission       BigInt               @default(0)
   providerKey         String?
@@ -262,15 +314,74 @@ model Service {
   updatedAt           DateTime             @updatedAt
   orders              Order[]
 
+  @@unique([slug, tenantId])
   @@index([categoryId])
-  @@index([slug])
+  @@index([tenantId])
   @@index([deliveryMode])
   @@index([fulfillmentType])
   @@index([isActive])
 }
 
+model PlatformProviderConfig {
+  id                        String              @id @default(uuid())
+  providerType              String
+  providerKey               String
+  scopeType                 ProviderConfigScope @default(PLATFORM)
+  scopeKey                  String              @default("platform")
+  displayName               String
+  isEnabled                 Boolean             @default(true)
+  rolloutMode               ProviderRolloutMode @default(AUTO)
+  baseUrl                   String?
+  apiKeyEncrypted           String?
+  apiKeyLast4               String?
+  apiKeyHeader              String?
+  apiKeyPrefix              String?
+  healthPath                String?
+  airtimePath               String?
+  dataPurchasePath          String?
+  dataPlansPath             String?
+  cablePlansPath            String?
+  cableVerifyPath           String?
+  cablePurchasePath         String?
+  electricityVerifyPath     String?
+  electricityPurchasePath   String?
+  notes                     String?
+  lastValidatedAt           DateTime?
+  lastValidationStatus      String?
+  lastValidationMessage     String?
+  createdAt                 DateTime            @default(now())
+  updatedAt                 DateTime            @updatedAt
+  validationEvents          ProviderValidationEvent[]
+
+  @@unique([providerType, providerKey, scopeType, scopeKey], map: "ppc_type_key_scope_unique")
+  @@index([providerType, providerKey, scopeType, scopeKey], map: "ppc_type_key_scope_idx")
+  @@map("platform_provider_configs")
+}
+
+model ProviderValidationEvent {
+  id                  String               @id @default(uuid())
+  providerConfigId    String?
+  providerConfig      PlatformProviderConfig? @relation(fields: [providerConfigId], references: [id], onDelete: Cascade)
+  providerType        String
+  providerKey         String
+  scopeType           ProviderConfigScope  @default(PLATFORM)
+  scopeKey            String               @default("platform")
+  rolloutMode         ProviderRolloutMode
+  effectiveMode       String
+  probeStatus         String
+  probeMessage        String
+  missingConfig       Json?
+  endpointBaseUrl     String?
+  createdAt           DateTime             @default(now())
+
+  @@index([providerType, providerKey, scopeType, scopeKey, createdAt], map: "pve_lookup_created_idx")
+  @@map("provider_validation_events")
+}
+
 model Order {
   id                     String      @id @default(uuid())
+  tenantId               String?
+  tenant                 Tenant?     @relation(fields: [tenantId], references: [id], onDelete: SetNull)
   orderNumber            String      @unique
   requesterId            String
   requester              User        @relation("OrderRequester", fields: [requesterId], references: [id])
@@ -285,6 +396,7 @@ model Order {
   resultUploadedAt       DateTime?
   totalAmount            BigInt
   platformFee            BigInt
+  tenantFee              BigInt      @default(0)
   cbtCommission          BigInt
   escrowReleasedAt       DateTime?
   disputeWindowExpiresAt DateTime?
@@ -303,6 +415,7 @@ model Order {
   dispute       Dispute?
   notifications Notification[]
 
+  @@index([tenantId])
   @@index([requesterId])
   @@index([assignedCbtId])
   @@index([status])
@@ -312,29 +425,33 @@ model Order {
 }
 
 model Dispute {
-  id             String        @id @default(uuid())
-  orderId        String        @unique
-  order          Order         @relation(fields: [orderId], references: [id])
-  raisedById     String
-  raisedBy       User          @relation("DisputeRaiser", fields: [raisedById], references: [id])
-  reason         String        @db.Text
-  evidenceUrls   Json          @default("[]")
-  status         DisputeStatus @default(OPEN)
-  resolvedById   String?
-  resolvedBy     User?         @relation("DisputeResolver", fields: [resolvedById], references: [id])
-  resolutionNote String?       @db.Text
-  resolvedAt     DateTime?
-  redoDeadline   DateTime?
+  id              String        @id @default(uuid())
+  tenantId        String?
+  orderId         String        @unique
+  order           Order         @relation(fields: [orderId], references: [id])
+  raisedById      String
+  raisedBy        User          @relation("DisputeRaiser", fields: [raisedById], references: [id])
+  reason          String        @db.Text
+  evidenceUrls    Json          @default("[]")
+  status          DisputeStatus @default(OPEN)
+  resolvedById    String?
+  resolvedBy      User?         @relation("DisputeResolver", fields: [resolvedById], references: [id])
+  resolutionNote  String?       @db.Text
+  resolvedAt      DateTime?
+  redoDeadline    DateTime?
   redoCompletedAt DateTime?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
+  @@index([tenantId])
   @@index([status])
   @@index([raisedById])
 }
 
 model WithdrawalRequest {
   id            String           @id @default(uuid())
+  tenantId      String?
+  tenant        Tenant?          @relation(fields: [tenantId], references: [id], onDelete: SetNull)
   userId        String
   user          User             @relation(fields: [userId], references: [id])
   amount        BigInt
@@ -350,12 +467,14 @@ model WithdrawalRequest {
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 
+  @@index([tenantId])
   @@index([userId])
   @@index([status])
 }
 
 model Notification {
   id        String           @id @default(uuid())
+  tenantId  String?
   userId    String
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   type      NotificationType
@@ -368,9 +487,61 @@ model Notification {
   order     Order?           @relation(fields: [orderId], references: [id])
   createdAt DateTime         @default(now())
 
+  @@index([tenantId])
   @@index([userId])
   @@index([isRead])
   @@index([createdAt])
+}
+
+model PushSubscription {
+  id         String   @id @default(uuid())
+  tenantId    String?
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint    String   @unique
+  p256dh      String
+  auth        String
+  userAgent   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  lastUsedAt  DateTime?
+
+  @@index([tenantId])
+  @@index([userId])
+}
+
+model TenantAdminAccess {
+  id                    String   @id @default(uuid())
+  tenantId              String
+  tenant                Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId                String
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdById           String?
+  email                 String
+  encryptedTempPassword String
+  isActive              Boolean  @default(true)
+  lastResetAt           DateTime?
+  dismissedAt           DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([tenantId, isActive])
+  @@index([userId, isActive])
+  @@index([createdAt])
+}
+
+model TenantServiceSelection {
+  id          String   @id @default(uuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  serviceSlug String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([tenantId, serviceSlug])
+  @@index([tenantId])
+  @@index([serviceSlug])
+  @@map("tenant_service_selections")
 }
 
 model OtpToken {
@@ -403,6 +574,8 @@ model PasswordReset {
 
 model AuditLog {
   id        String   @id @default(uuid())
+  tenantId  String?
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
   userId    String?
   user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   action    String
@@ -414,6 +587,7 @@ model AuditLog {
   userAgent String?
   createdAt DateTime @default(now())
 
+  @@index([tenantId])
   @@index([userId])
   @@index([action])
   @@index([entity])

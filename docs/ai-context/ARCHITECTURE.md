@@ -1,6 +1,6 @@
 # ARCHITECTURE.md — Zentry System Architecture
 
-> Last updated: 2026-04-06
+> Last updated: 2026-04-11
 > Read this before touching any folder structure, adding a module, or
 > introducing a new dependency.
 
@@ -13,8 +13,9 @@ applications and three shared packages. Every external integration (payments,
 VTU, SMS, email, storage) is abstracted behind a provider interface — this
 is the **Provider Abstraction Layer (PAL)**.
 
-Current implementation still reflects the Phase 1 direct-platform structure.
-Future expansion direction is platform-first multi-tenancy:
+Current implementation is now in active migration away from the old direct-platform structure.
+The expansion direction is platform-first multi-tenancy, and this is already in
+flight in the live codebase:
 - Zentry becomes the infrastructure/platform layer
 - the launch business becomes the first-party tenant
 - future external businesses become additional tenants
@@ -30,10 +31,10 @@ Future expansion direction is platform-first multi-tenancy:
 │                     API (NestJS)                            │
 │                                                             │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │
-│  │ Auth Module  │  │ Order Module │  │  Escrow Module   │  │
+│  │ Auth Module  │  │ Order Module │  │ Services Module  │  │
 │  └──────────────┘  └──────────────┘  └──────────────────┘  │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │
-│  │Wallet Module │  │Dispute Module│  │Withdraw Module   │  │
+│  │Wallet Module │  │Tenant Module │  │Notifications Mod │  │
 │  └──────────────┘  └──────────────┘  └──────────────────┘  │
 │                                                             │
 │  ┌─────────────────────────────────────────────────────┐   │
@@ -65,8 +66,9 @@ zentry/
 │   │       ├── app/
 │   │       │   ├── layout.tsx
 │   │       │   ├── (auth)/           # Login, Register, Verify, Reset
-│   │       │   ├── (dashboard)/      # Individual + Cyber Cafe views
+│   │       │   ├── (dashboard)/      # Individual requester views
 │   │       │   ├── (cbt)/            # CBT Center views
+│   │       │   ├── (tenant-admin)/   # Tenant admin views
 │   │       │   └── (admin)/          # Super Admin views
 │   │       ├── components/
 │   │       │   ├── layout/           # Sidebar, BottomNav, TopBar, MoreSheet
@@ -107,15 +109,14 @@ zentry/
 │           │   └── storage/          # Cloudinary adapter
 │           └── modules/
 │               ├── auth/
-│               ├── users/
-│               ├── wallet/
-│               ├── services/         # Service catalog
-│               ├── orders/
-│               ├── escrow/
-│               ├── disputes/
-│               ├── withdrawals/
 │               ├── notifications/
-│               └── admin/
+│               ├── orders/
+│               ├── prisma/
+│               ├── redis/
+│               ├── services/
+│               ├── tenant/
+│               ├── users/
+│               └── wallet/
 │
 ├── packages/
 │   ├── types/                        # Shared enums and TypeScript interfaces
@@ -149,9 +150,11 @@ zentry/
 
 ### Current vs Future Model
 
-Current Phase 1 frontend:
-- one direct-product surface for `INDIVIDUAL`, `CYBER_CAFE`, and `CBT_CENTER`
-- one platform admin surface
+Current frontend:
+- one requester surface for `INDIVIDUAL`
+- one CBT surface for `CBT_CENTER`
+- one tenant-admin surface for `TENANT_ADMIN`
+- one platform-admin surface for `SUPER_ADMIN`
 
 Future platform-first model:
 - platform marketing and platform-admin surface
@@ -165,9 +168,10 @@ other tenant instead of remaining a privileged special-case frontend.
 
 | Group | Path Pattern | Who Sees It |
 |---|---|---|
-| `(auth)` | `/login`, `/register`, `/register/cyber-cafe`, `/register/cbt`, etc. | Unauthenticated only |
-| `(dashboard)` | `/home`, `/services/*`, `/orders`, `/wallet`, `/profile` | INDIVIDUAL, CYBER_CAFE |
+| `(auth)` | `/login`, `/register`, `/register/cbt`, etc. | Unauthenticated only |
+| `(dashboard)` | `/home`, `/services/*`, `/orders`, `/wallet`, `/profile` | INDIVIDUAL |
 | `(cbt)` | `/dashboard`, `/job-pool`, `/earnings`, `/withdraw` | CBT_CENTER |
+| `(tenant-admin)` | `/tenant/*` | TENANT_ADMIN |
 | `(admin)` | `/admin/*` | SUPER_ADMIN |
 
 Route groups are enforced by the Next.js proxy layer (`proxy.ts`) that reads the JWT
@@ -181,9 +185,14 @@ role claim and redirects accordingly.
 - "More" opens a Framer Motion slide-up sheet (AnimatePresence)
 - Safe area inset on iOS: `pb-[env(safe-area-inset-bottom)]`
 
-**Individual/Cyber Cafe tabs:** Home | Services | Orders | Wallet | More
+**Individual tabs:** Home | Services | Orders | Wallet | More
 **CBT tabs:** Home | Job Pool | My Jobs | Earnings | More
+**Tenant-admin tabs:** Home | Users | Settings | Profile | More
 **Admin tabs:** Dashboard | Orders | Users | Finance | More
+
+Desktop tenant-admin navigation is broader than the mobile nav and currently
+includes tenant dashboard, users, CBT centers, services, providers, and
+settings.
 
 ### State Management
 
@@ -205,19 +214,23 @@ Single Axios instance (`lib/api-client.ts`):
 
 ## Backend Architecture (apps/api)
 
-### Future Direction
+### Current Direction
 
-The current backend is still Phase 1 single-platform oriented.
+The backend is no longer purely Phase 1 single-platform oriented. The live
+system already includes:
+- tenant-aware host and local-dev tenant resolution
+- tenant-scoped auth and registration flows
+- tenant-admin endpoints and `/tenant/*` frontend routes
+- tenant-aware catalog, order, wallet, notification, and provider behavior
+- tenant-owned VTU readiness/configuration with `TENANT -> PLATFORM` fallback
 
-The future expansion must move toward:
-- tenant-aware auth
-- tenant-aware routing and request resolution
-- tenant-scoped business data
-- platform-admin oversight over all tenants
-- platform-managed PWA and security rules that continue to work across tenant
-  storefronts
+What remains is closeout work rather than initial scaffolding:
+- final tenant-scoped query audits
+- last platform-vs-tenant boundary tightening
+- tenant-admin/provider UX refinement
+- later custom-domain and broader tenant-owned provider expansion
 
-See `docs/ai-context/WHITE_LABEL_ROADMAP.md` for the expansion plan.
+See `docs/ai-context/WHITE_LABEL_ROADMAP.md` for the live expansion direction.
 
 ### Module Dependency Order
 
@@ -234,15 +247,12 @@ AppModule
 │   └── StorageModule
 └── Feature Modules
     ├── AuthModule
+    ├── NotificationsModule
+    ├── OrdersModule
+    ├── ServicesModule
+    ├── TenantModule
     ├── UsersModule
     ├── WalletModule
-    ├── ServicesModule
-    ├── OrdersModule
-    ├── EscrowModule
-    ├── DisputesModule
-    ├── WithdrawalsModule
-    ├── NotificationsModule
-    └── AdminModule
 ```
 
 ### Global Guards (applied to entire app)
