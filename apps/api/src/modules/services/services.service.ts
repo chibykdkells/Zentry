@@ -27,8 +27,11 @@ import { RedisService } from '../redis/redis.service';
 type RequiredFieldDefinition = {
   name: string;
   label?: string;
-  type?: string;
+  type?: 'text' | 'textarea' | 'number' | 'email' | 'tel' | 'select';
   required?: boolean;
+  placeholder?: string;
+  helpText?: string;
+  options?: string[];
 };
 
 type RequiredDocumentDefinition = {
@@ -44,6 +47,17 @@ type VtuIntegrationMeta = {
   mode: 'live' | 'mock';
   cached: boolean;
 };
+
+const REQUIRED_FIELD_TYPES = [
+  'text',
+  'textarea',
+  'number',
+  'email',
+  'tel',
+  'select',
+] as const;
+
+type RequiredFieldType = (typeof REQUIRED_FIELD_TYPES)[number];
 
 type CableVerificationResponseData = {
   success: boolean;
@@ -1029,6 +1043,39 @@ export class ServicesService {
     };
   }
 
+  async deleteCategory(id: string) {
+    const category = await this.prisma.serviceCategoryModel.findFirst({
+      where: { id, tenantId: null },
+      select: {
+        id: true,
+        name: true,
+      },
+    });
+
+    if (!category) {
+      throw new NotFoundException('Service category not found.');
+    }
+
+    const linkedServices = await this.prisma.service.count({
+      where: { categoryId: id, tenantId: null },
+    });
+
+    if (linkedServices > 0) {
+      throw new BadRequestException(
+        'Delete or move the services in this category before removing it.',
+      );
+    }
+
+    await this.prisma.serviceCategoryModel.delete({
+      where: { id: category.id },
+    });
+
+    return {
+      message: `${category.name} was deleted successfully.`,
+      data: { id: category.id },
+    };
+  }
+
   async createService(dto: CreateServiceDto) {
     await this.ensureCategoryExists(dto.categoryId);
     await this.ensureUniqueServiceSlug(this.normalizeSlug(dto.slug));
@@ -1053,8 +1100,8 @@ export class ServicesService {
         providerServiceCode: dto.providerServiceCode?.trim() || null,
         isActive: dto.isActive ?? true,
         sortOrder: dto.sortOrder ?? 0,
-        requiredFields: this.toInputJsonArray(dto.requiredFields),
-        requiredDocuments: this.toInputJsonArray(dto.requiredDocuments),
+        requiredFields: this.toRequiredFieldsJson(dto.requiredFields),
+        requiredDocuments: this.toRequiredDocumentsJson(dto.requiredDocuments),
       },
       select: {
         id: true,
@@ -1152,10 +1199,14 @@ export class ServicesService {
         ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
         ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
         ...(dto.requiredFields !== undefined
-          ? { requiredFields: this.toInputJsonArray(dto.requiredFields) }
+          ? { requiredFields: this.toRequiredFieldsJson(dto.requiredFields) }
           : {}),
         ...(dto.requiredDocuments !== undefined
-          ? { requiredDocuments: this.toInputJsonArray(dto.requiredDocuments) }
+          ? {
+              requiredDocuments: this.toRequiredDocumentsJson(
+                dto.requiredDocuments,
+              ),
+            }
           : {}),
       },
       select: {
@@ -1190,6 +1241,39 @@ export class ServicesService {
     return {
       message: 'Service updated successfully.',
       data: this.mapServiceRecord(service),
+    };
+  }
+
+  async deleteService(id: string) {
+    const service = await this.prisma.service.findFirst({
+      where: { id, tenantId: null },
+      select: {
+        id: true,
+        name: true,
+      },
+    });
+
+    if (!service) {
+      throw new NotFoundException('Service not found.');
+    }
+
+    const linkedOrders = await this.prisma.order.count({
+      where: { serviceId: service.id },
+    });
+
+    if (linkedOrders > 0) {
+      throw new BadRequestException(
+        'This service already has order history. Deactivate it instead of deleting it.',
+      );
+    }
+
+    await this.prisma.service.delete({
+      where: { id: service.id },
+    });
+
+    return {
+      message: `${service.name} was deleted successfully.`,
+      data: { id: service.id },
     };
   }
 
@@ -1849,7 +1933,11 @@ export class ServicesService {
     }>,
     services: Array<{
       category: {
+        id: string;
+        tenantId: string | null;
+        name: string;
         slug: string;
+        description: string | null;
       };
     }>,
     tenantId: string | null,
@@ -1859,7 +1947,12 @@ export class ServicesService {
       return map;
     }, new Map());
 
-    return this.dedupeTenantScopedBySlug(categories, tenantId)
+    const serviceCategories = services.map((service) => service.category);
+
+    return this.dedupeTenantScopedBySlug(
+      [...categories, ...serviceCategories],
+      tenantId,
+    )
       .map((category) => ({
         ...category,
         serviceCount: counts.get(category.slug) ?? 0,
@@ -1928,10 +2021,167 @@ export class ServicesService {
     }
   }
 
-  private toInputJsonArray(
+  private toRequiredFieldsJson(
     value: Record<string, unknown>[] | undefined,
   ): Prisma.InputJsonValue {
-    return (value ?? []) as Prisma.InputJsonValue;
+    return this.normalizeRequiredFields(value) as Prisma.InputJsonValue;
+  }
+
+  private toRequiredDocumentsJson(
+    value: Record<string, unknown>[] | undefined,
+  ): Prisma.InputJsonValue {
+    return this.normalizeRequiredDocuments(value) as Prisma.InputJsonValue;
+  }
+
+  private normalizeRequiredFields(
+    value: Record<string, unknown>[] | undefined,
+  ): RequiredFieldDefinition[] {
+    const seenNames = new Set<string>();
+
+    return (value ?? []).map((item, index) => {
+      const raw = this.toObjectRecord(item, 'required field', index);
+      const name = this.normalizeRequiredFieldName(raw.name);
+
+      if (!name) {
+        throw new BadRequestException(
+          `Required field ${index + 1} must include a field key.`,
+        );
+      }
+
+      if (seenNames.has(name)) {
+        throw new BadRequestException(
+          `Required field keys must be unique. Duplicate key: ${name}.`,
+        );
+      }
+
+      seenNames.add(name);
+
+      const label = this.normalizeOptionalString(raw.label);
+      const placeholder = this.normalizeOptionalString(raw.placeholder);
+      const helpText = this.normalizeOptionalString(raw.helpText);
+      const type = this.normalizeRequiredFieldType(raw.type);
+      const options = this.normalizeStringArray(raw.options);
+
+      if (type === 'select' && options.length === 0) {
+        throw new BadRequestException(
+          `Required field ${name} must include at least one option.`,
+        );
+      }
+
+      return {
+        name,
+        ...(label ? { label } : {}),
+        ...(type !== 'text' ? { type } : {}),
+        ...(raw.required === true ? { required: true } : {}),
+        ...(placeholder ? { placeholder } : {}),
+        ...(helpText ? { helpText } : {}),
+        ...(options.length > 0 ? { options } : {}),
+      };
+    });
+  }
+
+  private normalizeRequiredDocuments(
+    value: Record<string, unknown>[] | undefined,
+  ): RequiredDocumentDefinition[] {
+    const seenNames = new Set<string>();
+
+    return (value ?? []).map((item, index) => {
+      const raw = this.toObjectRecord(item, 'required document', index);
+      const name = this.normalizeRequiredFieldName(raw.name);
+
+      if (!name) {
+        throw new BadRequestException(
+          `Required document ${index + 1} must include a document key.`,
+        );
+      }
+
+      if (seenNames.has(name)) {
+        throw new BadRequestException(
+          `Required document keys must be unique. Duplicate key: ${name}.`,
+        );
+      }
+
+      seenNames.add(name);
+
+      const label = this.normalizeOptionalString(raw.label);
+      const description = this.normalizeOptionalString(raw.description);
+      const acceptedTypes = this.normalizeStringArray(raw.acceptedTypes);
+
+      return {
+        name,
+        ...(label ? { label } : {}),
+        ...(raw.required === false ? { required: false } : {}),
+        ...(acceptedTypes.length > 0 ? { acceptedTypes } : {}),
+        ...(description ? { description } : {}),
+      };
+    });
+  }
+
+  private toObjectRecord(
+    value: unknown,
+    label: string,
+    index: number,
+  ): Record<string, unknown> {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      throw new BadRequestException(
+        `Each ${label} entry must be an object. Problem at item ${index + 1}.`,
+      );
+    }
+
+    return value as Record<string, unknown>;
+  }
+
+  private normalizeRequiredFieldName(value: unknown) {
+    if (typeof value !== 'string') {
+      return '';
+    }
+
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+      return '';
+    }
+
+    if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(trimmed)) {
+      throw new BadRequestException(
+        'Field keys must start with a letter and contain only letters, numbers, or underscores.',
+      );
+    }
+
+    return trimmed;
+  }
+
+  private normalizeRequiredFieldType(value: unknown): RequiredFieldType {
+    if (typeof value !== 'string') {
+      return 'text';
+    }
+
+    return (REQUIRED_FIELD_TYPES as readonly string[]).includes(value)
+      ? (value as RequiredFieldType)
+      : 'text';
+  }
+
+  private normalizeStringArray(value: unknown) {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    const seen = new Set<string>();
+
+    return value
+      .map((item) => (typeof item === 'string' ? item.trim() : ''))
+      .filter((item) => {
+        if (!item || seen.has(item)) {
+          return false;
+        }
+
+        seen.add(item);
+        return true;
+      });
+  }
+
+  private normalizeOptionalString(value: unknown) {
+    return typeof value === 'string' ? value.trim() || null : null;
   }
 
   private normalizeNullableString(value: string | undefined) {

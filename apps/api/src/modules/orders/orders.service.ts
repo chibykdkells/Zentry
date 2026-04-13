@@ -5,6 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   CbtApprovalStatus,
   DisputeStatus,
@@ -17,11 +18,13 @@ import {
   UserRole,
 } from '@prisma/client';
 import { Prisma } from '@prisma/client';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { generateOrderNumber, generateTransactionRef } from '@zentry/utils';
 import { nairaToKobo } from '@zentry/utils';
 import { StorageService } from '../../providers/storage/storage.service';
 import { VtuService } from '../../providers/vtu/vtu.service';
 import { EmailService } from '../../providers/email/email.service';
+import { SmsService } from '../../providers/sms/sms.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { OrdersReleaseQueueService } from './orders-release-queue.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -67,6 +70,7 @@ type OrderRequesterWithWallet = {
   firstName: string;
   lastName: string;
   email: string;
+  phone: string;
   wallet: {
     id: string;
     availableBalance: bigint;
@@ -212,6 +216,7 @@ const orderDetailSelect = Prisma.validator<Prisma.OrderSelect>()({
       firstName: true,
       lastName: true,
       email: true,
+      phone: true,
       role: true,
     },
   },
@@ -221,6 +226,7 @@ const orderDetailSelect = Prisma.validator<Prisma.OrderSelect>()({
       firstName: true,
       lastName: true,
       email: true,
+      phone: true,
       cbtProfile: {
         select: {
           centerName: true,
@@ -466,14 +472,17 @@ type ReleaseState =
 export class OrdersService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
     private readonly storageService: StorageService,
     private readonly ordersReleaseQueueService: OrdersReleaseQueueService,
     private readonly vtuService: VtuService,
     private readonly notificationsService: NotificationsService,
     private readonly emailService: EmailService,
+    private readonly smsService: SmsService,
   ) {}
 
   private readonly maxUploadSizeBytes = 5 * 1024 * 1024;
+  private readonly resultFileAccessTtlSeconds = 15 * 60;
   private readonly allowedDocumentMimeTypes = new Set([
     'application/pdf',
     'image/jpeg',
@@ -513,6 +522,10 @@ export class OrdersService {
     await this.emailService.sendEmail(input).catch(() => undefined);
   }
 
+  private async sendSmsSafely(input: { to: string; message: string }) {
+    await this.smsService.sendSms(input).catch(() => undefined);
+  }
+
   private sendOrderPlacedEmail(input: {
     email: string;
     firstName: string;
@@ -541,6 +554,22 @@ export class OrdersService {
         <p><strong>Order number:</strong> ${input.orderNumber}</p>
         <p>${statusLine}</p>
       `,
+    });
+  }
+
+  private sendOrderPlacedSms(input: {
+    phone: string;
+    serviceName: string;
+    orderNumber: string;
+    automated?: boolean;
+  }) {
+    const statusLine = input.automated
+      ? 'It was processed instantly and is ready in your order history.'
+      : 'It is now waiting for fulfillment.';
+
+    return this.sendSmsSafely({
+      to: input.phone,
+      message: `Zentry: ${input.serviceName} request received. Order ${input.orderNumber}. ${statusLine}`,
     });
   }
 
@@ -579,6 +608,26 @@ export class OrdersService {
     });
   }
 
+  private sendOrderCompletedSms(input: {
+    phone: string;
+    serviceName: string;
+    orderNumber: string;
+    disputeWindowExpiresAt?: Date | string | null;
+    automated?: boolean;
+  }) {
+    const deadline = this.formatEventDate(input.disputeWindowExpiresAt);
+    const bodyLine = input.automated
+      ? 'Your order was completed instantly and is available in your dashboard.'
+      : deadline
+        ? `Your result is ready. Review before ${deadline}.`
+        : 'Your result is ready in your dashboard.';
+
+    return this.sendSmsSafely({
+      to: input.phone,
+      message: `Zentry: ${input.serviceName} is ready. Order ${input.orderNumber}. ${bodyLine}`,
+    });
+  }
+
   private sendDisputeUpdateEmail(input: {
     email: string;
     firstName: string;
@@ -604,6 +653,73 @@ export class OrdersService {
         <p>${input.message}</p>
       `,
     });
+  }
+
+  private sendDisputeUpdateSms(input: {
+    phone: string;
+    serviceName: string;
+    orderNumber: string;
+    message: string;
+  }) {
+    return this.sendSmsSafely({
+      to: input.phone,
+      message: `Zentry: ${input.serviceName} (${input.orderNumber}) dispute update. ${input.message}`,
+    });
+  }
+
+  private getResultFileSignatureSecret() {
+    return this.configService.get<string>(
+      'JWT_ACCESS_SECRET',
+      'zentry-result-file-secret',
+    );
+  }
+
+  private signResultFileAccess(orderId: string, expiresAt: number) {
+    return createHmac('sha256', this.getResultFileSignatureSecret())
+      .update(`${orderId}:${expiresAt}`)
+      .digest('hex');
+  }
+
+  private buildResultFileAccessUrl(orderId: string, resultFileUrl: string | null) {
+    if (!resultFileUrl) {
+      return null;
+    }
+
+    const apiBaseUrl = this.configService
+      .get<string>('API_URL', 'http://localhost:4000')
+      .replace(/\/+$/, '');
+    const expiresAt =
+      Math.floor(Date.now() / 1000) + this.resultFileAccessTtlSeconds;
+    const signature = this.signResultFileAccess(orderId, expiresAt);
+
+    return `${apiBaseUrl}/api/v1/orders/files/${orderId}/result?expires=${expiresAt}&signature=${signature}`;
+  }
+
+  private assertValidResultFileSignature(
+    orderId: string,
+    signature: string,
+    expires: string,
+  ) {
+    const expiresAt = Number(expires);
+
+    if (!Number.isFinite(expiresAt)) {
+      throw new BadRequestException('Result file access link is invalid.');
+    }
+
+    if (expiresAt < Math.floor(Date.now() / 1000)) {
+      throw new ForbiddenException('Result file access link has expired.');
+    }
+
+    const expectedSignature = this.signResultFileAccess(orderId, expiresAt);
+    const provided = Buffer.from(signature);
+    const expected = Buffer.from(expectedSignature);
+
+    if (
+      provided.length !== expected.length ||
+      !timingSafeEqual(provided, expected)
+    ) {
+      throw new ForbiddenException('Result file access link is invalid.');
+    }
   }
 
   async getMyOrders(userId: string, tenantId: string | null) {
@@ -656,6 +772,29 @@ export class OrdersService {
     return {
       message: 'Order detail retrieved',
       data: this.serializeOrderDetail(order),
+    };
+  }
+
+  async getResultFileRedirect(orderId: string, signature: string, expires: string) {
+    this.assertValidResultFileSignature(orderId, signature, expires);
+
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        resultFileUrl: true,
+      },
+    });
+
+    if (!order?.resultFileUrl) {
+      throw new NotFoundException('Result file not found');
+    }
+
+    return {
+      message: 'Result file access granted',
+      data: {
+        url: order.resultFileUrl,
+      },
     };
   }
 
@@ -1804,6 +1943,12 @@ export class OrdersService {
           : `${order.service.name} dispute update`,
       message: outcome.requesterMessage,
     });
+    await this.sendDisputeUpdateSms({
+      phone: order.requester.phone,
+      serviceName: order.service.name,
+      orderNumber: order.orderNumber,
+      message: outcome.requesterMessage,
+    });
     if (order.assignedCbt) {
       await this.sendDisputeUpdateEmail({
         email: order.assignedCbt.email,
@@ -1814,6 +1959,12 @@ export class OrdersService {
           outcome.disputeStatus === DisputeStatus.UNDER_REVIEW
             ? `${order.service.name} dispute moved into review`
             : `${order.service.name} dispute update`,
+        message: outcome.cbtMessage,
+      });
+      await this.sendDisputeUpdateSms({
+        phone: order.assignedCbt.phone,
+        serviceName: order.service.name,
+        orderNumber: order.orderNumber,
         message: outcome.cbtMessage,
       });
     }
@@ -2850,6 +3001,12 @@ export class OrdersService {
         orderNumber: order.orderNumber,
         disputeWindowExpiresAt,
       });
+      await this.sendOrderCompletedSms({
+        phone: order.requester.phone,
+        serviceName: order.service.name,
+        orderNumber: order.orderNumber,
+        disputeWindowExpiresAt,
+      });
 
       return {
         message: 'Result uploaded and job completed successfully.',
@@ -2875,6 +3032,7 @@ export class OrdersService {
         firstName: true,
         lastName: true,
         email: true,
+        phone: true,
         wallet: {
           select: {
             id: true,
@@ -3083,6 +3241,11 @@ export class OrdersService {
     await this.sendOrderPlacedEmail({
       email: user.email,
       firstName: user.firstName,
+      serviceName: service.name,
+      orderNumber: order.orderNumber,
+    });
+    await this.sendOrderPlacedSms({
+      phone: user.phone,
       serviceName: service.name,
       orderNumber: order.orderNumber,
     });
@@ -3543,9 +3706,21 @@ export class OrdersService {
       orderNumber: order.orderNumber,
       automated: true,
     });
+    await this.sendOrderPlacedSms({
+      phone: user.phone,
+      serviceName: service.name,
+      orderNumber: order.orderNumber,
+      automated: true,
+    });
     await this.sendOrderCompletedEmail({
       email: user.email,
       firstName: user.firstName,
+      serviceName: service.name,
+      orderNumber: order.orderNumber,
+      automated: true,
+    });
+    await this.sendOrderCompletedSms({
+      phone: user.phone,
       serviceName: service.name,
       orderNumber: order.orderNumber,
       automated: true,
@@ -3988,7 +4163,7 @@ export class OrdersService {
       cbtCommission: order.cbtCommission.toString(),
       submittedData: this.toStringRecord(order.submittedData),
       requesterDocUrls: this.toStringArray(order.requesterDocUrls),
-      resultFileUrl: order.resultFileUrl,
+      resultFileUrl: this.buildResultFileAccessUrl(order.id, order.resultFileUrl),
       resultUploadedAt: order.resultUploadedAt,
       escrowReleasedAt: order.escrowReleasedAt,
       disputeWindowExpiresAt: order.disputeWindowExpiresAt,
@@ -4015,7 +4190,7 @@ export class OrdersService {
       fulfillmentType: order.fulfillmentType,
       submittedData: this.toStringRecord(order.submittedData),
       requesterDocUrls: this.toStringArray(order.requesterDocUrls),
-      resultFileUrl: order.resultFileUrl,
+      resultFileUrl: this.buildResultFileAccessUrl(order.id, order.resultFileUrl),
       resultUploadedAt: order.resultUploadedAt,
       totalAmount: order.totalAmount.toString(),
       platformFee: order.platformFee.toString(),
@@ -4097,7 +4272,10 @@ export class OrdersService {
         status: dispute.order.status,
         deliveryMode: dispute.order.deliveryMode,
         fulfillmentType: dispute.order.fulfillmentType,
-        resultFileUrl: dispute.order.resultFileUrl,
+        resultFileUrl: this.buildResultFileAccessUrl(
+          dispute.order.id,
+          dispute.order.resultFileUrl,
+        ),
         disputeWindowExpiresAt: dispute.order.disputeWindowExpiresAt,
         completedAt: dispute.order.completedAt,
         createdAt: dispute.order.createdAt,
@@ -4132,7 +4310,10 @@ export class OrdersService {
         totalAmount: dispute.order.totalAmount.toString(),
         cbtCommission: dispute.order.cbtCommission.toString(),
         platformFee: dispute.order.platformFee.toString(),
-        resultFileUrl: dispute.order.resultFileUrl,
+        resultFileUrl: this.buildResultFileAccessUrl(
+          dispute.order.id,
+          dispute.order.resultFileUrl,
+        ),
         escrowReleasedAt: dispute.order.escrowReleasedAt,
         disputeWindowExpiresAt: dispute.order.disputeWindowExpiresAt,
         completedAt: dispute.order.completedAt,
@@ -4283,7 +4464,7 @@ export class OrdersService {
       cbtCommission: order.cbtCommission.toString(),
       submittedData: this.toStringRecord(order.submittedData),
       requesterDocUrls: this.toStringArray(order.requesterDocUrls),
-      resultFileUrl: order.resultFileUrl,
+      resultFileUrl: this.buildResultFileAccessUrl(order.id, order.resultFileUrl),
       resultUploadedAt: order.resultUploadedAt,
       escrowReleasedAt: order.escrowReleasedAt,
       disputeWindowExpiresAt: order.disputeWindowExpiresAt,

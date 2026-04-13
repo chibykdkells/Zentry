@@ -38,8 +38,8 @@ Expected ports:
 ## Seeded Accounts
 
 - `admin@zentry.ng` / `Admin@Zentry2024!`
+- `tenant@test.com` / `Test@1234!`
 - `user@test.com` / `Test@1234!`
-- `cafe@test.com` / `Test@1234!`
 - `cbt@test.com` / `Test@1234!`
 
 Seeded PIN for all accounts:
@@ -70,8 +70,8 @@ Expected flow:
 ### 3. Role Routing
 
 - `user@test.com` should land on `/home`
-- `cafe@test.com` should land on `/home`
 - `cbt@test.com` should land on `/dashboard`
+- `tenant@test.com` should land on `/tenant/dashboard`
 - `admin@zentry.ng` should land on `/admin/dashboard`
 
 ### 4. Session Expiry Handling

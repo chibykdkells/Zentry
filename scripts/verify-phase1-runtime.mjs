@@ -7,22 +7,25 @@ const accounts = [
     email: 'user@test.com',
     password: 'Test@1234!',
     role: 'INDIVIDUAL',
+    tenantSlug: 'testbiz',
     defaultRoute: '/home',
     disallowedRoute: '/dashboard',
   },
   {
-    label: 'cyber-cafe',
-    email: 'cafe@test.com',
+    label: 'tenant-admin',
+    email: 'tenant@test.com',
     password: 'Test@1234!',
-    role: 'CYBER_CAFE',
-    defaultRoute: '/home',
-    disallowedRoute: '/dashboard',
+    role: 'TENANT_ADMIN',
+    tenantSlug: 'testbiz',
+    defaultRoute: '/tenant/dashboard',
+    disallowedRoute: '/admin/dashboard',
   },
   {
     label: 'cbt-center',
     email: 'cbt@test.com',
     password: 'Test@1234!',
     role: 'CBT_CENTER',
+    tenantSlug: 'testbiz',
     defaultRoute: '/dashboard',
     disallowedRoute: '/admin/dashboard',
   },
@@ -79,6 +82,9 @@ async function requestJson(url, init = {}) {
 async function verifyAccount(account) {
   const login = await requestJson(`${API_URL}/api/v1/auth/login`, {
     method: 'POST',
+    headers: {
+      ...(account.tenantSlug ? { 'x-tenant-slug': account.tenantSlug } : {}),
+    },
     body: JSON.stringify({
       email: account.email,
       password: account.password,
@@ -98,6 +104,7 @@ async function verifyAccount(account) {
     headers: {
       Authorization: `Bearer ${login.body.data.accessToken}`,
       Cookie: firstCookie,
+      ...(account.tenantSlug ? { 'x-tenant-slug': account.tenantSlug } : {}),
     },
   });
 

@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -127,6 +128,12 @@ export class ServicesController {
   }
 
   @Roles(UserRole.SUPER_ADMIN)
+  @Delete('admin/categories/:id')
+  deleteCategory(@Param('id') id: string) {
+    return this.servicesService.deleteCategory(id);
+  }
+
+  @Roles(UserRole.SUPER_ADMIN)
   @Post('admin/services')
   createService(@Body() dto: CreateServiceDto) {
     return this.servicesService.createService(dto);
@@ -136,6 +143,12 @@ export class ServicesController {
   @Patch('admin/services/:id')
   updateService(@Param('id') id: string, @Body() dto: UpdateServiceDto) {
     return this.servicesService.updateService(id, dto);
+  }
+
+  @Roles(UserRole.SUPER_ADMIN)
+  @Delete('admin/services/:id')
+  deleteService(@Param('id') id: string) {
+    return this.servicesService.deleteService(id);
   }
 
   @Get('catalog')

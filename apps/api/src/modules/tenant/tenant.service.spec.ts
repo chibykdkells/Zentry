@@ -1,4 +1,4 @@
-import { ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { Tenant } from '@prisma/client';
 import { UserRole } from '@zentry/types';
 import { TenantService } from './tenant.service';
@@ -32,15 +32,33 @@ describe('TenantService', () => {
     };
     user: {
       findUnique: jest.Mock;
+      findFirst: jest.Mock;
+      update: jest.Mock;
+      delete: jest.Mock;
       count: jest.Mock;
       findMany: jest.Mock;
     };
     order: {
       groupBy: jest.Mock;
+      count: jest.Mock;
+      findMany: jest.Mock;
+    };
+    wallet: {
+      aggregate: jest.Mock;
+    };
+    transaction: {
+      count: jest.Mock;
+    };
+    withdrawalRequest: {
+      count: jest.Mock;
+    };
+    dispute: {
+      count: jest.Mock;
     };
     auditLog: {
       create: jest.Mock;
     };
+    $transaction: jest.Mock;
   };
   let resolver: {
     invalidateCache: jest.Mock;
@@ -67,15 +85,35 @@ describe('TenantService', () => {
       },
       user: {
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
         count: jest.fn(),
         findMany: jest.fn(),
       },
       order: {
         groupBy: jest.fn(),
+        count: jest.fn(),
+        findMany: jest.fn(),
+      },
+      wallet: {
+        aggregate: jest.fn(),
+      },
+      transaction: {
+        count: jest.fn(),
+      },
+      withdrawalRequest: {
+        count: jest.fn(),
+      },
+      dispute: {
+        count: jest.fn(),
       },
       auditLog: {
         create: jest.fn(),
       },
+      $transaction: jest.fn().mockImplementation(async (ops: unknown[]) =>
+        Promise.all(ops),
+      ),
     };
 
     resolver = {
@@ -133,6 +171,14 @@ describe('TenantService', () => {
       { status: 'COMPLETED', _count: { _all: 4 } },
       { status: 'DISPUTED', _count: { _all: 1 } },
     ]);
+    prisma.wallet.aggregate
+      .mockResolvedValueOnce({ _sum: { escrowBalance: 0n } })
+      .mockResolvedValueOnce({ _sum: { availableBalance: 0n } });
+    prisma.order.count
+      .mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(0);
+    prisma.order.findMany.mockResolvedValue([]);
 
     const result = await service.getTenantOverviewForAdmin('tenant-admin-1');
 
@@ -214,5 +260,100 @@ describe('TenantService', () => {
     expect(prisma.auditLog.create).toHaveBeenCalled();
     expect(resolver.invalidateCache).toHaveBeenCalledWith('testbiz');
     expect(result.data.name).toBe('Updated Biz');
+  });
+
+  it('updates a tenant user role for a tenant admin', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      role: UserRole.TENANT_ADMIN,
+      tenantId: tenant.id,
+    });
+    prisma.user.findFirst.mockResolvedValue({
+      id: 'user-2',
+      firstName: 'Grace',
+      lastName: 'Hopper',
+      email: 'grace@test.com',
+      role: UserRole.INDIVIDUAL,
+      cbtProfile: {
+        id: 'cbt-1',
+      },
+    });
+    prisma.user.update.mockResolvedValue({
+      id: 'user-2',
+      role: UserRole.CBT_CENTER,
+      firstName: 'Grace',
+      lastName: 'Hopper',
+      email: 'grace@test.com',
+      phone: '+2348000000007',
+      isEmailVerified: true,
+      isPhoneVerified: false,
+      isActive: true,
+      createdAt: new Date('2026-04-10T10:00:00.000Z'),
+      lastLoginAt: null,
+    });
+    prisma.auditLog.create.mockResolvedValue(null);
+
+    const result = await service.updateTenantUserRoleForAdmin(
+      'tenant-admin-1',
+      'user-2',
+      UserRole.CBT_CENTER,
+    );
+
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'user-2' },
+        data: { role: UserRole.CBT_CENTER },
+      }),
+    );
+    expect(prisma.auditLog.create).toHaveBeenCalled();
+    expect(result.data.role).toBe(UserRole.CBT_CENTER);
+  });
+
+  it('rejects tenant user deletion when the user has finance or order history', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      role: UserRole.TENANT_ADMIN,
+      tenantId: tenant.id,
+    });
+    prisma.user.findFirst.mockResolvedValue({
+      id: 'user-3',
+      firstName: 'Ada',
+      lastName: 'Byron',
+      email: 'ada.byron@test.com',
+      role: UserRole.INDIVIDUAL,
+    });
+    prisma.order.count
+      .mockResolvedValueOnce(1)
+      .mockResolvedValueOnce(0);
+    prisma.transaction.count.mockResolvedValue(0);
+    prisma.withdrawalRequest.count.mockResolvedValue(0);
+    prisma.dispute.count.mockResolvedValue(0);
+
+    await expect(
+      service.deleteTenantUserForAdmin('tenant-admin-1', 'user-3'),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('toggles tenant user active state for a platform admin', async () => {
+    prisma.tenant.findUnique.mockResolvedValue(tenant);
+    prisma.user.findFirst.mockResolvedValue({
+      id: 'user-4',
+      firstName: 'Kemi',
+      lastName: 'Ade',
+      role: UserRole.INDIVIDUAL,
+      isActive: true,
+    });
+    prisma.user.update.mockResolvedValue({
+      id: 'user-4',
+      isActive: false,
+    });
+    prisma.auditLog.create.mockResolvedValue(null);
+
+    const result = await service.toggleTenantUserActiveForPlatformAdmin(
+      'admin-1',
+      tenant.id,
+      'user-4',
+    );
+
+    expect(prisma.$transaction).toHaveBeenCalled();
+    expect(result.data).toEqual({ id: 'user-4', isActive: false });
   });
 });

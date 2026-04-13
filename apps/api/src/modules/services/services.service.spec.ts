@@ -15,6 +15,7 @@ describe('ServicesService', () => {
     serviceCategoryModel: {
       findMany: jest.Mock;
       findFirst: jest.Mock;
+      delete: jest.Mock;
     };
     service: {
       findMany: jest.Mock;
@@ -23,6 +24,10 @@ describe('ServicesService', () => {
       count: jest.Mock;
       create: jest.Mock;
       update: jest.Mock;
+      delete: jest.Mock;
+    };
+    order: {
+      count: jest.Mock;
     };
     platformProviderConfig: {
       findUnique: jest.Mock;
@@ -63,6 +68,7 @@ describe('ServicesService', () => {
       serviceCategoryModel: {
         findMany: jest.fn(),
         findFirst: jest.fn(),
+        delete: jest.fn(),
       },
       service: {
         findMany: jest.fn(),
@@ -71,6 +77,10 @@ describe('ServicesService', () => {
         count: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
+        delete: jest.fn(),
+      },
+      order: {
+        count: jest.fn(),
       },
       platformProviderConfig: {
         findUnique: jest.fn(),
@@ -194,5 +204,33 @@ describe('ServicesService', () => {
     await expect(
       service.getVtuDataPlans('foreign-service', 'tenant-1'),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('deletes a platform service without order history', async () => {
+    prisma.service.findFirst.mockResolvedValue({
+      id: 'svc-1',
+      name: 'NIN Validation',
+    });
+    prisma.order.count.mockResolvedValue(0);
+    prisma.service.delete.mockResolvedValue({ id: 'svc-1' });
+
+    const result = await service.deleteService('svc-1');
+
+    expect(prisma.service.delete).toHaveBeenCalledWith({
+      where: { id: 'svc-1' },
+    });
+    expect(result.message).toContain('deleted successfully');
+  });
+
+  it('prevents deleting a category that still has services', async () => {
+    prisma.serviceCategoryModel.findFirst.mockResolvedValue({
+      id: 'cat-1',
+      name: 'Identity Services',
+    });
+    prisma.service.count.mockResolvedValue(2);
+
+    await expect(service.deleteCategory('cat-1')).rejects.toThrow(
+      'Delete or move the services in this category before removing it.',
+    );
   });
 });

@@ -6,13 +6,16 @@ import {
   Patch,
   Post,
   Query,
+  Res,
   UploadedFile,
   UploadedFiles,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import type { Response } from 'express';
 import { UserRole, type JwtUser } from '@zentry/types';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CompleteCbtJobDto } from './dto/complete-cbt-job.dto';
 import { CreateDisputeDto } from './dto/create-dispute.dto';
@@ -54,6 +57,23 @@ export class OrdersController {
       orderId,
       user.tenantId,
     );
+  }
+
+  @Public()
+  @Get('files/:orderId/result')
+  async getResultFile(
+    @Param('orderId') orderId: string,
+    @Query('signature') signature: string,
+    @Query('expires') expires: string,
+    @Res() res: Response,
+  ) {
+    const access = await this.ordersService.getResultFileRedirect(
+      orderId,
+      signature,
+      expires,
+    );
+
+    return res.redirect(access.data.url);
   }
 
   @Post('me/:orderId/dispute')

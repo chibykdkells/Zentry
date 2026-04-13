@@ -945,6 +945,132 @@ export class TenantService {
     };
   }
 
+  async toggleTenantUserActiveForPlatformAdmin(
+    superAdminId: string,
+    tenantId: string,
+    targetUserId: string,
+  ) {
+    await this.getTenantById(tenantId);
+
+    const target = await this.prisma.user.findFirst({
+      where: { id: targetUserId, tenantId },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        isActive: true,
+      },
+    });
+
+    if (!target) {
+      throw new NotFoundException('User not found in this business.');
+    }
+
+    const next = !target.isActive;
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: target.id },
+        data: { isActive: next },
+      }),
+      this.prisma.auditLog.create({
+        data: {
+          userId: superAdminId,
+          tenantId,
+          action: next
+            ? 'PLATFORM_USER_REACTIVATED'
+            : 'PLATFORM_USER_DEACTIVATED',
+          entity: 'User',
+          entityId: target.id,
+          oldValues: { isActive: target.isActive, role: target.role },
+          newValues: { isActive: next },
+        },
+      }),
+    ]);
+
+    return {
+      message: `${target.firstName} ${target.lastName} has been ${next ? 'reactivated' : 'deactivated'}.`,
+      data: { id: target.id, isActive: next },
+    };
+  }
+
+  async deleteTenantUserForPlatformAdmin(
+    superAdminId: string,
+    tenantId: string,
+    targetUserId: string,
+  ) {
+    await this.getTenantById(tenantId);
+
+    const target = await this.prisma.user.findFirst({
+      where: { id: targetUserId, tenantId },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        role: true,
+      },
+    });
+
+    if (!target) {
+      throw new NotFoundException('User not found in this business.');
+    }
+
+    if (target.id === superAdminId) {
+      throw new ForbiddenException('Cannot delete your own account.');
+    }
+
+    const [
+      placedOrders,
+      assignedOrders,
+      transactions,
+      withdrawals,
+      disputesRaised,
+      disputesResolved,
+    ] = await Promise.all([
+      this.prisma.order.count({ where: { requesterId: target.id } }),
+      this.prisma.order.count({ where: { assignedCbtId: target.id } }),
+      this.prisma.transaction.count({ where: { userId: target.id } }),
+      this.prisma.withdrawalRequest.count({ where: { userId: target.id } }),
+      this.prisma.dispute.count({ where: { raisedById: target.id } }),
+      this.prisma.dispute.count({ where: { resolvedById: target.id } }),
+    ]);
+
+    const hasHistory =
+      placedOrders > 0 ||
+      assignedOrders > 0 ||
+      transactions > 0 ||
+      withdrawals > 0 ||
+      disputesRaised > 0 ||
+      disputesResolved > 0;
+
+    if (hasHistory) {
+      throw new BadRequestException(
+        'This account has existing transaction or order history and cannot be deleted. Deactivate it instead.',
+      );
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.user.delete({ where: { id: target.id } }),
+      this.prisma.auditLog.create({
+        data: {
+          userId: superAdminId,
+          tenantId,
+          action: 'PLATFORM_USER_DELETED',
+          entity: 'User',
+          entityId: target.id,
+          oldValues: { role: target.role, email: target.email },
+        },
+      }),
+    ]);
+
+    return {
+      message: `${target.firstName} ${target.lastName} has been permanently removed.`,
+      data: { id: target.id },
+    };
+  }
+
   async updateOwnTenantSettings(
     userId: string,
     dto: UpdateOwnTenantSettingsDto,
@@ -1099,5 +1225,236 @@ export class TenantService {
       .replace(/\s+/g, '-')
       .replace(/[^a-zA-Z0-9._-]/g, '')
       .toLowerCase();
+  }
+
+  private async getTenantAdminTenantId(userId: string) {
+    const membership = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, tenantId: true },
+    });
+
+    if (!membership) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (membership.role !== 'TENANT_ADMIN' || !membership.tenantId) {
+      throw new ForbiddenException('Tenant admin access is required');
+    }
+
+    return membership.tenantId;
+  }
+
+  async updateTenantUserRoleForAdmin(
+    adminUserId: string,
+    targetUserId: string,
+    nextRole: UserRole,
+  ) {
+    const tenantId = await this.getTenantAdminTenantId(adminUserId);
+
+    if (
+      nextRole === UserRole.SUPER_ADMIN ||
+      nextRole === UserRole.TENANT_ADMIN
+    ) {
+      throw new BadRequestException(
+        'Use the dedicated business-admin provisioning flow for admin access changes.',
+      );
+    }
+
+    const targetUser = await this.prisma.user.findFirst({
+      where: {
+        id: targetUserId,
+        tenantId,
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        role: true,
+        cbtProfile: {
+          select: {
+            id: true,
+          },
+        },
+      },
+    });
+
+    if (!targetUser) {
+      throw new NotFoundException('Business user not found.');
+    }
+
+    if (targetUser.id === adminUserId) {
+      throw new ForbiddenException('You cannot change your own role here.');
+    }
+
+    if (targetUser.role === 'TENANT_ADMIN') {
+      throw new BadRequestException(
+        'Business admin accounts are managed from the business-admin access flow.',
+      );
+    }
+
+    if (String(targetUser.role) === String(nextRole)) {
+      return {
+        message: `${targetUser.firstName} ${targetUser.lastName} already has this role.`,
+        data: {
+          id: targetUser.id,
+          role: targetUser.role,
+        },
+      };
+    }
+
+    if (nextRole === UserRole.CBT_CENTER && !targetUser.cbtProfile) {
+      throw new BadRequestException(
+        'Only users with a CBT profile can be moved into the CBT center role. Use the CBT registration flow first.',
+      );
+    }
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: targetUser.id },
+      data: {
+        role: nextRole,
+      },
+      select: {
+        id: true,
+        role: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        phone: true,
+        isEmailVerified: true,
+        isPhoneVerified: true,
+        isActive: true,
+        createdAt: true,
+        lastLoginAt: true,
+      },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId: adminUserId,
+        tenantId,
+        action: 'TENANT_USER_ROLE_UPDATED',
+        entity: 'User',
+        entityId: targetUser.id,
+        oldValues: {
+          role: targetUser.role,
+          email: targetUser.email,
+        },
+        newValues: {
+          role: nextRole,
+          email: targetUser.email,
+        },
+      },
+    });
+
+    return {
+      message: `${updatedUser.firstName} ${updatedUser.lastName} is now set as ${this.formatRoleLabel(nextRole)}.`,
+      data: {
+        ...updatedUser,
+        createdAt: updatedUser.createdAt.toISOString(),
+        lastLoginAt: updatedUser.lastLoginAt?.toISOString() ?? null,
+      },
+    };
+  }
+
+  async deleteTenantUserForAdmin(adminUserId: string, targetUserId: string) {
+    const tenantId = await this.getTenantAdminTenantId(adminUserId);
+
+    const targetUser = await this.prisma.user.findFirst({
+      where: {
+        id: targetUserId,
+        tenantId,
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        role: true,
+      },
+    });
+
+    if (!targetUser) {
+      throw new NotFoundException('Business user not found.');
+    }
+
+    if (targetUser.id === adminUserId) {
+      throw new ForbiddenException('You cannot delete your own account here.');
+    }
+
+    if (targetUser.role === 'TENANT_ADMIN') {
+      throw new BadRequestException(
+        'Business admin accounts must be managed from the business-admin access flow.',
+      );
+    }
+
+    const [
+      placedOrders,
+      assignedOrders,
+      transactions,
+      withdrawals,
+      disputesRaised,
+      disputesResolved,
+    ] = await Promise.all([
+      this.prisma.order.count({ where: { requesterId: targetUser.id } }),
+      this.prisma.order.count({ where: { assignedCbtId: targetUser.id } }),
+      this.prisma.transaction.count({ where: { userId: targetUser.id } }),
+      this.prisma.withdrawalRequest.count({ where: { userId: targetUser.id } }),
+      this.prisma.dispute.count({ where: { raisedById: targetUser.id } }),
+      this.prisma.dispute.count({ where: { resolvedById: targetUser.id } }),
+    ]);
+
+    const hasHistory =
+      placedOrders > 0 ||
+      assignedOrders > 0 ||
+      transactions > 0 ||
+      withdrawals > 0 ||
+      disputesRaised > 0 ||
+      disputesResolved > 0;
+
+    if (hasHistory) {
+      throw new BadRequestException(
+        'This user already has order or finance history, so the account cannot be deleted. You can still leave the account inactive.',
+      );
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.user.delete({
+        where: { id: targetUser.id },
+      }),
+      this.prisma.auditLog.create({
+        data: {
+          userId: adminUserId,
+          tenantId,
+          action: 'TENANT_USER_DELETED',
+          entity: 'User',
+          entityId: targetUser.id,
+          oldValues: {
+            role: targetUser.role,
+            email: targetUser.email,
+          },
+        },
+      }),
+    ]);
+
+    return {
+      message: `${targetUser.firstName} ${targetUser.lastName} was removed from this business.`,
+      data: { id: targetUser.id },
+    };
+  }
+
+  private formatRoleLabel(role: UserRole) {
+    switch (role) {
+      case UserRole.CBT_CENTER:
+        return 'CBT center';
+      case UserRole.INDIVIDUAL:
+        return 'individual user';
+      case UserRole.TENANT_ADMIN:
+        return 'business admin';
+      case UserRole.SUPER_ADMIN:
+        return 'platform admin';
+      default:
+        return 'user';
+    }
   }
 }

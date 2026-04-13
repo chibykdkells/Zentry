@@ -105,6 +105,174 @@ Both `apps/api` and `apps/web` typecheck clean (`tsc --noEmit`).
 
 ---
 
+## Session 2026-04-12 — Brand Persistence, TENANT_ADMIN Management & Socket Disconnect Fix
+
+**Phase:** Phase 9 (Post-Phase 8 — Polish & Stability)
+**AI Assistant:** Claude Sonnet 4.6
+
+### What Was Done
+
+1. **Tenant brand persistence across auth pages** — Converted `AuthShell` to a
+   `'use client'` component and added the `mounted` state pattern to defer
+   `useTenantStore` reads until after hydration. Previously the server rendered
+   the default "Zentry" brand and the client hydrated with the tenant's name,
+   causing React hydration mismatch errors. Now both server and first client paint
+   use the same default ("Zentry"), and the tenant brand applies after mount.
+   - `tenant?.name` used as `brandName`, `tenant?.logoUrl` shows logo if present.
+   - Same `mounted` pattern applied to `ProtectedShell` for sidebar brand label.
+
+2. **Sidebar brand label is tenant-aware** — `getSidebarTitle()` in
+   `ProtectedShell` now accepts the tenant name. Any user belonging to a tenant
+   sees the tenant's business name (with "CBT" suffix for `CBT_CENTER` role).
+   Platform-level (no tenant) users continue to see "Zentry Admin" / "Zentry".
+
+3. **SUPER_ADMIN can deactivate/delete TENANT_ADMIN accounts** — Added
+   `toggleTenantUserActiveForPlatformAdmin` and `deleteTenantUserForPlatformAdmin`
+   service methods in `TenantService`. These are exposed via:
+   - `PATCH /tenants/:tenantId/users/:userId/active` — toggle `isActive`
+   - `DELETE /tenants/:tenantId/users/:userId` — hard delete (blocked if history exists)
+   Both operations are audit-logged. The controller guards use `@Roles(UserRole.SUPER_ADMIN)`.
+   Frontend hooks (`useToggleTenantUserActive`, `useDeleteTenantUser`) and UI
+   (two-step delete confirmation) added to the admin users page.
+
+4. **Socket rapid connect/disconnect fix** — Root cause identified: on page load
+   with `accessToken = null`, TanStack Query fires its initial fetches immediately.
+   These requests (no auth header) get 401 responses. The api-client 401 interceptor
+   was concurrently calling `/auth/refresh` alongside `AuthBootstrap`, causing two
+   `setAccessToken()` calls in quick succession. Each call re-ran `SocketBootstrap`,
+   which disconnected and re-created the socket. The new socket was created but
+   immediately disconnected by the second effect run.
+
+   **Fix:** Added `hadToken` check in the 401 interceptor — if the original request
+   had no Authorization header, the interceptor skips the refresh and lets the error
+   propagate. React Query's `retry: 1` (with the now-400ms `retryDelay`) re-attempts
+   the request after AuthBootstrap has set the token. This eliminates the duplicate
+   refresh calls and the resulting socket churn.
+
+### Files Modified
+
+- `apps/web/src/components/auth/auth-shell.tsx` — `mounted` pattern, tenant brand
+- `apps/web/src/components/layout/protected-shell.tsx` — `mounted` pattern, `getSidebarTitle` tenant-aware
+- `apps/api/src/modules/tenant/tenant.service.ts` — `toggleTenantUserActiveForPlatformAdmin`, `deleteTenantUserForPlatformAdmin`
+- `apps/api/src/modules/tenant/tenant.controller.ts` — two new SUPER_ADMIN routes
+- `apps/web/src/hooks/use-platform-admin-tenants.ts` — `useToggleTenantUserActive`, `useDeleteTenantUser`
+- `apps/web/src/app/(admin)/admin/users/page.tsx` — deactivate/delete UI
+- `apps/web/src/lib/api-client.ts` — `hadToken` guard on 401 interceptor
+- `apps/web/src/lib/query-client.ts` — `retryDelay: 400` for faster bootstrap recovery
+
+### Decisions Made
+
+- **`hadToken` guard over global query `enabled` flags** — Rather than gating
+  every query on `!!accessToken` (which would require touching every hook), a
+  single guard in the centralized api-client prevents the race condition. The
+  retry mechanism handles the brief bootstrap window with minimal code change.
+- **`mounted` pattern for SSR-safe hydration** — Tenant store reads are deferred
+  until after React hydrates, keeping server and first-client renders identical
+  (both show "Zentry"). After mount, the client picks up the persisted tenant.
+
+### Phase Checklist Updates
+
+None — these were post-phase polish items.
+
+### Blockers / Notes for Next Session
+
+- If any queries still show a ~400ms stale state on first authenticated load,
+  consider adding `enabled: !!accessToken` to specific high-priority queries
+  (wallet balance, notifications) rather than globally.
+- The socket disconnect fix is in `api-client.ts`. If additional bootstrap races
+  are observed (e.g., after a Strict Mode update), revisit `SocketBootstrap` and
+  consider adding a short `debounce` on disconnect.
+
+---
+
+## Session 2026-04-13 — UX Fixes: Auth Bootstrap, Dashboard Bug, Naming & UI Rewrites
+
+**Phase:** Phase 9 (Post-Phase 8 — Polish & Stability)
+**AI Assistant:** Claude Sonnet 4.6
+
+### What Was Done
+
+1. **"Dashboard unavailable" bug fixed** — Root cause: `useAuthProfile` (and other hooks)
+   fired before `accessToken` was set, causing 401s that displayed the error state.
+   Fixed two ways:
+   - Added `RouteGuard` component that blocks page content while AuthBootstrap is
+     running and redirects unauthenticated/wrong-role users.
+   - Added `enabled: !!accessToken` to `useAuthProfile` to gate the query.
+
+2. **Red sidebar fixed** — Root cause: `getConfiguredDevTenantSlug()` defaults to
+   `'testbiz'` on localhost, loading a red-themed tenant for platform-level users.
+   Fixed in `TenantBootstrap`:
+   - `useLayoutEffect(() => resetTenantTheme(), [])` — synchronously wipes stale
+     CSS vars before first paint.
+   - Short-circuit: if `user !== null && user.tenantId === null`, skip tenant fetch.
+
+3. **Renamed "Individual user" → "Customer"** everywhere in the tenant admin UI:
+   - Navigation: "Individuals" → "Customers", "Providers" → "API Integrations"
+   - Dashboard stat card, stat summary, recent-users badge, page description
+   - Users page eyebrow and body copy
+
+4. **Tenant dashboard "total people" count fixed** — Changed from
+   `individualUsers` to `individualUsers + cbtUsers` to count all business members.
+
+5. **Customer list rewritten as accordion list** — Replaced 3-column card grid
+   with expandable row list. One row expanded at a time (`expandedId` state).
+   Delete button removed entirely — per user requirement, customers must not be deleted.
+
+6. **Services selection page fully rewritten** — Replaced complex nested-panel design
+   with: mode toggle (All / Custom), search bar, category accordions, per-service
+   toggle rows, sticky save bar (`fixed inset-x-0 bottom-0 md:left-64`).
+
+7. **API Integrations page (providers) redesigned** — Renamed from "Provider
+   configuration" to "API Integrations". Reorganized into clear sections:
+   - Status summary strip (3 tiles: API health, provider, services affected)
+   - General settings card (enable toggle + rollout mode)
+   - API credentials card (base URL, key, header/prefix)
+   - Endpoint paths — collapsed by default (ChevronDown accordion, "Advanced")
+   - Notes field
+   - Connection test section (run probe + last result inline)
+   - Test history (table rows, no cards)
+   - Automated services list (clean divide-y rows)
+
+### Files Created / Modified
+
+- `apps/web/src/components/auth/route-guard.tsx` — NEW: auth gate component
+- `apps/web/src/app/(dashboard)/layout.tsx` — RouteGuard with INDIVIDUAL role
+- `apps/web/src/app/(cbt)/layout.tsx` — RouteGuard with CBT_CENTER role
+- `apps/web/src/app/(admin)/layout.tsx` — RouteGuard with SUPER_ADMIN role
+- `apps/web/src/app/(tenant-admin)/layout.tsx` — RouteGuard with TENANT_ADMIN role
+- `apps/web/src/hooks/use-auth-profile.ts` — `enabled: !!accessToken`
+- `apps/web/src/app/tenant-bootstrap.tsx` — theme reset on mount, user-aware short-circuit
+- `apps/web/src/lib/navigation.ts` — label renames
+- `apps/web/src/app/(tenant-admin)/tenant/dashboard/page.tsx` — count + label fixes
+- `apps/web/src/app/(tenant-admin)/tenant/users/page.tsx` — accordion list rewrite
+- `apps/web/src/app/(tenant-admin)/tenant/services/page.tsx` — full rewrite
+- `apps/web/src/app/(tenant-admin)/tenant/providers/page.tsx` — API Integrations redesign
+
+### Decisions Made
+
+- **Delete customer: explicitly forbidden** — no delete action in customer list.
+  Deletion is reserved for staff/admin accounts.
+- **Services page sticky bar offset**: `md:left-64` accounts for the sidebar width
+  so the bar does not overlap the nav on desktop.
+- **Endpoint paths collapsed by default** — most tenants won't need to customize
+  these; hiding behind a "Advanced" accordion keeps the form approachable.
+
+### Phase Checklist Updates
+
+None — polish/UX items not tracked in PHASES.md.
+
+### Blockers / Notes for Next Session
+
+- **Staff management system (Item 4) — NOT YET IMPLEMENTED:**
+  - Remove delete from customer list ✓ (done)
+  - Add create/delete staff for: CBT centers, Tenant businesses, Platform admin
+  - Requires viable role design (e.g. `CBT_STAFF`, `TENANT_STAFF`, `PLATFORM_SUPPORT`)
+  - Requires backend schema migration + new API endpoints + frontend pages
+- **API Integrations page title on error state** still says "Provider config unavailable"
+  — updated to "API Integrations unavailable" in the rewrite.
+
+---
+
 ## Session 2026-04-03 — Project Planning, Architecture & AI Context Setup
 
 **Phase:** Pre-Phase 1 (Planning & Documentation)

@@ -508,6 +508,7 @@ model PushSubscription {
 
   @@index([tenantId])
   @@index([userId])
+  @@map("push_subscriptions")
 }
 
 model TenantAdminAccess {

@@ -80,6 +80,22 @@ async function requestJson(url, init = {}) {
   return { response, body };
 }
 
+async function assertSignedResultRedirect(url, label) {
+  const response = await fetch(url, {
+    redirect: 'manual',
+  });
+
+  assert(
+    response.status >= 300 && response.status < 400,
+    `${label}: signed result URL did not redirect`,
+  );
+  assert(
+    typeof response.headers.get('location') === 'string' &&
+      response.headers.get('location').length > 0,
+    `${label}: signed result URL did not provide a storage redirect`,
+  );
+}
+
 async function apiRequest(path, accessToken, cookie, init = {}, tenantSlug = TENANT_SLUG) {
   return requestJson(`${API_URL}/api/v1${path}`, {
     ...init,
@@ -808,6 +824,14 @@ async function verifyTenantBusinessStateFlows(tenantAdmin, transactionalFlows) {
       complete.body.data.resultFileUrl.length > 0,
     'tenant CBT completion did not return a result file URL',
   );
+  assert(
+    complete.body.data.resultFileUrl.includes('/api/v1/orders/files/'),
+    'tenant CBT completion did not return a signed result file access URL',
+  );
+  await assertSignedResultRedirect(
+    complete.body.data.resultFileUrl,
+    'tenant CBT completion result access',
+  );
 
   const requesterDetail = await apiRequest(
     `/orders/me/${orderId}`,
@@ -823,6 +847,14 @@ async function verifyTenantBusinessStateFlows(tenantAdmin, transactionalFlows) {
     typeof requesterDetail.body?.data?.resultFileUrl === 'string' &&
       requesterDetail.body.data.resultFileUrl.length > 0,
     'tenant requester could not see the uploaded finished work',
+  );
+  assert(
+    requesterDetail.body.data.resultFileUrl.includes('/api/v1/orders/files/'),
+    'tenant requester detail did not return a signed result file access URL',
+  );
+  await assertSignedResultRedirect(
+    requesterDetail.body.data.resultFileUrl,
+    'tenant requester result access',
   );
 
   const dispute = await apiRequest(
@@ -1245,20 +1277,43 @@ async function verifyCrossTenantDenial(tenantAdmin, registrations) {
 }
 
 async function main() {
-  await verifyTenantConfig();
-  const registrations = await verifyTenantRegistration();
-  const tenantAdmin = await verifyTenantAdminAccess();
-  await verifyTenantIndividualFlow();
-  await verifyTenantSettingsPersistence(tenantAdmin);
-  await verifyTenantUserFiltering(tenantAdmin, registrations);
-  await verifyCrossTenantDenial(tenantAdmin, registrations);
-  const transactionalFlows = await verifyTenantTransactionalFlows(tenantAdmin);
-  const businessStateFlows = await verifyTenantBusinessStateFlows(
-    tenantAdmin,
-    transactionalFlows,
+  const runStep = async (label, fn) => {
+    try {
+      return await fn();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`${label}: ${message}`);
+    }
+  };
+
+  await runStep('tenant config resolution', verifyTenantConfig);
+  const registrations = await runStep(
+    'tenant registration',
+    verifyTenantRegistration,
   );
-  const adminSurfaceCoverage = await verifyAdminFinanceAndReportingSurfaces(
-    tenantAdmin,
+  const tenantAdmin = await runStep(
+    'tenant admin access',
+    verifyTenantAdminAccess,
+  );
+  await runStep('tenant individual flow', verifyTenantIndividualFlow);
+  await runStep('tenant settings persistence', () =>
+    verifyTenantSettingsPersistence(tenantAdmin),
+  );
+  await runStep('tenant user filtering', () =>
+    verifyTenantUserFiltering(tenantAdmin, registrations),
+  );
+  await runStep('cross-tenant denial', () =>
+    verifyCrossTenantDenial(tenantAdmin, registrations),
+  );
+  const transactionalFlows = await runStep('tenant transactional flows', () =>
+    verifyTenantTransactionalFlows(tenantAdmin),
+  );
+  const businessStateFlows = await runStep('tenant business-state flows', () =>
+    verifyTenantBusinessStateFlows(tenantAdmin, transactionalFlows),
+  );
+  const adminSurfaceCoverage = await runStep(
+    'tenant finance/reporting surfaces',
+    () => verifyAdminFinanceAndReportingSurfaces(tenantAdmin),
   );
 
   console.log('Tenant runtime verification passed.');

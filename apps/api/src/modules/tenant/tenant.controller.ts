@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Param,
   Body,
   Query,
@@ -26,6 +27,7 @@ import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { CreateTenantAdminDto } from './dto/create-tenant-admin.dto';
 import { GetTenantUsersDto } from './dto/get-tenant-users.dto';
 import { UpdateOwnTenantSettingsDto } from './dto/update-own-tenant-settings.dto';
+import { UpdateTenantUserRoleDto } from './dto/update-tenant-user-role.dto';
 
 @Controller('tenants')
 export class TenantController {
@@ -90,6 +92,29 @@ export class TenantController {
     return this.tenantService.getTenantUsersForAdmin(user.sub, query);
   }
 
+  @Patch('me/users/:userId/role')
+  @Roles(UserRole.TENANT_ADMIN)
+  async updateMyTenantUserRole(
+    @CurrentUser() user: JwtUser,
+    @Param('userId') targetUserId: string,
+    @Body() body: UpdateTenantUserRoleDto,
+  ) {
+    return this.tenantService.updateTenantUserRoleForAdmin(
+      user.sub,
+      targetUserId,
+      body.role,
+    );
+  }
+
+  @Delete('me/users/:userId')
+  @Roles(UserRole.TENANT_ADMIN)
+  async deleteMyTenantUser(
+    @CurrentUser() user: JwtUser,
+    @Param('userId') targetUserId: string,
+  ) {
+    return this.tenantService.deleteTenantUserForAdmin(user.sub, targetUserId);
+  }
+
   @Patch('me')
   @Roles(UserRole.TENANT_ADMIN)
   async updateMyTenantSettings(
@@ -124,6 +149,36 @@ export class TenantController {
     @Query() query: GetTenantUsersDto,
   ) {
     return this.tenantService.getTenantUsersForPlatformAdmin(id, query);
+  }
+
+  /** SUPER_ADMIN: toggle active status for any user in a tenant (including TENANT_ADMIN) */
+  @Patch(':tenantId/users/:userId/active')
+  @Roles(UserRole.SUPER_ADMIN)
+  async toggleTenantUserActive(
+    @CurrentUser() user: JwtUser,
+    @Param('tenantId') tenantId: string,
+    @Param('userId') userId: string,
+  ) {
+    return this.tenantService.toggleTenantUserActiveForPlatformAdmin(
+      user.sub,
+      tenantId,
+      userId,
+    );
+  }
+
+  /** SUPER_ADMIN: permanently delete a user in a tenant (including TENANT_ADMIN, no-history accounts only) */
+  @Delete(':tenantId/users/:userId')
+  @Roles(UserRole.SUPER_ADMIN)
+  async deleteTenantUserByPlatformAdmin(
+    @CurrentUser() user: JwtUser,
+    @Param('tenantId') tenantId: string,
+    @Param('userId') userId: string,
+  ) {
+    return this.tenantService.deleteTenantUserForPlatformAdmin(
+      user.sub,
+      tenantId,
+      userId,
+    );
   }
 
   /** SUPER_ADMIN: get a single tenant */
