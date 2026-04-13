@@ -12,6 +12,7 @@ datasource db {
 enum UserRole {
   INDIVIDUAL
   CBT_CENTER
+  CBT_STAFF
   TENANT_ADMIN
   SUPER_ADMIN
 }
@@ -185,6 +186,8 @@ model User {
   otpTokens        OtpToken[]
   passwordResets   PasswordReset[]
   tenantAdminAccesses TenantAdminAccess[]
+  cbtStaffProfile  CbtStaffMembership? @relation("CbtStaff_Member")
+  cbtStaffMembers  CbtStaffMembership[] @relation("CbtCenter_Staff")
 
   @@index([email])
   @@index([phone])
@@ -529,6 +532,18 @@ model TenantAdminAccess {
   @@index([tenantId, isActive])
   @@index([userId, isActive])
   @@index([createdAt])
+}
+
+model CbtStaffMembership {
+  id        String   @id @default(uuid())
+  cbtId     String
+  cbt       User     @relation("CbtCenter_Staff", fields: [cbtId], references: [id], onDelete: Cascade)
+  staffId   String   @unique
+  staff     User     @relation("CbtStaff_Member", fields: [staffId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([cbtId])
+  @@map("cbt_staff_memberships")
 }
 
 model TenantServiceSelection {

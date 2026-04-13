@@ -185,13 +185,13 @@ export class OrdersController {
     );
   }
 
-  @Roles(UserRole.CBT_CENTER)
+  @Roles(UserRole.CBT_CENTER, UserRole.CBT_STAFF)
   @Get('cbt/dashboard')
   getCbtDashboard(@CurrentUser() user: JwtUser) {
     return this.ordersService.getCbtDashboard(user.sub, user.tenantId);
   }
 
-  @Roles(UserRole.CBT_CENTER)
+  @Roles(UserRole.CBT_CENTER, UserRole.CBT_STAFF)
   @Get('cbt/job-pool')
   getCbtJobPool(
     @CurrentUser() user: JwtUser,
@@ -200,7 +200,7 @@ export class OrdersController {
     return this.ordersService.getCbtJobPool(user.sub, query, user.tenantId);
   }
 
-  @Roles(UserRole.CBT_CENTER)
+  @Roles(UserRole.CBT_CENTER, UserRole.CBT_STAFF)
   @Get('cbt/my-jobs')
   getCbtMyJobs(
     @CurrentUser() user: JwtUser,
@@ -209,7 +209,7 @@ export class OrdersController {
     return this.ordersService.getCbtMyJobs(user.sub, query, user.tenantId);
   }
 
-  @Roles(UserRole.CBT_CENTER)
+  @Roles(UserRole.CBT_CENTER, UserRole.CBT_STAFF)
   @Get('cbt/:orderId')
   getCbtOrderDetail(
     @CurrentUser() user: JwtUser,
@@ -222,19 +222,19 @@ export class OrdersController {
     );
   }
 
-  @Roles(UserRole.CBT_CENTER)
+  @Roles(UserRole.CBT_CENTER, UserRole.CBT_STAFF)
   @Post('cbt/:orderId/claim')
   claimCbtJob(@CurrentUser() user: JwtUser, @Param('orderId') orderId: string) {
     return this.ordersService.claimCbtJob(user.sub, orderId, user.tenantId);
   }
 
-  @Roles(UserRole.CBT_CENTER)
+  @Roles(UserRole.CBT_CENTER, UserRole.CBT_STAFF)
   @Post('cbt/:orderId/start')
   startCbtJob(@CurrentUser() user: JwtUser, @Param('orderId') orderId: string) {
     return this.ordersService.startCbtJob(user.sub, orderId, user.tenantId);
   }
 
-  @Roles(UserRole.CBT_CENTER)
+  @Roles(UserRole.CBT_CENTER, UserRole.CBT_STAFF)
   @Post('cbt/:orderId/result')
   @UseInterceptors(FileInterceptor('file'))
   uploadCbtResult(

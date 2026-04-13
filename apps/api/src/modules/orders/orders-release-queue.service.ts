@@ -175,6 +175,10 @@ export class OrdersReleaseQueueService implements OnModuleInit {
               firstName: true,
               lastName: true,
               email: true,
+              role: true,
+              cbtStaffProfile: {
+                select: { cbtId: true },
+              },
               wallet: {
                 select: {
                   id: true,
@@ -254,8 +258,30 @@ export class OrdersReleaseQueueService implements OnModuleInit {
         throw new ConflictException('Requester wallet not found');
       }
 
-      if (!order.assignedCbt?.wallet) {
-        throw new ConflictException('Assigned CBT wallet not found');
+      // Commission recipient: if the fulfiller is CBT_STAFF, credit the parent
+      // CBT center's wallet. The staff earns on behalf of the center.
+      let earnerUserId: string;
+      let earnerWallet: { id: string; availableBalance: bigint; totalEarned: bigint };
+
+      if (
+        order.assignedCbt?.role === UserRole.CBT_STAFF &&
+        order.assignedCbt.cbtStaffProfile?.cbtId
+      ) {
+        const parentWallet = await tx.wallet.findUnique({
+          where: { userId: order.assignedCbt.cbtStaffProfile.cbtId },
+          select: { id: true, availableBalance: true, totalEarned: true },
+        });
+        if (!parentWallet) {
+          throw new ConflictException('Parent CBT center wallet not found');
+        }
+        earnerUserId = order.assignedCbt.cbtStaffProfile.cbtId;
+        earnerWallet = parentWallet;
+      } else {
+        if (!order.assignedCbt?.wallet) {
+          throw new ConflictException('Assigned CBT wallet not found');
+        }
+        earnerUserId = order.assignedCbt.id;
+        earnerWallet = order.assignedCbt.wallet;
       }
 
       const platformWallet = await tx.wallet.findFirst({
@@ -283,10 +309,9 @@ export class OrdersReleaseQueueService implements OnModuleInit {
 
       const requesterEscrowBefore = order.requester.wallet.escrowBalance;
       const requesterEscrowAfter = requesterEscrowBefore - order.totalAmount;
-      const cbtBalanceBefore = order.assignedCbt.wallet.availableBalance;
+      const cbtBalanceBefore = earnerWallet.availableBalance;
       const cbtBalanceAfter = cbtBalanceBefore + order.cbtCommission;
-      const cbtTotalEarnedAfter =
-        order.assignedCbt.wallet.totalEarned + order.cbtCommission;
+      const cbtTotalEarnedAfter = earnerWallet.totalEarned + order.cbtCommission;
       const platformNet = order.totalAmount - order.cbtCommission;
       const platformBalanceBefore = platformWallet.availableBalance;
       const platformBalanceAfter = platformBalanceBefore + platformNet;
@@ -302,7 +327,7 @@ export class OrdersReleaseQueueService implements OnModuleInit {
       });
 
       await tx.wallet.update({
-        where: { id: order.assignedCbt.wallet.id },
+        where: { id: earnerWallet.id },
         data: {
           availableBalance: cbtBalanceAfter,
           totalEarned: cbtTotalEarnedAfter,
@@ -335,8 +360,8 @@ export class OrdersReleaseQueueService implements OnModuleInit {
             },
           },
           {
-            walletId: order.assignedCbt.wallet.id,
-            userId: order.assignedCbt.id,
+            walletId: earnerWallet.id,
+            userId: earnerUserId,
             orderId: order.id,
             type: TransactionType.CBT_COMMISSION,
             status: TransactionStatus.SUCCESS,
@@ -348,6 +373,9 @@ export class OrdersReleaseQueueService implements OnModuleInit {
             metadata: {
               orderNumber: order.orderNumber,
               scope: 'cbt-commission',
+              ...(order.assignedCbt?.role === UserRole.CBT_STAFF
+                ? { fulfilledByStaffId: order.assignedCbt.id }
+                : {}),
             },
           },
           {
@@ -379,11 +407,11 @@ export class OrdersReleaseQueueService implements OnModuleInit {
       await tx.notification.createMany({
         data: [
           {
-            userId: order.assignedCbt.id,
+            userId: earnerUserId,
             orderId: order.id,
             type: NotificationType.ORDER_COMPLETED,
             title: 'Earnings are now available',
-            message: `${order.orderNumber} has cleared the dispute window and your earnings are now in your wallet.`,
+            message: `${order.orderNumber} has cleared the dispute window and earnings are now in your wallet.`,
             metadata: {
               orderNumber: order.orderNumber,
               cbtCommission: order.cbtCommission.toString(),
@@ -426,7 +454,7 @@ export class OrdersReleaseQueueService implements OnModuleInit {
         orderNumber: order.orderNumber,
         cbtCommission: order.cbtCommission.toString(),
         platformNet: platformNet.toString(),
-        cbtId: order.assignedCbt.id,
+        cbtId: earnerUserId,
       };
     });
 

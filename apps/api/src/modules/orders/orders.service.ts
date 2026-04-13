@@ -4544,19 +4544,45 @@ export class OrdersService {
       },
       select: {
         id: true,
+        role: true,
         cbtProfile: {
+          select: { centerName: true, approvalStatus: true },
+        },
+        cbtStaffProfile: {
           select: {
-            centerName: true,
-            approvalStatus: true,
+            cbtId: true,
+            cbt: {
+              select: {
+                cbtProfile: {
+                  select: { centerName: true, approvalStatus: true },
+                },
+              },
+            },
           },
         },
       },
     });
 
-    if (!user?.cbtProfile) {
-      throw new NotFoundException('CBT profile not found');
+    if (!user) throw new NotFoundException('User not found');
+
+    // CBT_STAFF: validate against their parent CBT center's approval status.
+    if (user.role === UserRole.CBT_STAFF) {
+      const parentProfile = user.cbtStaffProfile?.cbt?.cbtProfile;
+      if (!parentProfile) {
+        throw new NotFoundException('CBT center profile not found for this staff member');
+      }
+      if (parentProfile.approvalStatus !== CbtApprovalStatus.APPROVED) {
+        throw new ForbiddenException(
+          'Your CBT center must be approved before you can access live jobs.',
+        );
+      }
+      return { ...user, cbtProfile: parentProfile };
     }
 
+    // CBT_CENTER: original logic.
+    if (!user.cbtProfile) {
+      throw new NotFoundException('CBT profile not found');
+    }
     if (user.cbtProfile.approvalStatus !== CbtApprovalStatus.APPROVED) {
       throw new ForbiddenException(
         'Your CBT center must be approved before it can access live jobs.',

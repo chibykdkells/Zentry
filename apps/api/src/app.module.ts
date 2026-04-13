@@ -16,6 +16,7 @@ import { UsersModule } from './modules/users/users.module';
 import { WalletModule } from './modules/wallet/wallet.module';
 import { ServicesModule } from './modules/services/services.module';
 import { OrdersModule } from './modules/orders/orders.module';
+import { CbtModule } from './modules/cbt/cbt.module';
 import { TenantModule } from './modules/tenant/tenant.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
@@ -65,6 +66,7 @@ import { TenantContextMiddleware } from './common/middleware/tenant-context.midd
     WalletModule,
     ServicesModule,
     OrdersModule,
+    CbtModule,
     NotificationsModule,
     AnalyticsModule,
     SystemConfigModule,

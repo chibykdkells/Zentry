@@ -35,7 +35,11 @@ export class TenantController {
 
   /**
    * Public endpoint — frontend calls this on load to get branding config.
-   * Tenant is resolved from the 'host' request header.
+   * Tenant is resolved (in priority order) from:
+   *   1. TenantContext (subdomain / host header)
+   *   2. ?slug= query param (white-label slug routing)
+   *   3. ?tenantId= query param (used by authenticated tenant users whose
+   *      tenantId is stored in their JWT but whose URL carries no slug)
    */
   @Get('config')
   @Public()
@@ -43,10 +47,20 @@ export class TenantController {
     @Req() _request: Request,
     @TenantContext() tenant: Tenant | null,
     @Query('slug') slug?: string,
+    @Query('tenantId') tenantId?: string,
   ) {
-    const resolvedTenant =
+    let resolvedTenant: Tenant | null =
       tenant ??
       (slug ? await this.tenantService.getActiveTenantBySlug(slug) : null);
+
+    if (!resolvedTenant && tenantId) {
+      try {
+        resolvedTenant = await this.tenantService.getTenantById(tenantId);
+      } catch {
+        // tenantId not found — fall through to platform context
+        resolvedTenant = null;
+      }
+    }
 
     return {
       message: resolvedTenant

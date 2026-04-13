@@ -150,6 +150,7 @@ export class NotificationsGateway
       {
         [UserRole.INDIVIDUAL]: 0,
         [UserRole.CBT_CENTER]: 0,
+        [UserRole.CBT_STAFF]: 0,
         [UserRole.TENANT_ADMIN]: 0,
         [UserRole.SUPER_ADMIN]: 0,
       },

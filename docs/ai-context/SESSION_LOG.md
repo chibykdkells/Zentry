@@ -273,6 +273,106 @@ None — polish/UX items not tracked in PHASES.md.
 
 ---
 
+## Session 2026-04-13 (continued) — Tenant Brand Fix: TopBar, Auth Bootstrap, Layouts
+
+**Phase:** Phase 9 (Post-Phase 8 — Polish & Stability)
+**AI Assistant:** Claude Sonnet 4.6
+
+### What Was Done
+
+Continued from the previous session context. Fixed remaining "Zentry" branding
+issues for tenant-user accounts (specifically confirmed with "Ruby Digital Tech" screenshots).
+
+1. **`TenantBootstrap` resolves by `tenantId`** — Previously only resolved tenant
+   by URL subdomain slug or `?slug=` param. On localhost where no slug is set,
+   authenticated tenant users saw the wrong brand. Now, if no slug is available,
+   `TenantBootstrap` passes `params.tenantId = user.tenantId` to `/tenants/config`,
+   guaranteeing the correct tenant branding is always applied.
+
+2. **`/tenants/config` extended with `?tenantId=`** — Added `@Query('tenantId')`
+   param to `TenantController.getConfig()`. Resolves the tenant by ID after slug
+   is tried. Falls through cleanly if `tenantId` is not found.
+
+3. **`tenant.store.ts` — `getInitialTenant()` synchronous hydration** — Added a
+   function that synchronously reads from localStorage at module load time
+   (checking auth store first to skip for platform users), initializing the tenant
+   store with the correct value before the first React render. Prevents the brand
+   color flash on page load for returning tenant users.
+
+4. **`tenant-theme.ts` bootstrap script** — Updated `getTenantThemeBootstrapScript()`
+   to check auth store in localStorage: skips applying tenant CSS vars entirely
+   for platform-level users (`tenantId === null`), preventing brand bleed-through.
+
+5. **`TenantBootstrap` targeted layout reset** — Replaced the blanket
+   `useLayoutEffect(() => resetTenantTheme(), [])` (which caused brand flash) with
+   a user-aware reset: only calls `clearTenant()` + `resetTenantTheme()` when the
+   current user has `tenantId === null`.
+
+6. **`auth.store.ts` — `_hasHydrated` approach REVERTED** — Attempted to add a
+   hydration guard via `onRehydrateStorage`. Zustand v5 (`^5.0.3`) never fires
+   this callback, so `_hasHydrated` stayed `false` permanently, causing
+   `RouteGuard` to block forever (infinite spinner). Reverted to clean store.
+
+7. **`route-guard.tsx` — uses `isBootstrapping`** — Detects the brief window where
+   user is in store but `accessToken` is null (AuthBootstrap running) and shows
+   spinner instead of redirecting. No `_hasHydrated` dependency.
+
+8. **`TopBar` now shows tenant brand** — Added `useTenantStore` + `mounted` pattern.
+   `brandName` falls back to `'Zentry'`; `brandInitial` from first char of brand name.
+   Mobile TopBar logo box and text both reflect tenant brand.
+
+9. **`(dashboard)/layout.tsx` — tenant-aware sidebar** — Converted from server
+   component to `'use client'`. Reads `useTenantStore` with `mounted` guard.
+   `brandLabel` = tenant name (if tenant user) or `'Zentry'`.
+
+10. **`(cbt)/layout.tsx` — tenant-aware sidebar** — Same pattern. `brandLabel` =
+    `"${tenant.name} CBT"` for tenant-bound CBT centers, `"Zentry CBT"` for
+    platform-level centers.
+
+11. **`(admin)/layout.tsx`** — No change needed. `SUPER_ADMIN` always has
+    `tenantId === null`; `"Zentry Admin"` is always correct.
+
+12. **`(tenant-admin)/layout.tsx` + `protected-shell.tsx` + `auth-shell.tsx`** —
+    All already had `mounted` pattern applied from previous context in this session.
+
+### Files Created / Modified
+
+- `apps/api/src/modules/tenant/tenant.controller.ts` — `?tenantId=` param on `GET /tenants/config`
+- `apps/web/src/app/tenant-bootstrap.tsx` — tenantId fallback, targeted layout reset
+- `apps/web/src/stores/tenant.store.ts` — `getInitialTenant()` sync hydration
+- `apps/web/src/lib/tenant-theme.ts` — skip platform users in bootstrap script
+- `apps/web/src/stores/auth.store.ts` — reverted `_hasHydrated` attempt (clean state)
+- `apps/web/src/components/auth/route-guard.tsx` — `isBootstrapping` pattern, no `_hasHydrated`
+- `apps/web/src/components/layout/top-bar.tsx` — tenant brand (name + initial)
+- `apps/web/src/app/(dashboard)/layout.tsx` — client component, tenant `brandLabel`
+- `apps/web/src/app/(cbt)/layout.tsx` — client component, tenant `brandLabel`
+- `apps/web/src/app/(tenant-admin)/layout.tsx` — `mounted` pattern (already client)
+- `apps/web/src/components/layout/protected-shell.tsx` — `mounted` + tenant-aware `getSidebarTitle`
+- `apps/web/src/components/auth/auth-shell.tsx` — `mounted` + tenant brand
+
+### Decisions Made
+
+- **Sync localStorage init over `onRehydrateStorage`**: Zustand v5 broke the
+  `onRehydrateStorage` hydration callback. The synchronous `getInitialTenant()` read
+  at module load time is more reliable and compatible with Zustand v5 + synchronous
+  localStorage storage adapter.
+- **`mounted` pattern universally applied**: Every component that reads from the
+  tenant store now uses `useState(false)` + `useEffect(() => setMounted(true), [])`.
+  Server and first client renders always see the default brand. After mount, the
+  persisted tenant value is applied without hydration mismatch.
+
+### Phase Checklist Updates
+
+None — these were polish/bug-fix items.
+
+### Blockers / Notes for Next Session
+
+- **Staff management system — NOT YET IMPLEMENTED** (remains from previous session)
+- All tenant-brand issues for Ruby Digital Tech user are now addressed. Verify with
+  actual login and check: TopBar initial/name, sidebar label, CSS color vars.
+
+---
+
 ## Session 2026-04-03 — Project Planning, Architecture & AI Context Setup
 
 **Phase:** Pre-Phase 1 (Planning & Documentation)
