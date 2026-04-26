@@ -27,7 +27,6 @@ COPY apps/api/prisma.config.ts ./apps/api/prisma.config.ts
 RUN pnpm install --frozen-lockfile
 
 # Explicitly generate Prisma client with direct schema path
-# (belt-and-suspenders — ensures types exist even if postinstall skipped)
 RUN node_modules/.bin/prisma generate --schema=apps/api/prisma/schema.prisma
 
 # Copy application source
@@ -42,7 +41,7 @@ COPY packages/validators/src ./packages/validators/src
 RUN pnpm --filter=@zentry/api build
 
 # ── Stage 3: Production Runner ───────────────────────────────────
-FROM node:20-alpine AS runner
+FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
@@ -60,4 +59,4 @@ COPY apps/api/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 EXPOSE 4000
-ENTRYPOINT ["/entrypoint.sh"]
+CMD ["/entrypoint.sh"]
