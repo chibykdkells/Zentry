@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f6f8fc;
+  --foreground: #10203c;
+  --font-sans:
+    "Plus Jakarta Sans", "Avenir Next", "Segoe UI", sans-serif;
+  --font-mono: "SFMono-Regular", "Menlo", monospace;
+  --brand-canvas: #f6f8fc;
+  --brand-surface: #ffffff;
+  --brand-surface-soft: #edf2f9;
+  --brand-line: #d7e0ee;
+  --brand-ink: #10203c;
+  --brand-muted: #617089;
+  --brand-navy: #0d1b3e;
+  --brand-navy-strong: #132754;
+  --brand-accent: #f5a623;
+  --brand-accent-soft: #fff1d9;
+  --brand-button: #0d1b3e;
+  --brand-button-strong: #132754;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-brand-canvas: var(--brand-canvas);
+  --color-brand-surface: var(--brand-surface);
+  --color-brand-surface-soft: var(--brand-surface-soft);
+  --color-brand-line: var(--brand-line);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-muted: var(--brand-muted);
+  --color-brand-navy: var(--brand-navy);
+  --color-brand-navy-strong: var(--brand-navy-strong);
+  --color-brand-accent: var(--brand-accent);
+  --color-brand-accent-soft: var(--brand-accent-soft);
+  --color-brand-button: var(--brand-button);
+  --color-brand-button-strong: var(--brand-button-strong);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}
+
+body {
+  background: var(--brand-canvas);
+  color: var(--brand-ink);
+  font-family: var(--font-sans);
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(circle at top left, rgba(245, 166, 35, 0.08), transparent 34%),
+    radial-gradient(circle at top right, rgba(13, 27, 62, 0.05), transparent 28%);
+  pointer-events: none;
+  z-index: -1;
+}

@@ -16,6 +16,75 @@
 
 ---
 
+## Session 2026-04-26 — Production Deploy Infrastructure: Railway + Vercel + CI
+
+**Phase:** Phase 10 — Admin Analytics, Security Audit & Launch
+**AI Assistant:** Claude Sonnet 4.6
+
+### What Was Done
+
+Production deployment config added for the full stack (Railway API + Vercel web + GitHub Actions CI).
+
+1. **Health check endpoint added** — `GET /health` added to `app.controller.ts` with `@Public()`. Returns `{ status: 'ok', timestamp }`. Global prefix exclusion added in `main.ts` so the route resolves at `/health` (not `/api/v1/health`) — required by Railway's healthcheck probe.
+
+2. **`apps/api/Dockerfile`** — Multi-stage production build:
+   - `base`: node:20-alpine + corepack (pnpm)
+   - `builder`: copies manifests + Prisma schema → `pnpm install --frozen-lockfile` (triggers `prisma generate` via postinstall) → copies source → `nest build` (webpack bundles workspace packages)
+   - `runner`: copies hoisted `node_modules` from builder (includes Prisma CLI + binary), Prisma migrations dir, and `dist/` → runs entrypoint
+
+3. **`apps/api/entrypoint.sh`** — Startup script: runs `prisma migrate deploy` then `node apps/api/dist/main`. Keeps migrations and startup atomic on every container boot.
+
+4. **`.dockerignore`** — Root-level, excludes `node_modules`, `.next`, `dist`, `.turbo`, `.env`, coverage, `.DS_Store`.
+
+5. **`railway.toml`** — Railway service config: dockerfile builder pointing to `apps/api/Dockerfile`, healthcheck at `/health` with 300s timeout, on-failure restart policy.
+
+6. **`apps/web/vercel.json`** — Vercel config for the pnpm monorepo: install command runs from repo root, build runs `pnpm --filter=@zentry/web build`, output directory `.next`.
+
+7. **`.github/workflows/ci.yml`** — GitHub Actions CI: triggers on push/PR to `main`, runs lint → typecheck → build with dummy env vars so Next.js build passes in CI without real secrets.
+
+### Files Created / Modified
+
+- `apps/api/src/app.controller.ts` — added `GET /health` with `@Public()`
+- `apps/api/src/main.ts` — added `/health` exclusion to `setGlobalPrefix`
+- `apps/api/Dockerfile` — NEW: multi-stage production build
+- `apps/api/entrypoint.sh` — NEW: migrate deploy + start script
+- `.dockerignore` — NEW: root-level build context exclusions
+- `railway.toml` — NEW: Railway service config
+- `apps/web/vercel.json` — NEW: Vercel monorepo config
+- `.github/workflows/ci.yml` — NEW: CI pipeline
+
+### Decisions Made
+
+- **Railway over Render** for the API: Railway runs persistent containers (required for Socket.io WebSockets + Bull queue). Render's free tier sleeps on inactivity, which breaks both.
+- **Vercel for frontend**: Native Next.js support, no config friction for App Router + PWA.
+- **Cloudflare as DNS + WAF layer** in front of both (not as the app host): proxy `api.zentry.ng` → Railway, `app.zentry.ng` → Vercel.
+- **`prisma migrate deploy` in entrypoint** (not `migrate dev`): `migrate deploy` applies pending migrations without resetting data, safe for production on every deploy.
+- **CI builds with dummy env vars**: real secrets are never in CI. Dummy values satisfy TypeScript/NestJS config checks at build time only.
+
+### Phase Checklist Updates
+
+Phase 10:
+- Vercel deployment config: ready (dashboard wiring remains)
+- Railway deployment config: ready (dashboard wiring remains)
+- Cloudflare DNS config: pending (user action)
+
+### Blockers / Notes for Next Session
+
+**User actions still needed to go live:**
+1. Create Railway project → connect GitHub repo → set env vars (all from .env.example)
+2. Connect Vercel to GitHub repo → set Root Directory = `apps/web` → set env vars
+3. Add `zentry.ng` to Cloudflare → set DNS records pointing to Railway + Vercel
+4. Generate VAPID keys: `npx web-push generate-vapid-keys`
+5. Get real provider credentials: FintavaPay, Termii, Resend, Cloudinary, VTU provider
+6. Create Sentry projects (zentry-api + zentry-web) and add DSNs to env vars
+
+**Code still needed before launch:**
+- Signed Cloudinary URLs for result files (permanent public URLs currently)
+- SMS notifications for key order events beyond OTP
+- Load test (500 concurrent users) — after infra is live
+
+---
+
 ## Session 2026-04-11 — Phase 8: FintavaPay Bank Payout Integration
 
 **Phase:** Phase 8 — Withdrawal System  

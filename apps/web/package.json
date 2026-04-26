@@ -1,0 +1,47 @@
+{
+  "name": "@zentry/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "next build --webpack",
+    "start": "next start",
+    "dev": "next dev --hostname 0.0.0.0 --port 3000 --webpack",
+    "lint": "eslint",
+    "typecheck": "mkdir -p .next/types .next/dev/types && next typegen && tsc --noEmit"
+  },
+  "dependencies": {
+    "@fontsource-variable/plus-jakarta-sans": "^5.2.8",
+    "@hookform/resolvers": "^3.10.0",
+    "@tanstack/react-query": "^5.72.2",
+    "@zentry/types": "workspace:*",
+    "@zentry/utils": "workspace:*",
+    "@zentry/validators": "workspace:*",
+    "axios": "^1.15.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "framer-motion": "^12.6.2",
+    "lucide-react": "^0.475.0",
+    "next": "16.2.3",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "react-hook-form": "^7.54.2",
+    "react-hot-toast": "^2.5.2",
+    "recharts": "^2.15.1",
+    "socket.io-client": "^4.8.3",
+    "tailwind-merge": "^3.0.2",
+    "zod": "^3.24.1",
+    "zustand": "^5.0.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.2",
+    "next-pwa": "^5.6.0",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

@@ -116,7 +116,7 @@ async function bootstrap() {
     }),
   );
 
-  app.setGlobalPrefix('api/v1');
+  app.setGlobalPrefix('api/v1', { exclude: ['/health'] });
 
   await app.listen(port);
   console.log(`🚀 Zentry API running on http://localhost:${port}/api/v1`);

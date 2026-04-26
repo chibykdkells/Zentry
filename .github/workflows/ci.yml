@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    name: Lint, Typecheck & Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build
+        run: pnpm build
+        env:
+          # Dummy values so Next.js build doesn't fail on missing env vars
+          NEXT_PUBLIC_API_URL: https://api.zentry.ng
+          NEXT_PUBLIC_APP_URL: https://app.zentry.ng
+          DATABASE_URL: postgresql://postgres:password@localhost:5432/zentry_db
+          REDIS_URL: redis://localhost:6379
+          JWT_ACCESS_SECRET: ci_dummy_access_secret_minimum_64_characters_long_placeholder_value
+          JWT_REFRESH_SECRET: ci_dummy_refresh_secret_minimum_64_characters_long_placeholder_value

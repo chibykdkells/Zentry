@@ -1,0 +1,55 @@
+'use client';
+
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+import { UserRole } from '@zentry/types';
+
+export interface AuthUser {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  role: UserRole;
+  tenantId: string | null;
+  isEmailVerified: boolean;
+}
+
+interface AuthStore {
+  user: AuthUser | null;
+  accessToken: string | null;
+  isAuthenticated: boolean;
+  setAuth: (user: AuthUser, accessToken: string) => void;
+  setAccessToken: (accessToken: string | null) => void;
+  clearAuth: () => void;
+  updateUser: (updates: Partial<AuthUser>) => void;
+}
+
+export const useAuthStore = create<AuthStore>()(
+  persist(
+    (set) => ({
+      user: null,
+      accessToken: null,
+      isAuthenticated: false,
+
+      setAuth: (user, accessToken) => {
+        set({ user, accessToken, isAuthenticated: true });
+      },
+
+      setAccessToken: (accessToken) => set({ accessToken }),
+
+      clearAuth: () => {
+        set({ user: null, accessToken: null, isAuthenticated: false });
+      },
+
+      updateUser: (updates) =>
+        set((state) => ({
+          user: state.user ? { ...state.user, ...updates } : null,
+        })),
+    }),
+    {
+      name: 'zentry-auth',
+      // Persist user metadata only. Access tokens stay in memory.
+      partialize: (state) => ({ user: state.user, isAuthenticated: state.isAuthenticated }),
+    },
+  ),
+);

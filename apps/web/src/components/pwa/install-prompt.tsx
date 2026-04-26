@@ -1,0 +1,246 @@
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
+import { Download, Share2, Smartphone, X } from 'lucide-react';
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
+}
+
+const DISMISS_KEY = 'zentry-pwa-install-dismissed-at';
+const DISMISS_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+const DEV_BROWSER_RESET_KEY = 'zentry-dev-browser-reset-v1';
+
+function getInitialDismissedState() {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  const dismissedAt = window.localStorage.getItem(DISMISS_KEY);
+  return Boolean(
+    dismissedAt && Date.now() - Number(dismissedAt) < DISMISS_DURATION_MS,
+  );
+}
+
+function getInitialInstalledState() {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return (
+    window.matchMedia('(display-mode: standalone)').matches ||
+    ('standalone' in window.navigator &&
+      Boolean(
+        (window.navigator as Navigator & { standalone?: boolean }).standalone,
+      ))
+  );
+}
+
+function getUserAgent() {
+  if (typeof window === 'undefined') {
+    return '';
+  }
+
+  return window.navigator.userAgent;
+}
+
+function isLocalDevelopmentHostname(hostname: string) {
+  return (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '0.0.0.0' ||
+    /^192\.168\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
+    /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
+    /^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(hostname)
+  );
+}
+
+export function InstallPrompt() {
+  const [deferredPrompt, setDeferredPrompt] =
+    useState<BeforeInstallPromptEvent | null>(null);
+  const [isInstalled, setIsInstalled] = useState(getInitialInstalledState);
+  const [isDismissed, setIsDismissed] = useState(getInitialDismissedState);
+  const [isIos] = useState(() => /iPhone|iPad|iPod/i.test(getUserAgent()));
+  const [isSafari] = useState(
+    () =>
+      /Safari/i.test(getUserAgent()) &&
+      !/Chrome|CriOS|Edg|FxiOS/i.test(getUserAgent()),
+  );
+
+  function dismissPrompt(persist = true) {
+    setIsDismissed(true);
+    if (persist && typeof window !== 'undefined') {
+      window.localStorage.setItem(DISMISS_KEY, Date.now().toString());
+    }
+  }
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    if (
+      process.env.NODE_ENV === 'development' &&
+      'serviceWorker' in navigator &&
+      isLocalDevelopmentHostname(window.location.hostname)
+    ) {
+      const hasResetBrowserThisTab =
+        window.sessionStorage.getItem(DEV_BROWSER_RESET_KEY) === 'done';
+
+      void Promise.all([
+        navigator.serviceWorker
+          .getRegistrations()
+          .then((registrations) =>
+            Promise.all(
+              registrations.map((registration) => registration.unregister()),
+            ).then((results) =>
+              results.some((wasUnregistered) => wasUnregistered),
+            ),
+          ),
+        'caches' in window
+          ? window.caches
+              .keys()
+              .then((cacheNames) =>
+                Promise.all(cacheNames.map((cacheName) => window.caches.delete(cacheName))).then(
+                  (results) => results.some(Boolean),
+                ),
+              )
+          : Promise.resolve(false),
+      ])
+        .then(([hadServiceWorkers, hadCaches]) => {
+          if (hasResetBrowserThisTab) {
+            return;
+          }
+
+          window.sessionStorage.setItem(DEV_BROWSER_RESET_KEY, 'done');
+          // In development, silently clear stale PWA state without forcing a browser
+          // reload. Automatic reloads can create fast refresh loops in real sessions
+          // when the browser repeatedly observes old caches or registrations.
+          void hadServiceWorkers;
+          void hadCaches;
+        })
+        .catch(() => undefined);
+    }
+
+    const handleBeforeInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      setDeferredPrompt(event as BeforeInstallPromptEvent);
+    };
+
+    const handleAppInstalled = () => {
+      setIsInstalled(true);
+      setDeferredPrompt(null);
+      dismissPrompt(false);
+    };
+
+    window.addEventListener(
+      'beforeinstallprompt',
+      handleBeforeInstallPrompt as EventListener,
+    );
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    return () => {
+      window.removeEventListener(
+        'beforeinstallprompt',
+        handleBeforeInstallPrompt as EventListener,
+      );
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, []);
+
+  const showInstallPrompt = useMemo(() => {
+    if (isInstalled || isDismissed) {
+      return false;
+    }
+
+    return Boolean(deferredPrompt) || (isIos && isSafari);
+  }, [deferredPrompt, isDismissed, isInstalled, isIos, isSafari]);
+
+  const handleInstall = async () => {
+    if (!deferredPrompt) {
+      return;
+    }
+
+    await deferredPrompt.prompt();
+    const result = await deferredPrompt.userChoice;
+
+    if (result.outcome === 'accepted') {
+      dismissPrompt(false);
+      setDeferredPrompt(null);
+      return;
+    }
+
+    dismissPrompt();
+  };
+
+  if (!showInstallPrompt) {
+    return null;
+  }
+
+  return (
+    <div className="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex justify-center px-4">
+      <div className="pointer-events-auto w-full max-w-md rounded-[1.75rem] border border-brand-line bg-brand-surface p-5 shadow-2xl shadow-slate-300/30">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand-navy text-brand-accent">
+              {deferredPrompt ? <Download size={20} /> : <Smartphone size={20} />}
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-brand-ink">
+                Install Zentry
+              </h3>
+              <p className="mt-1 text-sm leading-6 text-brand-muted">
+                {deferredPrompt
+                  ? 'Add Zentry to your home screen for a faster, app-like experience.'
+                  : 'On iPhone or iPad, use Safari’s Share menu and choose “Add to Home Screen”.'}
+              </p>
+              {process.env.NODE_ENV === 'development' ? (
+                <p className="mt-2 text-xs text-slate-400">
+                  Install prompts only appear reliably from a production build or deployed app.
+                </p>
+              ) : null}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => dismissPrompt()}
+            className="rounded-full p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+            aria-label="Dismiss install prompt"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+          {deferredPrompt ? (
+            <button
+              type="button"
+              onClick={() => {
+                void handleInstall();
+              }}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-brand-navy px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand-navy-strong"
+            >
+              <Download size={16} />
+              Install app
+            </button>
+          ) : (
+            <div className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-brand-line bg-brand-surface-soft px-4 py-3 text-sm font-semibold text-slate-700">
+              <Share2 size={16} />
+              Open Share menu
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => dismissPrompt()}
+            className="inline-flex flex-1 items-center justify-center rounded-2xl border border-brand-line bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-brand-surface-soft"
+          >
+            Maybe later
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
