@@ -19,14 +19,16 @@ COPY packages/types/package.json ./packages/types/
 COPY packages/utils/package.json ./packages/utils/
 COPY packages/validators/package.json ./packages/validators/
 
-# Copy Prisma schema BEFORE install so the postinstall hook can run prisma generate
+# Copy Prisma files BEFORE install (postinstall runs prisma generate)
 COPY apps/api/prisma ./apps/api/prisma
+COPY apps/api/prisma.config.ts ./apps/api/prisma.config.ts
 
 # Install all deps (dev + prod — prisma CLI needed for generate + migrate)
 RUN pnpm install --frozen-lockfile
 
-# Explicitly generate Prisma client to ensure types exist before TypeScript compile
-RUN pnpm --filter=@zentry/api exec prisma generate
+# Explicitly generate Prisma client with direct schema path
+# (belt-and-suspenders — ensures types exist even if postinstall skipped)
+RUN node_modules/.bin/prisma generate --schema=apps/api/prisma/schema.prisma
 
 # Copy application source
 COPY apps/api/src ./apps/api/src
