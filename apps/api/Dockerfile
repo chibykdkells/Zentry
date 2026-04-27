@@ -28,6 +28,7 @@ RUN node_modules/.bin/prisma generate --schema=apps/api/prisma/schema.prisma
 COPY apps/api/src ./apps/api/src
 COPY apps/api/tsconfig.json ./apps/api/tsconfig.json
 COPY apps/api/nest-cli.json ./apps/api/nest-cli.json
+COPY apps/api/webpack.config.js ./apps/api/webpack.config.js
 COPY packages/types/src ./packages/types/src
 COPY packages/utils/src ./packages/utils/src
 COPY packages/validators/src ./packages/validators/src
