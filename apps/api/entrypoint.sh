@@ -2,7 +2,7 @@
 set -e
 
 echo "Running database migrations..."
-node_modules/.bin/prisma migrate deploy --schema=apps/api/prisma/schema.prisma
+/app/node_modules/.bin/prisma migrate deploy --schema=/app/apps/api/prisma/schema.prisma
 
 echo "Starting Zentry API..."
-exec node apps/api/dist/main
+exec node /app/apps/api/dist/main

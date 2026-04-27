@@ -32,7 +32,11 @@ COPY packages/types/src ./packages/types/src
 COPY packages/utils/src ./packages/utils/src
 COPY packages/validators/src ./packages/validators/src
 
-RUN pnpm --filter=@zentry/api build
+# Build from the api directory explicitly so nest outputs to apps/api/dist
+RUN cd apps/api && ../../node_modules/.bin/nest build
+
+# Verify the build output exists
+RUN ls -la apps/api/dist/
 
 # ── Stage 3: Production Runner (plain node — no corepack, no pnpm) ──
 FROM node:20-alpine AS runner
@@ -42,6 +46,9 @@ ENV NODE_ENV=production
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
+
+# Verify dist was copied into runner
+RUN ls -la apps/api/dist/
 
 COPY apps/api/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
