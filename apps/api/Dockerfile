@@ -39,8 +39,5 @@ RUN cd apps/api && ../../node_modules/.bin/nest build
 # Confirm main.js exists — build fails here if it doesn't
 RUN test -f apps/api/dist/main.js && echo "dist/main.js OK" || (echo "MISSING dist/main.js" && exit 1)
 
-COPY apps/api/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-
 EXPOSE 4000
-CMD ["/entrypoint.sh"]
+CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy --schema=apps/api/prisma/schema.prisma && node apps/api/dist/main"]
