@@ -1,7 +1,6 @@
 FROM node:20-alpine
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-ENV NODE_ENV=production
 WORKDIR /app
 
 RUN corepack enable
@@ -39,5 +38,6 @@ RUN cd apps/api && ../../node_modules/.bin/nest build
 # Confirm main.js exists — build fails here if it doesn't
 RUN test -f apps/api/dist/main.js && echo "dist/main.js OK" || (echo "MISSING dist/main.js" && exit 1)
 
+ENV NODE_ENV=production
 EXPOSE 4000
 CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy --schema=apps/api/prisma/schema.prisma && node apps/api/dist/main"]
