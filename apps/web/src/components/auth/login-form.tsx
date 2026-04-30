@@ -49,32 +49,27 @@ async function attemptLogin(
   data: LoginInput,
   tenantSlug?: string | null,
 ): Promise<LoginAttemptResult> {
-  const response = await fetch('/api/v1/auth/login', {
-    method: 'POST',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(tenantSlug ? { 'x-tenant-slug': tenantSlug } : {}),
-    },
-    body: JSON.stringify(data),
-  });
+  try {
+    const response = await apiClient.post('/auth/login', data, {
+      headers: tenantSlug ? { 'x-tenant-slug': tenantSlug } : undefined,
+    });
 
-  const text = await response.text();
-  let body: unknown = null;
+    return {
+      ok: true,
+      status: response.status,
+      body: response.data,
+    };
+  } catch (error: unknown) {
+    const response = (error as {
+      response?: { status?: number; data?: unknown };
+    }).response;
 
-  if (text) {
-    try {
-      body = JSON.parse(text);
-    } catch {
-      body = text;
-    }
+    return {
+      ok: false,
+      status: response?.status ?? 500,
+      body: response?.data ?? null,
+    };
   }
-
-  return {
-    ok: response.ok,
-    status: response.status,
-    body,
-  };
 }
 
 export function LoginForm({ mode = 'auto' }: { mode?: LoginMode }) {
