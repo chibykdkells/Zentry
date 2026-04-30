@@ -13,7 +13,7 @@ export function proxy(request: NextRequest) {
   const sessionExpired = request.nextUrl.searchParams.get('reason') === 'session-expired';
   const tenantSlug =
     request.nextUrl.searchParams.get('tenant') ??
-    request.cookies.get('zentry-tenant-slug')?.value ??
+    request.cookies.get('zendocx-tenant-slug')?.value ??
     '';
   const refreshToken = request.cookies.get('refresh_token')?.value;
   const role = getRoleFromJwt(refreshToken);

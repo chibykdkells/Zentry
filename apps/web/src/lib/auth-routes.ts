@@ -63,7 +63,7 @@ export function getSafePostLoginRoute(
   }
 
   try {
-    const url = new URL(nextPath, 'http://zentry.local');
+    const url = new URL(nextPath, 'http://zendocx.local');
     const resolvedPath = `${url.pathname}${url.search}${url.hash}`;
 
     if (!isProtectedRoute(url.pathname) || !canAccessPath(role, url.pathname)) {
