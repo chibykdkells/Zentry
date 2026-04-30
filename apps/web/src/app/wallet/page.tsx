@@ -17,6 +17,7 @@ import {
 import { ProtectedShell } from '@/components/layout/protected-shell';
 import { EmptyState } from '@/components/shared/empty-state';
 import { AccountPanel } from '@/components/shared/account-panel';
+import { FeedbackBanner } from '@/components/shared/feedback-banner';
 import { PageHero } from '@/components/shared/page-hero';
 import { ScrollCardBody } from '@/components/shared/scroll-card-body';
 import {
@@ -26,16 +27,23 @@ import {
 import { StatCard } from '@/components/shared/stat-card';
 import { FundWalletModal } from '@/components/wallet/fund-wallet-modal';
 import { WalletCard } from '@/components/wallet/wallet-card';
+import { WithdrawalRequestForm } from '@/components/wallet/withdrawal-request-form';
 import {
   useWallet,
   useWalletTransactions,
   type WalletTransactionFilters,
 } from '@/hooks/use-wallet';
+import { useMyWithdrawalRequests } from '@/hooks/use-withdrawal-requests';
 import apiClient from '@/lib/api-client';
 import { formatDate, formatNaira, truncate } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
-import { TransactionStatus, TransactionType, UserRole } from '@zendocx/types';
+import {
+  TransactionStatus,
+  TransactionType,
+  UserRole,
+  WithdrawalStatus,
+} from '@zendocx/types';
 
 const ALL_FILTER_VALUE = 'ALL';
 const TRANSACTION_PAGE_LIMIT = 8;
@@ -163,7 +171,13 @@ export default function WalletPage() {
 
   const isRequesterOnly = user?.role === UserRole.INDIVIDUAL;
   const isCbt = user?.role === UserRole.CBT_CENTER;
+  const isTenantAdmin = user?.role === UserRole.TENANT_ADMIN;
   const isPlatformOwner = user?.role === UserRole.SUPER_ADMIN;
+  const canRequestWithdrawal = isCbt || isTenantAdmin || isPlatformOwner;
+  const canTryOnlineFunding =
+    user?.role === UserRole.INDIVIDUAL ||
+    user?.role === UserRole.CBT_CENTER ||
+    user?.role === UserRole.SUPER_ADMIN;
 
   const transactionTypeOptions: Array<{
     label: string;
@@ -187,7 +201,17 @@ export default function WalletPage() {
           { label: 'Refund', value: TransactionType.REFUND },
           { label: 'Penalty', value: TransactionType.PENALTY },
         ]
-      : [
+      : isTenantAdmin
+        ? [
+            { label: 'All types', value: ALL_FILTER_VALUE },
+            { label: 'Funding', value: TransactionType.WALLET_FUNDING },
+            { label: 'Business spending', value: TransactionType.SERVICE_PURCHASE },
+            { label: 'Held funds', value: TransactionType.ESCROW_LOCK },
+            { label: 'Released funds', value: TransactionType.ESCROW_RELEASE },
+            { label: 'Withdrawal', value: TransactionType.WITHDRAWAL },
+            { label: 'Refund', value: TransactionType.REFUND },
+          ]
+        : [
           { label: 'All types', value: ALL_FILTER_VALUE },
           { label: 'Funding', value: TransactionType.WALLET_FUNDING },
           { label: 'Service purchase', value: TransactionType.SERVICE_PURCHASE },
@@ -203,6 +227,8 @@ export default function WalletPage() {
     ? 'View what is available now, what is on hold for active requests, and recent wallet activity.'
     : isCbt
       ? 'Track released earnings, funds still on hold, and the wallet activity tied to jobs you completed.'
+      : isTenantAdmin
+        ? 'Manage the business wallet, track money reserved for active work, and submit payout requests when funds are ready.'
       : isPlatformOwner
         ? 'Track platform-held funds, released balances, and ledger activity tied to platform earnings and withdrawals.'
         : 'View what is available now, what is on hold, and recent wallet activity.';
@@ -211,6 +237,8 @@ export default function WalletPage() {
     ? 'A quick summary of what you can spend now, what is temporarily on hold for active requests, and how active this wallet has been.'
     : isCbt
       ? 'A quick summary of released earnings, funds still on hold, and payout movement in this wallet.'
+      : isTenantAdmin
+        ? 'A quick summary of what the business can use now, what is still reserved, and how much has already moved through this wallet.'
       : isPlatformOwner
         ? 'A quick summary of what the platform wallet can use now, what is still on hold, and how much has moved through it.'
         : 'A quick summary of what is available now, what is on hold, and how active this wallet has been.';
@@ -226,8 +254,36 @@ export default function WalletPage() {
 
         <PageHero
           eyebrow="Wallet"
-          title="Wallet workspace"
+          title={
+            isTenantAdmin
+              ? 'Business wallet'
+              : isPlatformOwner
+                ? 'Platform wallet'
+                : 'Wallet workspace'
+          }
           description={walletHeroDescription}
+          actions={
+            <>
+              {canTryOnlineFunding ? (
+                <button
+                  type="button"
+                  onClick={() => setFundingOpen(true)}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-brand-button px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand-button-strong"
+                >
+                  <WalletIcon size={16} />
+                  Add money online
+                </button>
+              ) : null}
+              {canRequestWithdrawal ? (
+                <a
+                  href="#withdrawals"
+                  className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-white"
+                >
+                  Withdraw money
+                </a>
+              ) : null}
+            </>
+          }
         />
 
         {confirmingSandboxFunding ? (
@@ -242,7 +298,8 @@ export default function WalletPage() {
             availableBalance={wallet.availableBalance}
             escrowBalance={wallet.escrowBalance}
             className="min-h-[18rem]"
-            onFundClick={() => setFundingOpen(true)}
+            onFundClick={canTryOnlineFunding ? () => setFundingOpen(true) : undefined}
+            actionLabel="Add money online"
           />
           <AccountPanel
             title="Balance health"
@@ -260,7 +317,13 @@ export default function WalletPage() {
             />
             {!isRequesterOnly ? (
               <BalanceRow
-                label={isCbt ? 'Total earned' : 'Total platform earnings'}
+                label={
+                  isCbt
+                    ? 'Total earned'
+                    : isTenantAdmin
+                      ? 'Business earnings'
+                      : 'Total platform earnings'
+                }
                 value={formatNaira(wallet.totalEarned)}
               />
             ) : null}
@@ -297,7 +360,13 @@ export default function WalletPage() {
           />
           {!isRequesterOnly ? (
             <StatCard
-              title={isCbt ? 'Earned' : 'Platform earnings'}
+              title={
+                isCbt
+                  ? 'Earned'
+                  : isTenantAdmin
+                    ? 'Business earnings'
+                    : 'Platform earnings'
+              }
               value={formatNaira(wallet.totalEarned)}
               icon={ArrowUpRight}
               variant="green"
@@ -319,6 +388,35 @@ export default function WalletPage() {
             />
           )}
         </div>
+
+        {isTenantAdmin ? (
+          <AccountPanel
+            title="Before you use this business wallet"
+            description="Keep the wallet actions honest and easy to understand for business admins."
+          >
+            <div className="grid gap-4 xl:grid-cols-2">
+              <ReadinessRow
+                icon={WalletIcon}
+                title="Online top-up is still being prepared for business wallets"
+                description="This page now focuses on balances, earnings, and withdrawals first. Online funding will return here once the live gateway flow is stable for business accounts."
+              />
+              <ReadinessRow
+                icon={Landmark}
+                title="Withdrawals are now available from this business wallet"
+                description="When the business has cleared funds, you can submit a payout request from the withdrawal section below."
+              />
+            </div>
+          </AccountPanel>
+        ) : null}
+
+        {canRequestWithdrawal ? (
+          <section id="withdrawals">
+            <WithdrawalWorkspace
+              role={user?.role ?? null}
+              availableBalance={wallet.availableBalance}
+            />
+          </section>
+        ) : null}
 
         <div className="grid gap-5 md:gap-6 xl:grid-cols-[1.05fr_0.95fr]">
           <AccountPanel
@@ -641,6 +739,157 @@ function ReadinessRow({
   );
 }
 
+function WithdrawalWorkspace({
+  role,
+  availableBalance,
+}: {
+  role: UserRole | null;
+  availableBalance: string;
+}) {
+  const {
+    requests,
+    summary,
+    loading,
+    error,
+    reload,
+  } = useMyWithdrawalRequests({
+    page: 1,
+    limit: 6,
+    status: 'ALL',
+  });
+
+  const heading =
+    role === UserRole.TENANT_ADMIN
+      ? 'Business payouts'
+      : role === UserRole.SUPER_ADMIN
+        ? 'Wallet withdrawals'
+        : 'Withdrawal requests';
+
+  const description =
+    role === UserRole.TENANT_ADMIN
+      ? 'Move cleared business funds out of the wallet, track payout requests, and keep the finance trail easy to follow.'
+      : 'Submit a withdrawal request when funds are ready, then track review and payout progress from one place.';
+
+  return (
+    <div className="grid gap-5 md:gap-6 xl:grid-cols-[0.92fr_1.08fr]">
+      <AccountPanel
+        title={heading}
+        description={description}
+        contentClassName="space-y-4"
+      >
+        <div className="grid gap-3 sm:grid-cols-2">
+          <BalanceRow
+            label="Available now"
+            value={formatNaira(availableBalance)}
+            tone="strong"
+          />
+          <BalanceRow
+            label="Waiting review"
+            value={formatNaira(summary?.pendingAmount ?? '0')}
+          />
+          <BalanceRow
+            label="Processing"
+            value={formatNaira(summary?.processingAmount ?? '0')}
+          />
+          <BalanceRow
+            label="Completed"
+            value={formatNaira(summary?.completedAmount ?? '0')}
+          />
+        </div>
+
+        <FeedbackBanner
+          tone="info"
+          title="What this action does"
+          message={
+            role === UserRole.TENANT_ADMIN
+              ? 'Submit a payout request when the business has cleared funds. The amount is reserved immediately so finance review stays consistent.'
+              : 'Submit a withdrawal request once funds are available. The amount is reserved immediately while it moves through review and payout processing.'
+          }
+        />
+
+        <WithdrawalRequestForm />
+      </AccountPanel>
+
+      <AccountPanel
+        title="Recent withdrawal activity"
+        description="Keep the latest payout requests visible so approvals, processing, and completed transfers are easy to understand at a glance."
+        contentClassName="space-y-4"
+      >
+        {error ? (
+          <EmptyState
+            title="Withdrawal history unavailable"
+            message={error}
+            icon={Landmark}
+            action={
+              <button
+                type="button"
+                onClick={reload}
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Try again
+              </button>
+            }
+          />
+        ) : loading ? (
+          <div className="space-y-3">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <TransactionSkeleton key={index} />
+            ))}
+          </div>
+        ) : requests.length === 0 ? (
+          <EmptyState
+            title="No withdrawal requests yet"
+            message="As soon as a payout request is submitted, it will appear here with its review status and destination account."
+            icon={Landmark}
+          />
+        ) : (
+          <>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <BalanceRow
+                label="Pending count"
+                value={String(summary?.pendingCount ?? 0)}
+              />
+              <BalanceRow
+                label="Completed count"
+                value={String(summary?.completedCount ?? 0)}
+              />
+            </div>
+
+            <ScrollCardBody bodyClassName="space-y-3">
+              {requests.map((request) => (
+                <article
+                  key={request.id}
+                  className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4"
+                >
+                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-semibold text-slate-900">
+                          {request.bankName} · {request.accountName}
+                        </p>
+                        <WithdrawalStatusBadge status={request.status} />
+                      </div>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {request.accountNumber} · Requested {formatDate(request.createdAt)}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-400">
+                        {request.processorNote ?? 'No finance note yet.'}
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-white px-3 py-1.5 text-sm font-semibold text-slate-900">
+                      {formatNaira(request.amount)}
+                    </span>
+                  </div>
+                </article>
+              ))}
+            </ScrollCardBody>
+          </>
+        )}
+      </AccountPanel>
+    </div>
+  );
+}
+
 function TransactionSkeleton() {
   return (
     <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
@@ -650,6 +899,24 @@ function TransactionSkeleton() {
         <SkeletonLine className="h-3 w-40" />
       </div>
     </div>
+  );
+}
+
+function WithdrawalStatusBadge({ status }: { status: WithdrawalStatus }) {
+  const tone =
+    status === WithdrawalStatus.COMPLETED
+      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+      : status === WithdrawalStatus.REJECTED
+        ? 'border-rose-200 bg-rose-50 text-rose-700'
+        : status === WithdrawalStatus.PROCESSING ||
+            status === WithdrawalStatus.APPROVED
+          ? 'border-sky-200 bg-sky-50 text-sky-700'
+          : 'border-amber-200 bg-amber-50 text-amber-700';
+
+  return (
+    <span className={cn('rounded-full border px-2.5 py-1 text-[11px] font-semibold', tone)}>
+      {status.replace(/_/g, ' ')}
+    </span>
   );
 }
 

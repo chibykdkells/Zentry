@@ -6,6 +6,8 @@ import { ServiceDeliveryMode } from '@zendocx/types';
 import {
   Activity,
   ArrowUpRight,
+  Eye,
+  EyeOff,
   Globe2,
   Loader2,
   LockKeyhole,
@@ -24,6 +26,7 @@ import { SkeletonBlock } from '@/components/shared/skeleton-loader';
 import { useTenantServiceManagementCatalog } from '@/hooks/use-tenant-services';
 import {
   useTenantProviderReadiness,
+  useUpdateTenantServiceSelection,
   useUpdateTenantVtuProviderConfig,
   useValidateTenantVtuProviderConfig,
   type UpdateTenantVtuProviderConfigInput,
@@ -55,6 +58,12 @@ type ProviderDraft = {
 };
 
 type ServiceStatusTone = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
+
+const DELIVERY_LABELS: Record<ServiceDeliveryMode, string> = {
+  [ServiceDeliveryMode.CBT_MANUAL]: 'Handled by your team',
+  [ServiceDeliveryMode.API_AUTOMATED]: 'Automated',
+  [ServiceDeliveryMode.PIN_STOCK]: 'Stock based',
+};
 
 const ROLLOUT_LABELS: Record<'AUTO' | 'MOCK' | 'LIVE', string> = {
   AUTO: 'Auto routing',
@@ -253,25 +262,36 @@ function buildUpdatePayload(draft: ProviderDraft): UpdateTenantVtuProviderConfig
 }
 
 function getServiceStatus({
+  deliveryMode,
   isSelected,
-  usesCustomSelection,
   isEnabled,
   probeStatus,
   mode,
   missingConfigCount,
 }: {
+  deliveryMode: ServiceDeliveryMode;
   isSelected: boolean;
-  usesCustomSelection: boolean;
   isEnabled: boolean;
   probeStatus: string;
   mode: 'live' | 'mock';
   missingConfigCount: number;
 }) {
-  if (usesCustomSelection && !isSelected) {
+  if (!isSelected) {
     return {
       label: 'Hidden',
       detail: 'Not currently offered in this business.',
       tone: 'neutral' as ServiceStatusTone,
+    };
+  }
+
+  if (deliveryMode !== ServiceDeliveryMode.API_AUTOMATED) {
+    return {
+      label: 'Ready',
+      detail:
+        deliveryMode === ServiceDeliveryMode.CBT_MANUAL
+          ? 'Handled by your team without a live API connection.'
+          : 'Handled through stocked inventory instead of a live API call.',
+      tone: 'success' as ServiceStatusTone,
     };
   }
 
@@ -353,10 +373,11 @@ export default function TenantProvidersPage() {
     loading: servicesLoading,
     error: servicesError,
   } = useTenantServiceManagementCatalog({});
+  const updateSelection = useUpdateTenantServiceSelection();
   const updateConfig = useUpdateTenantVtuProviderConfig();
   const validateConfig = useValidateTenantVtuProviderConfig();
 
-  const automatedServices = useMemo(
+  const apiManagedServices = useMemo(
     () =>
       services.filter(
         (service) => service.deliveryMode === ServiceDeliveryMode.API_AUTOMATED,
@@ -364,18 +385,18 @@ export default function TenantProvidersPage() {
     [services],
   );
 
-  const groupedAutomatedServices = useMemo(() => {
+  const groupedServices = useMemo(() => {
     const groups = new Map<
       string,
       {
         slug: string;
         name: string;
         description: string | null;
-        services: typeof automatedServices;
+        services: typeof services;
       }
     >();
 
-    automatedServices.forEach((service) => {
+    services.forEach((service) => {
       const existing = groups.get(service.category.slug);
       if (existing) {
         existing.services.push(service);
@@ -391,7 +412,7 @@ export default function TenantProvidersPage() {
     });
 
     return Array.from(groups.values());
-  }, [automatedServices]);
+  }, [services]);
 
   if (loading || servicesLoading) {
     return (
@@ -434,7 +455,19 @@ export default function TenantProvidersPage() {
     (readiness.scope.effectiveType ?? readiness.scope.type) === 'TENANT';
   const latestValidation = readiness.validationHistory[0] ?? null;
   const usesCustomSelection = selection?.usesCustomSelection ?? false;
-  const hiddenAutomatedServices = automatedServices.filter((service) => !service.isSelected).length;
+  const selectedServiceSlugs = selection?.selectedServiceSlugs ?? [];
+  const effectiveSelectedSlugs = usesCustomSelection
+    ? selectedServiceSlugs
+    : services.map((service) => service.slug);
+  const visibleServiceCount = effectiveSelectedSlugs.length;
+  const hiddenServiceCount = Math.max(services.length - visibleServiceCount, 0);
+  const hiddenApiServices = apiManagedServices.filter((service) => !service.isSelected).length;
+  const readyApiServices = apiManagedServices.filter((service) =>
+    service.isSelected &&
+    effectiveIsEnabled &&
+    readiness.vtu.missingConfig.length === 0 &&
+    probeStatus === 'healthy',
+  ).length;
   const hasDraftChanges = Object.keys(draft).length > 0;
 
   const openConfigModal = (serviceName?: string) => {
@@ -503,13 +536,58 @@ export default function TenantProvidersPage() {
     });
   };
 
+  const updateServiceVisibility = (slug: string, shouldShow: boolean) => {
+    setSuccessMessage('');
+
+    const current = new Set(
+      usesCustomSelection ? selectedServiceSlugs : services.map((service) => service.slug),
+    );
+
+    if (shouldShow) {
+      current.add(slug);
+    } else {
+      current.delete(slug);
+    }
+
+    updateSelection.mutate(
+      {
+        usesCustomSelection: true,
+        selectedServiceSlugs: Array.from(current),
+      },
+      {
+        onSuccess: () => {
+          setSuccessMessage(
+            shouldShow
+              ? 'Service is now visible in this business.'
+              : 'Service has been hidden from this business.',
+          );
+        },
+      },
+    );
+  };
+
+  const restoreAllServices = () => {
+    setSuccessMessage('');
+    updateSelection.mutate(
+      {
+        usesCustomSelection: false,
+        selectedServiceSlugs,
+      },
+      {
+        onSuccess: () => {
+          setSuccessMessage('This business now shows every service from the platform catalog.');
+        },
+      },
+    );
+  };
+
   return (
     <>
       <div className="mx-auto max-w-7xl space-y-6 p-4 pb-28 md:p-8 md:pb-12">
         <PageHero
           eyebrow="API Integrations"
-          title="Connect each automated service through one tenant-ready workspace"
-          description="Manage the tenant's shared API connection, confirm the provider is healthy, and see which automated services are live, hidden, or still waiting for configuration."
+          title="Service connections for this business"
+          description="See which services customers can use, decide whether requests should use the Zendocx default connection or your own provider, and confirm what still needs setup."
           actions={
             <>
               <button
@@ -539,7 +617,7 @@ export default function TenantProvidersPage() {
             <>
               <SummaryCard
                 icon={Activity}
-                label="Connection status"
+                label="Connection check"
                 value={probeLabel}
                 helper={readiness.vtu.probe.message}
                 tone={
@@ -552,9 +630,16 @@ export default function TenantProvidersPage() {
               />
               <SummaryCard
                 icon={PlugZap}
-                label="Active integration"
-                value={isTenantOverride ? 'Custom API' : 'Platform default'}
-                helper={`${automatedServices.length} automated services in scope`}
+                label="Connection source"
+                value={isTenantOverride ? 'Your provider' : 'Zendocx default'}
+                helper={`${visibleServiceCount} visible service${visibleServiceCount === 1 ? '' : 's'} across this business`}
+                tone="neutral"
+              />
+              <SummaryCard
+                icon={Sparkles}
+                label="API-ready services"
+                value={`${readyApiServices}/${apiManagedServices.length}`}
+                helper="Services already selected and ready for live API traffic"
                 tone="neutral"
               />
             </>
@@ -580,6 +665,15 @@ export default function TenantProvidersPage() {
             )}
           />
         ) : null}
+        {updateSelection.error ? (
+          <FeedbackBanner
+            tone="error"
+            message={getApiErrorMessage(
+              updateSelection.error,
+              'Could not update service visibility right now.',
+            )}
+          />
+        ) : null}
         {servicesError ? (
           <FeedbackBanner
             tone="warning"
@@ -593,14 +687,15 @@ export default function TenantProvidersPage() {
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                  Activation controls
+                  Business setup
                 </p>
                 <h2 className="mt-2 text-lg font-semibold text-slate-900">
-                  Choose how this tenant routes automated service calls
+                  Decide how this business handles connected services
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-slate-500">
-                  Save from here when you only need to toggle availability or rollout mode. Use
-                  the API configuration modal for endpoint and credential updates.
+                  Use this section to pause or resume automated traffic, choose whether requests
+                  should stay in mock mode or go live, and keep the service list below aligned
+                  with what this business is actually offering.
                 </p>
               </div>
 
@@ -623,11 +718,11 @@ export default function TenantProvidersPage() {
               <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/70 p-4">
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <p className="text-sm font-semibold text-slate-900">Tenant API override</p>
+                    <p className="text-sm font-semibold text-slate-900">Connection owner</p>
                     <p className="mt-1 text-sm text-slate-500">
                       {isTenantOverride
-                        ? 'This business is already using its own saved API configuration.'
-                        : 'This business is still inheriting the platform default provider.'}
+                        ? 'This business already uses its own saved provider details.'
+                        : 'This business is still using the Zendocx default provider details.'}
                     </p>
                   </div>
                   <span
@@ -645,7 +740,7 @@ export default function TenantProvidersPage() {
                 <div className="mt-5 grid gap-4 sm:grid-cols-2">
                   <label className="rounded-[1.35rem] border border-slate-200 bg-white p-4">
                     <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                      Rollout mode
+                      Request mode
                     </span>
                     <select
                       value={effectiveRolloutMode}
@@ -675,7 +770,7 @@ export default function TenantProvidersPage() {
                           {effectiveIsEnabled ? 'Enabled' : 'Paused'}
                         </p>
                         <p className="mt-1 text-sm text-slate-500">
-                          Pause automated traffic without removing the saved credentials.
+                          Pause automated requests without deleting the saved connection details.
                         </p>
                       </div>
 
@@ -708,14 +803,14 @@ export default function TenantProvidersPage() {
 
               <div className="space-y-4 rounded-[1.5rem] border border-slate-200 bg-white p-4">
                 <MetricCard
-                  label="Automated services"
-                  value={String(automatedServices.length)}
-                  helper="Catalog services that depend on this API layer"
+                  label="Visible services"
+                  value={String(visibleServiceCount)}
+                  helper="Services customers can currently see in this business"
                 />
                 <MetricCard
                   label="Hidden services"
-                  value={String(hiddenAutomatedServices)}
-                  helper="Automated services not currently offered in this tenant"
+                  value={String(hiddenServiceCount)}
+                  helper="Services intentionally hidden from this business"
                 />
                 <MetricCard
                   label="Latest validation"
@@ -730,15 +825,15 @@ export default function TenantProvidersPage() {
 
           <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-              Current endpoint
+              Connection details
             </p>
             <p className="mt-2 text-lg font-semibold text-slate-900">
               {effectiveBaseUrl || readiness.vtu.providerName}
             </p>
             <p className="mt-2 text-sm leading-6 text-slate-500">
               {effectiveBaseUrl
-                ? 'Requests route through the saved tenant endpoint shown here.'
-                : 'No tenant endpoint has been saved yet, so the platform default handles this business.'}
+                ? 'Requests route through the business-specific endpoint shown here.'
+                : 'No business-specific endpoint has been saved yet, so the Zendocx default handles this business.'}
             </p>
 
             <div className="mt-5 space-y-3">
@@ -764,8 +859,8 @@ export default function TenantProvidersPage() {
 
         <div className="inline-flex rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
           {[
-            { key: 'services', label: 'Automated services' },
-            { key: 'custom-api', label: 'Custom API setup' },
+            { key: 'services', label: 'Service list' },
+            { key: 'custom-api', label: 'Connection settings' },
           ].map((tab) => (
             <button
               key={tab.key}
@@ -787,13 +882,43 @@ export default function TenantProvidersPage() {
           <>
             <FeedbackBanner
               tone="info"
-              title="How this screen works"
-              message="Current customer pricing still follows the platform catalog price. The integration controls below focus on service visibility, connection status, and whether requests route through the platform default or this tenant's custom API."
+              title="Use this page in two passes"
+              message="First decide which services this business should show to customers. Then confirm which ones need a live API connection and whether they should use the Zendocx default or this business's own provider."
             />
 
-            {groupedAutomatedServices.length ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600">
+                <span className="font-semibold text-slate-900">{visibleServiceCount}</span>{' '}
+                visible
+              </div>
+              <div className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600">
+                <span className="font-semibold text-slate-900">{hiddenServiceCount}</span>{' '}
+                hidden
+              </div>
+              <div className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600">
+                <span className="font-semibold text-slate-900">{hiddenApiServices}</span>{' '}
+                API service{hiddenApiServices === 1 ? '' : 's'} still hidden
+              </div>
+              {usesCustomSelection ? (
+                <button
+                  type="button"
+                  onClick={restoreAllServices}
+                  disabled={updateSelection.isPending}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {updateSelection.isPending ? (
+                    <Loader2 size={15} className="animate-spin" />
+                  ) : (
+                    <Sparkles size={15} />
+                  )}
+                  Show every platform service
+                </button>
+              ) : null}
+            </div>
+
+            {groupedServices.length ? (
               <div className="space-y-5">
-                {groupedAutomatedServices.map((group) => (
+                {groupedServices.map((group) => (
                   <section
                     key={group.slug}
                     className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm"
@@ -803,7 +928,7 @@ export default function TenantProvidersPage() {
                         <div>
                           <p className="text-lg font-semibold text-slate-900">{group.name}</p>
                           <p className="mt-1 text-sm text-slate-500">
-                            {group.description || 'Automated services in this category.'}
+                            {group.description || 'Services grouped under this category.'}
                           </p>
                         </div>
                         <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
@@ -813,13 +938,14 @@ export default function TenantProvidersPage() {
                     </div>
 
                     <div className="overflow-x-auto">
-                      <table className="min-w-[980px] divide-y divide-slate-100">
+                      <table className="min-w-[1080px] divide-y divide-slate-100">
                         <thead className="bg-slate-50/80">
                           <tr className="text-left text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
                             <th className="px-5 py-3">Service</th>
-                            <th className="px-5 py-3">Platform price</th>
-                            <th className="px-5 py-3">Your price</th>
-                            <th className="px-5 py-3">Integration</th>
+                            <th className="px-5 py-3">Delivery</th>
+                            <th className="px-5 py-3">Visibility</th>
+                            <th className="px-5 py-3">How it runs</th>
+                            <th className="px-5 py-3">Price</th>
                             <th className="px-5 py-3">Status</th>
                             <th className="px-5 py-3 text-right">Actions</th>
                           </tr>
@@ -827,8 +953,8 @@ export default function TenantProvidersPage() {
                         <tbody className="divide-y divide-slate-100">
                           {group.services.map((service) => {
                             const status = getServiceStatus({
+                              deliveryMode: service.deliveryMode,
                               isSelected: service.isSelected,
-                              usesCustomSelection,
                               isEnabled: effectiveIsEnabled,
                               probeStatus,
                               mode: readiness.vtu.mode,
@@ -843,16 +969,50 @@ export default function TenantProvidersPage() {
                                       {service.name}
                                     </p>
                                     <p className="mt-1 max-w-sm text-sm leading-6 text-slate-500">
-                                      {service.description || 'Automated service request.'}
+                                      {service.description || 'Customer-facing service.'}
                                     </p>
                                   </div>
                                 </td>
                                 <td className="px-5 py-4">
+                                  <span
+                                    className={cn(
+                                      'inline-flex rounded-full px-3 py-1 text-xs font-semibold',
+                                      service.deliveryMode === ServiceDeliveryMode.API_AUTOMATED
+                                        ? 'bg-emerald-50 text-emerald-700'
+                                        : service.deliveryMode === ServiceDeliveryMode.CBT_MANUAL
+                                          ? 'bg-amber-50 text-amber-700'
+                                          : 'bg-blue-50 text-blue-700',
+                                    )}
+                                  >
+                                    {DELIVERY_LABELS[service.deliveryMode]}
+                                  </span>
+                                </td>
+                                <td className="px-5 py-4">
+                                  <span
+                                    className={cn(
+                                      'inline-flex rounded-full border px-3 py-1 text-xs font-semibold',
+                                      service.isSelected
+                                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                        : 'border-slate-200 bg-slate-50 text-slate-500',
+                                    )}
+                                  >
+                                    {service.isSelected ? 'Visible to customers' : 'Hidden'}
+                                  </span>
+                                </td>
+                                <td className="px-5 py-4">
                                   <p className="text-sm font-semibold text-slate-900">
-                                    {formatNaira(service.totalPrice)}
+                                    {service.deliveryMode === ServiceDeliveryMode.API_AUTOMATED
+                                      ? isTenantOverride
+                                        ? 'Your API connection'
+                                        : 'Zendocx default connection'
+                                      : service.deliveryMode === ServiceDeliveryMode.CBT_MANUAL
+                                        ? 'Your team completes the request'
+                                        : 'Zendocx stock inventory'}
                                   </p>
                                   <p className="mt-1 text-xs text-slate-400">
-                                    Published platform catalog price
+                                    {service.deliveryMode === ServiceDeliveryMode.API_AUTOMATED
+                                      ? readiness.vtu.providerName
+                                      : 'No API setup required'}
                                   </p>
                                 </td>
                                 <td className="px-5 py-4">
@@ -860,15 +1020,7 @@ export default function TenantProvidersPage() {
                                     {formatNaira(service.totalPrice)}
                                   </p>
                                   <p className="mt-1 text-xs text-slate-400">
-                                    Currently mirrors platform pricing
-                                  </p>
-                                </td>
-                                <td className="px-5 py-4">
-                                  <p className="text-sm font-semibold text-slate-900">
-                                    {isTenantOverride ? 'Custom API' : 'Platform default'}
-                                  </p>
-                                  <p className="mt-1 text-xs text-slate-400">
-                                    {readiness.vtu.providerName}
+                                    Published customer price
                                   </p>
                                 </td>
                                 <td className="px-5 py-4">
@@ -886,23 +1038,27 @@ export default function TenantProvidersPage() {
                                 </td>
                                 <td className="px-5 py-4">
                                   <div className="flex justify-end gap-2">
+                                    {service.deliveryMode === ServiceDeliveryMode.API_AUTOMATED ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => openConfigModal(service.name)}
+                                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                                      >
+                                        <Settings2 size={15} />
+                                        Configure API
+                                      </button>
+                                    ) : null}
                                     <button
                                       type="button"
-                                      onClick={() => openConfigModal(service.name)}
-                                      className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                                      onClick={() =>
+                                        updateServiceVisibility(service.slug, !service.isSelected)
+                                      }
+                                      disabled={updateSelection.isPending}
+                                      className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
                                     >
-                                      <Settings2 size={15} />
-                                      Configure
+                                      {service.isSelected ? <EyeOff size={15} /> : <Eye size={15} />}
+                                      {service.isSelected ? 'Hide' : 'Show'}
                                     </button>
-                                    {!service.isSelected ? (
-                                      <Link
-                                        href="/tenant/services"
-                                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-white"
-                                      >
-                                        <Sparkles size={15} />
-                                        Manage
-                                      </Link>
-                                    ) : null}
                                   </div>
                                 </td>
                               </tr>
@@ -916,8 +1072,8 @@ export default function TenantProvidersPage() {
               </div>
             ) : (
               <EmptyState
-                title="No automated services yet"
-                message="This tenant is not currently exposing any API-automated services. Add or enable automated services first, then come back here to connect the provider."
+                title="No services available yet"
+                message="This business is not currently exposing any services. Open the service workspace first, then come back here to handle visibility and API setup."
                 icon={PlugZap}
                 action={
                   <Link

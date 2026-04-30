@@ -2753,6 +2753,10 @@ export class WalletService {
       return user;
     }
 
+    if (user.role === UserRole.TENANT_ADMIN) {
+      return user;
+    }
+
     if (!user.cbtProfile) {
       throw new ForbiddenException(
         'Only approved CBT centers or the platform owner can request withdrawals.',

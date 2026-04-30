@@ -110,7 +110,7 @@ export class WalletController {
     return this.walletService.getCbtEarnings(user.sub, query, user.tenantId);
   }
 
-  @Roles(UserRole.CBT_CENTER, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.CBT_CENTER, UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)
   @Get('withdrawals')
   getMyWithdrawals(
     @CurrentUser() user: JwtUser,
@@ -119,13 +119,13 @@ export class WalletController {
     return this.walletService.getMyWithdrawals(user.sub, query, user.tenantId);
   }
 
-  @Roles(UserRole.CBT_CENTER)
+  @Roles(UserRole.CBT_CENTER, UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)
   @Get('banks')
   getBanks() {
     return this.walletService.getBanks();
   }
 
-  @Roles(UserRole.CBT_CENTER, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.CBT_CENTER, UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)
   @Post('withdrawals')
   createWithdrawalRequest(
     @CurrentUser() user: JwtUser,

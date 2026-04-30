@@ -9,6 +9,7 @@ interface WalletCardProps {
   availableBalance: string; // kobo as string from API
   escrowBalance?: string;
   onFundClick?: () => void;
+  actionLabel?: string;
   className?: string;
 }
 
@@ -16,6 +17,7 @@ export function WalletCard({
   availableBalance,
   escrowBalance,
   onFundClick,
+  actionLabel = 'Add money',
   className,
 }: WalletCardProps) {
   const [hidden, setHidden] = useState(false);
@@ -73,7 +75,7 @@ export function WalletCard({
           )}
         >
           <CreditCard size={16} />
-          Fund Account
+          {actionLabel}
         </button>
       </div>
     </div>
