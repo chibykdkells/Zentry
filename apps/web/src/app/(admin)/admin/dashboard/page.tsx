@@ -4,13 +4,12 @@ import Link from 'next/link';
 import { Activity, Building2, Receipt, Users } from 'lucide-react';
 import { AccountPanel } from '@/components/shared/account-panel';
 import { EmptyState } from '@/components/shared/empty-state';
-import { InfoHint } from '@/components/shared/info-hint';
 import { PageHero } from '@/components/shared/page-hero';
 import { SkeletonBlock } from '@/components/shared/skeleton-loader';
 import { StatCard } from '@/components/shared/stat-card';
 import { useAdminOperationsOverview } from '@/hooks/use-admin-operations';
 import { useAdminWalletOverview } from '@/hooks/use-admin-wallets';
-import { formatNaira } from '@/lib/format';
+import { formatDate, formatNaira, formatTimeUntil } from '@/lib/format';
 
 export default function AdminDashboardPage() {
   const {
@@ -103,15 +102,23 @@ export default function AdminDashboardPage() {
     <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-8">
       <PageHero
         eyebrow="Platform admin dashboard"
-        title="See business growth, support exposure, and payout posture in one place"
-        description="This dashboard is now centered on businesses, people, money movement, and live usage so the platform owner can make support and rollout decisions faster."
+        title="Run the platform from one operating view"
+        description="See business growth, money pressure, support load, and payout readiness without jumping across multiple screens."
         actions={
-          <Link
-            href="/admin/users"
-            className="inline-flex items-center justify-center rounded-2xl bg-[#0D1B3E] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#132754]"
-          >
-            Open business and user control
-          </Link>
+          <>
+            <Link
+              href="/admin/users"
+              className="inline-flex items-center justify-center rounded-2xl bg-[#0D1B3E] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#132754]"
+            >
+              Open business and user control
+            </Link>
+            <Link
+              href="/admin/finance"
+              className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-white"
+            >
+              Open finance
+            </Link>
+          </>
         }
       />
 
@@ -123,42 +130,33 @@ export default function AdminDashboardPage() {
 
       <div className="grid gap-6 xl:grid-cols-[0.98fr_1.02fr]">
         <AccountPanel
-          title="Workspace highlights"
-          description="A short human-language guide to what matters in this workspace."
+          title="Needs attention now"
+          description="The fastest reading of what the platform owner should look at next."
         >
-          <div className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
             {[
               {
-                title: 'Businesses',
-                description:
-                  'A business is a tenant portal. It contains its own users, jobs, settings, and wallet activity.',
+                title: 'Businesses on the platform',
+                description: `${overview.metrics.totalTenants} tenant portals are live or registered.`,
               },
               {
-                title: 'Live users',
-                description:
-                  'This count shows people currently connected through the live session layer, not just people who have logged in before.',
+                title: 'Live users right now',
+                description: `${overview.metrics.activeUsers} users are currently active in live sessions.`,
               },
               {
-                title: 'Held funds',
-                description:
-                  'Held funds are customer payments still waiting for completion, dispute clearance, or release. This helps support teams trace issues faster.',
+                title: 'Manual jobs waiting for pickup',
+                description: `${overview.metrics.pendingPoolJobs} manual jobs are still in the open pool.`,
               },
               {
-                title: 'Platform earnings',
-                description:
-                  'Platform earnings are the commissions retained by the platform owner, separate from CBT payouts and customer balances.',
+                title: 'Jobs waiting for release',
+                description: `${overview.metrics.awaitingRelease + overview.metrics.readyForRelease} completed jobs are still in the release pipeline.`,
               },
             ].map((item) => (
               <div
                 key={item.title}
                 className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4"
               >
-                <div className="flex items-center gap-2">
-                  <h2 className="text-sm font-semibold text-slate-900">
-                    {item.title}
-                  </h2>
-                  <InfoHint text={item.description} />
-                </div>
+                <h2 className="text-sm font-semibold text-slate-900">{item.title}</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-500">
                   {item.description}
                 </p>
@@ -169,7 +167,7 @@ export default function AdminDashboardPage() {
 
         <AccountPanel
           title="Platform money snapshot"
-          description="A short view of platform earnings, customer funds still on hold, and which businesses are carrying the largest support exposure."
+          description="Use this to read earnings, held customer money, and which businesses are carrying the most support exposure."
         >
           <div className="grid gap-3 sm:grid-cols-2">
             <MoneyTile
@@ -191,12 +189,9 @@ export default function AdminDashboardPage() {
           </div>
 
           <div className="mt-5 rounded-[1.5rem] border border-slate-100 bg-slate-50/70 p-4">
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-semibold text-slate-900">
-                Held funds by business
-              </h2>
-              <InfoHint text="Use this view when support needs to confirm which business portals currently have customer funds still waiting on completion or dispute clearance." />
-            </div>
+            <h2 className="text-sm font-semibold text-slate-900">
+              Held funds by business
+            </h2>
 
             {walletOverview.heldFundsByTenant.length ? (
               <div className="mt-4 space-y-3">
@@ -231,7 +226,7 @@ export default function AdminDashboardPage() {
       <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
         <AccountPanel
           title="Jobs waiting for a CBT center"
-          description="These are manual requests still waiting for a CBT center to pick them up."
+          description="These manual requests are still waiting for a CBT center to pick them up."
           actions={
             <Link
               href="/admin/orders"
@@ -266,10 +261,38 @@ export default function AdminDashboardPage() {
         </AccountPanel>
 
         <AccountPanel
-          title="Platform posture"
-          description="A quick support-oriented reading of what needs attention across the platform."
+          title="Release pressure"
+          description="Use this to understand where the platform is feeling payout or operations pressure."
         >
-          <div className="space-y-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <MoneyTile
+              label="Ready for release"
+              value={String(overview.scheduler.readyCount)}
+            />
+            <MoneyTile
+              label="Still waiting"
+              value={String(overview.scheduler.awaitingCount)}
+            />
+            <MoneyTile
+              label="Blocked"
+              value={String(overview.scheduler.blockedCount)}
+            />
+            <MoneyTile
+              label="Dispute window"
+              value={`${overview.scheduler.disputeWindowHours}h`}
+            />
+          </div>
+
+          <div className="mt-5 rounded-[1.5rem] border border-slate-100 bg-slate-50/70 p-4">
+            <p className="text-sm font-semibold text-slate-900">Next release timing</p>
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              {overview.scheduler.nextWindowExpiryAt
+                ? `The next dispute window closes on ${formatDate(overview.scheduler.nextWindowExpiryAt)} (${formatTimeUntil(overview.scheduler.nextWindowExpiryAt)}).`
+                : 'No release window is currently counting down.'}
+            </p>
+          </div>
+
+          <div className="mt-5 space-y-3">
             <PostureRow
               label="Manual jobs waiting for pickup"
               value={String(overview.metrics.pendingPoolJobs)}
@@ -281,10 +304,6 @@ export default function AdminDashboardPage() {
             <PostureRow
               label="Manual jobs completed"
               value={String(overview.metrics.completedJobs)}
-            />
-            <PostureRow
-              label="Jobs waiting for payout release"
-              value={String(overview.metrics.awaitingRelease + overview.metrics.readyForRelease)}
             />
           </div>
         </AccountPanel>

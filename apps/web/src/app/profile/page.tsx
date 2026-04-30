@@ -77,7 +77,7 @@ export default function ProfilePage() {
                   {profile.firstName} {profile.lastName}
                 </h1>
                 <p className="mt-1 text-sm text-slate-500">
-                  Member since {formatDate(profile.createdAt)}
+                  Signed up {formatDate(profile.createdAt)}
                 </p>
               </div>
             </div>
@@ -94,20 +94,27 @@ export default function ProfilePage() {
               <ProfileHighlight label="Role" value={formatRole(profile.role)} />
             </div>
           </div>
+
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+            <Link
+              href={appendTenantContextToPath('/wallet', tenantSlug)}
+              className="inline-flex items-center justify-center rounded-2xl bg-brand-button px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand-button-strong"
+            >
+              Open wallet
+            </Link>
+            <Link
+              href={appendTenantContextToPath('/security', tenantSlug)}
+              className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-white"
+            >
+              Manage security
+            </Link>
+          </div>
         </section>
 
         <div className="grid gap-5 md:gap-6 xl:grid-cols-[1.2fr_0.8fr]">
           <AccountPanel
-            title="Personal details"
-            description="This is the account information currently available across authentication, wallet, and notifications."
-            actions={
-              <Link
-                href={appendTenantContextToPath('/wallet', tenantSlug)}
-                className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-white"
-              >
-                Open wallet
-              </Link>
-            }
+            title="Account details"
+            description="These details power sign-in, wallet activity, notifications, and service updates."
           >
             <div className="space-y-4">
               <InfoRow
@@ -139,7 +146,7 @@ export default function ProfilePage() {
                   Update basic details
                 </h3>
                 <p className="text-sm leading-6 text-slate-500">
-                  Edit your name and phone number without leaving this page.
+                  Change your name and phone number here without leaving the profile workspace.
                 </p>
               </div>
               <ProfileEditForm profile={profile} />
@@ -148,16 +155,16 @@ export default function ProfilePage() {
 
           <div className="space-y-6">
             <AccountPanel
-              title="Account status"
-              description="A quick read on verification, approval, and security readiness."
+              title="Account readiness"
+              description="A quick read on access, verification, and what still needs attention."
             >
               <div className="space-y-4">
                 <StatusCard
                   title="Email verification"
                   description={
                     profile.isEmailVerified
-                      ? 'Your email is verified and ready for sign-in, notifications, and order updates.'
-                      : 'Please verify your email to unlock the rest of the platform.'
+                      ? 'Your email is ready for sign-in, notifications, and account recovery.'
+                      : 'Verify your email so recovery, notifications, and service updates keep working.'
                   }
                   tone={profile.isEmailVerified ? 'success' : 'warning'}
                 />
@@ -173,28 +180,51 @@ export default function ProfilePage() {
                   />
                 ) : null}
                 <StatusCard
-                  title="Security"
-                  description="Password reset and wallet PIN flows are available in the current authentication layer. Dedicated account controls can be surfaced later without changing the backend."
+                  title="Security access"
+                  description="Password change, account recovery, and wallet protections are managed from the security workspace."
                   tone="neutral"
+                />
+              </div>
+
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                <ProfileHighlight
+                  label="Last sign-in"
+                  value={
+                    profile.lastLoginAt ? formatDate(profile.lastLoginAt) : 'No activity yet'
+                  }
+                />
+                <ProfileHighlight
+                  label="Phone status"
+                  value={profile.isPhoneVerified ? 'Trusted' : 'Needs attention'}
                 />
               </div>
             </AccountPanel>
 
-            <AccountPanel title="What you can do next">
+            <AccountPanel
+              title="Quick actions"
+              description="The fastest next steps for this account."
+            >
               <div className="space-y-3">
                 <ActionRow
                   icon={Wallet}
                   title="Review wallet balances"
-                  description="Track available funds, money on hold, and wallet readiness from one place."
+                  description="See what is available, what is on hold, and what has already moved."
                   href={appendTenantContextToPath('/wallet', tenantSlug)}
                   cta="Open wallet"
                 />
                 <ActionRow
                   icon={ShieldCheck}
-                  title="Stay account ready"
-                  description="Use verified email access and PIN protection to keep your orders and payouts secure."
+                  title="Keep access secure"
+                  description="Change your password, manage recovery, and keep sensitive actions protected."
                   href={appendTenantContextToPath('/security', tenantSlug)}
                   cta="View security"
+                />
+                <ActionRow
+                  icon={UserCircle2}
+                  title="Get account help"
+                  description="Open support when you need help with verification, access, or account corrections."
+                  href={appendTenantContextToPath('/support', tenantSlug)}
+                  cta="Open support"
                 />
               </div>
             </AccountPanel>

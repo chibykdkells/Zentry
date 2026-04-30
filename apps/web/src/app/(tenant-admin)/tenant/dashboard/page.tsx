@@ -12,7 +12,6 @@ import {
 } from 'lucide-react';
 import { AccountPanel } from '@/components/shared/account-panel';
 import { EmptyState } from '@/components/shared/empty-state';
-import { InfoHint } from '@/components/shared/info-hint';
 import { PageHero } from '@/components/shared/page-hero';
 import { SkeletonBlock } from '@/components/shared/skeleton-loader';
 import { StatCard } from '@/components/shared/stat-card';
@@ -58,17 +57,29 @@ export default function TenantDashboardPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-8">
       <PageHero
-        eyebrow="Business operations"
-        title={`${overview.tenant.name} operations dashboard`}
-        description="This is the business-admin workspace for one tenant. It focuses on your customers, your CBT network, current service activity, and payout readiness inside this business only."
+        eyebrow="Business command center"
+        title={`${overview.tenant.name} at a glance`}
+        description="Track this business's customers, operators, active work, and payout posture from one operating view."
         actions={
           <>
             <Link
               href="/tenant/users"
               className="inline-flex items-center gap-2 rounded-2xl bg-brand-button px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand-button-strong"
             >
-              Open customers
+              Manage users
               <ArrowRight size={16} />
+            </Link>
+            <Link
+              href="/tenant/services"
+              className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-white"
+            >
+              Business services
+            </Link>
+            <Link
+              href="/wallet"
+              className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-white"
+            >
+              Open wallet
             </Link>
             <Link
               href="/tenant/providers"
@@ -83,18 +94,18 @@ export default function TenantDashboardPage() {
       <section className="grid gap-4 lg:grid-cols-3">
         {[
           {
-            title: 'Customer activity',
-            text: 'Watch how many individual customers are active in this business and how much money is still held against open service work.',
+            title: 'People in this business',
+            text: `${overview.metrics.individualUsers} customers and ${overview.metrics.cbtUsers} CBT centers are currently inside this tenant.`,
             tone: 'from-slate-50 to-white',
           },
           {
-            title: 'CBT operations',
-            text: 'Keep the CBT network separate from customer accounts so operations stay easy to scan during support or daily review.',
+            title: 'Work in motion',
+            text: `${overview.metrics.activeOrders} active requests are still moving, with ${overview.metrics.disputedOrders} already in dispute.`,
             tone: 'from-amber-50/70 to-white',
           },
           {
-            title: 'Payout readiness',
-            text: 'Use the queue below to understand what is still waiting, what is ready, and what is blocked inside this business only.',
+            title: 'Payout pressure',
+            text: `${overview.metrics.readyReleaseCount} ready for payout, ${overview.metrics.awaitingReleaseCount} still waiting, ${overview.metrics.blockedReleaseCount} blocked.`,
             tone: 'from-emerald-50/70 to-white',
           },
         ].map((item) => (
@@ -103,7 +114,7 @@ export default function TenantDashboardPage() {
             className={`rounded-[1.5rem] border border-slate-200 bg-gradient-to-br ${item.tone} p-5 shadow-sm`}
           >
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-              Workspace guide
+              Quick read
             </p>
             <h2 className="mt-3 text-base font-semibold text-slate-900">{item.title}</h2>
             <p className="mt-2 text-sm leading-6 text-slate-500">{item.text}</p>
@@ -140,31 +151,26 @@ export default function TenantDashboardPage() {
 
       <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
         <AccountPanel
-          title="Business health"
-          description="A quick snapshot of the people and service activity inside this one business portal."
+          title="Needs attention now"
+          description="The fastest way to understand what the business admin should check next."
         >
-          <div className="rounded-[1.5rem] border border-slate-100 bg-slate-50/70 p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-              What this means
-            </p>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              These numbers are scoped to this business only, so you can read them as an operations view instead of a platform-wide admin report.
-            </p>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2">
             {[
               {
-                label: 'Customers + CBT centers',
-                value: overview.metrics.individualUsers + overview.metrics.cbtUsers,
+                label: 'Requests still active',
+                value: overview.metrics.activeOrders,
               },
               {
-                label: 'Completed requests',
-                value: overview.metrics.completedOrders,
-              },
-              {
-                label: 'Requests in dispute',
+                label: 'Disputes already open',
                 value: overview.metrics.disputedOrders,
+              },
+              {
+                label: 'Ready for payout release',
+                value: overview.metrics.readyReleaseCount,
+              },
+              {
+                label: 'Business balance available',
+                value: formatNaira(overview.metrics.availableBalance),
               },
             ].map((item) => (
               <div
@@ -181,27 +187,27 @@ export default function TenantDashboardPage() {
 
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             <MiniFinanceTile
-              label="Business available balance"
-              value={formatNaira(overview.metrics.availableBalance)}
+              label="Completed requests"
+              value={String(overview.metrics.completedOrders)}
             />
             <MiniFinanceTile
-              label="CBT centers in this business"
-              value={String(overview.metrics.cbtUsers)}
+              label="Held customer funds"
+              value={formatNaira(overview.metrics.heldFunds)}
             />
             <MiniFinanceTile
-              label="Customers"
-              value={String(overview.metrics.individualUsers)}
+              label="Customers + CBT centers"
+              value={String(overview.metrics.individualUsers + overview.metrics.cbtUsers)}
             />
             <MiniFinanceTile
-              label="Ready for payout release"
-              value={String(overview.metrics.readyReleaseCount)}
+              label="Blocked by dispute"
+              value={String(overview.metrics.blockedReleaseCount)}
             />
           </div>
         </AccountPanel>
 
         <AccountPanel
-          title="Recent users"
-          description="The latest people who joined or were provisioned into this business."
+          title="Newest users in this business"
+          description="The latest people who joined or were provisioned into this tenant."
         >
           {overview.recentUsers.length ? (
             <div className="space-y-3">
@@ -246,15 +252,10 @@ export default function TenantDashboardPage() {
 
       <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
         <AccountPanel
-          title="Payout readiness"
-          description="This is the business-facing release queue. It helps the tenant admin know which completed manual jobs are still waiting, ready, or blocked."
+          title="Money and payout posture"
+          description="Use this to understand what is waiting, what is ready, and what the business can already move."
         >
-          <div className="flex items-center gap-2 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3 text-sm text-slate-500">
-            <InfoHint text="Ready means the dispute window has passed and the payout can move when platform release processing runs. Waiting means the dispute window is still open. Blocked means a dispute is holding the payout back." />
-            This section explains payout readiness in simple business language.
-          </div>
-
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-3">
             <MiniFinanceTile
               label="Waiting on dispute window"
               value={String(overview.metrics.awaitingReleaseCount)}
@@ -268,11 +269,19 @@ export default function TenantDashboardPage() {
               value={String(overview.metrics.blockedReleaseCount)}
             />
           </div>
+
+          <div className="mt-5 rounded-[1.5rem] border border-slate-100 bg-slate-50/70 p-4">
+            <p className="text-sm font-semibold text-slate-900">How to read this</p>
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              Waiting means the dispute window is still open. Ready means the work is clear
+              for payout. Blocked means a dispute is holding the release back.
+            </p>
+          </div>
         </AccountPanel>
 
         <AccountPanel
           title="Completed job queue"
-          description="See which completed manual jobs are still waiting, which are ready, and which are blocked by a dispute."
+          description="See which completed manual jobs are still waiting, ready, or blocked."
         >
           {overview.releaseQueue.length ? (
             <div className="space-y-3">

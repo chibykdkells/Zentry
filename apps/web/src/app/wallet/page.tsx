@@ -224,24 +224,14 @@ export default function WalletPage() {
         ];
 
   const walletHeroDescription = isRequesterOnly
-    ? 'View what is available now, what is on hold for active requests, and recent wallet activity.'
+    ? 'See what you can spend now, what is still reserved for open requests, and the latest wallet movement.'
     : isCbt
-      ? 'Track released earnings, funds still on hold, and the wallet activity tied to jobs you completed.'
+      ? 'Track released earnings, funds still on hold, and recent payout-related movement.'
       : isTenantAdmin
-        ? 'Manage the business wallet, track money reserved for active work, and submit payout requests when funds are ready.'
+        ? 'Run the business wallet from one place: see cleared money, held funds, and when the business is ready for payout.'
       : isPlatformOwner
-        ? 'Track platform-held funds, released balances, and ledger activity tied to platform earnings and withdrawals.'
-        : 'View what is available now, what is on hold, and recent wallet activity.';
-
-  const balanceHealthDescription = isRequesterOnly
-    ? 'A quick summary of what you can spend now, what is temporarily on hold for active requests, and how active this wallet has been.'
-    : isCbt
-      ? 'A quick summary of released earnings, funds still on hold, and payout movement in this wallet.'
-      : isTenantAdmin
-        ? 'A quick summary of what the business can use now, what is still reserved, and how much has already moved through this wallet.'
-      : isPlatformOwner
-        ? 'A quick summary of what the platform wallet can use now, what is still on hold, and how much has moved through it.'
-        : 'A quick summary of what is available now, what is on hold, and how active this wallet has been.';
+        ? 'Track platform-held money, released balances, and withdrawal activity without jumping between screens.'
+        : 'See what is available now, what is on hold, and the latest wallet movement.';
 
   return (
     <ProtectedShell title="Wallet">
@@ -271,7 +261,7 @@ export default function WalletPage() {
                   className="inline-flex items-center gap-2 rounded-2xl bg-brand-button px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand-button-strong"
                 >
                   <WalletIcon size={16} />
-                  Add money online
+                  Fund wallet
                 </button>
               ) : null}
               {canRequestWithdrawal ? (
@@ -299,44 +289,48 @@ export default function WalletPage() {
             escrowBalance={wallet.escrowBalance}
             className="min-h-[18rem]"
             onFundClick={canTryOnlineFunding ? () => setFundingOpen(true) : undefined}
-            actionLabel="Add money online"
+            actionLabel="Fund wallet"
           />
           <AccountPanel
-            title="Balance health"
-            description={balanceHealthDescription}
+            title="What you can do now"
+            description={
+              isRequesterOnly
+                ? 'Use the wallet for funding, request payments, and checking what is still reserved.'
+                : isCbt
+                  ? 'Use this wallet for earnings visibility, payout tracking, and reviewing recent movement.'
+                  : isTenantAdmin
+                    ? 'Use this business wallet for withdrawals, business balance checks, and payout tracking. Online top-up stays hidden until the live business flow is stable.'
+                    : 'Use this wallet for platform balance visibility, withdrawals, and finance review.'
+            }
             contentClassName="space-y-4"
           >
-            <BalanceRow
-              label="Available balance"
-              value={formatNaira(wallet.availableBalance)}
-              tone="strong"
+            <ReadinessRow
+              icon={WalletIcon}
+              title="Available now"
+              description={`${formatNaira(wallet.availableBalance)} is ready to use immediately.`}
             />
-            <BalanceRow
-              label="Funds on hold"
-              value={formatNaira(wallet.escrowBalance)}
+            <ReadinessRow
+              icon={Clock3}
+              title="Still on hold"
+              description={`${formatNaira(wallet.escrowBalance)} is still reserved for active work or release checks.`}
             />
             {!isRequesterOnly ? (
-              <BalanceRow
-                label={
-                  isCbt
-                    ? 'Total earned'
-                    : isTenantAdmin
-                      ? 'Business earnings'
-                      : 'Total platform earnings'
+              <ReadinessRow
+                icon={Landmark}
+                title="Withdrawals"
+                description={
+                  isTenantAdmin
+                    ? 'Business payouts can be requested from the withdrawal section below.'
+                    : 'Withdrawal requests and payout history are available lower on this page.'
                 }
-                value={formatNaira(wallet.totalEarned)}
               />
-            ) : null}
-            {!isRequesterOnly ? (
-              <BalanceRow
-                label="Total withdrawn"
-                value={formatNaira(wallet.totalWithdrawn)}
+            ) : (
+              <ReadinessRow
+                icon={ReceiptText}
+                title="Ledger activity"
+                description={`${wallet.transactionCount} wallet transaction${wallet.transactionCount === 1 ? '' : 's'} are already recorded.`}
               />
-            ) : null}
-            <BalanceRow
-              label="Transactions on record"
-              value={wallet.transactionCount.toString()}
-            />
+            )}
           </AccountPanel>
         </div>
 
@@ -347,13 +341,13 @@ export default function WalletPage() {
           )}
         >
           <StatCard
-            title="Available"
+            title="Ready now"
             value={formatNaira(wallet.availableBalance)}
             icon={WalletIcon}
             variant="navy"
           />
           <StatCard
-            title="On hold"
+            title="Reserved"
             value={formatNaira(wallet.escrowBalance)}
             icon={Clock3}
             variant="orange"
@@ -389,26 +383,6 @@ export default function WalletPage() {
           )}
         </div>
 
-        {isTenantAdmin ? (
-          <AccountPanel
-            title="Before you use this business wallet"
-            description="Keep the wallet actions honest and easy to understand for business admins."
-          >
-            <div className="grid gap-4 xl:grid-cols-2">
-              <ReadinessRow
-                icon={WalletIcon}
-                title="Online top-up is still being prepared for business wallets"
-                description="This page now focuses on balances, earnings, and withdrawals first. Online funding will return here once the live gateway flow is stable for business accounts."
-              />
-              <ReadinessRow
-                icon={Landmark}
-                title="Withdrawals are now available from this business wallet"
-                description="When the business has cleared funds, you can submit a payout request from the withdrawal section below."
-              />
-            </div>
-          </AccountPanel>
-        ) : null}
-
         {canRequestWithdrawal ? (
           <section id="withdrawals">
             <WithdrawalWorkspace
@@ -420,13 +394,13 @@ export default function WalletPage() {
 
         <div className="grid gap-5 md:gap-6 xl:grid-cols-[1.05fr_0.95fr]">
           <AccountPanel
-            title="Transaction history"
+            title="Wallet ledger"
             description={
               isRequesterOnly
-                ? 'Filter the live wallet ledger by type, status, or date range. This history focuses on funding, request spending, held funds, releases, and refunds.'
+                ? 'Filter the wallet ledger by type, status, or date range to review funding, spending, held funds, releases, and refunds.'
                 : isCbt
-                  ? 'Filter the live wallet ledger by type, status, or date range. This history focuses on released CBT earnings, withdrawals, and related wallet movement.'
-                  : 'Filter the live wallet ledger by type, status, or date range. Funding confirmations now appear here as soon as they are credited.'
+                  ? 'Filter the ledger by type, status, or date range to track earnings, withdrawals, and payout-related movement.'
+                  : 'Filter the ledger by type, status, or date range to review balance movement without leaving this workspace.'
             }
             contentClassName="space-y-4"
           >
@@ -590,13 +564,13 @@ export default function WalletPage() {
           </AccountPanel>
 
           <AccountPanel
-            title="Latest activity snapshot"
+            title="Latest balance-moving activity"
             description={
               isRequesterOnly
-                ? 'This compact view keeps your latest request-related wallet movement visible without making the full page longer.'
+                ? 'A compact recent-activity view so you do not have to scan the full filtered ledger first.'
                 : isCbt
-                  ? 'This compact view keeps the most recent earnings and payout-related wallet movement visible without leaving the page.'
-                  : 'This remains the compact five-item overview from the wallet summary API, so you can compare the filtered ledger with the latest balance-impacting activity quickly.'
+                  ? 'A compact recent-activity view for the most recent earnings and payout movement.'
+                  : 'A compact recent-activity view so the newest balance changes stay visible beside the ledger.'
             }
           >
             {wallet.recentTransactions.length === 0 ? (
@@ -615,28 +589,6 @@ export default function WalletPage() {
           </AccountPanel>
         </div>
 
-        <AccountPanel
-          title="Wallet readiness"
-          description="These safeguards help prepare the wallet experience for funding, held funds, and withdrawals."
-        >
-          <div className="grid gap-4 xl:grid-cols-3">
-            <ReadinessRow
-              icon={ShieldCheck}
-              title="Protected access"
-              description="Wallet access is tied to your authenticated session and refresh-token flow."
-            />
-            <ReadinessRow
-              icon={LockKeyhole}
-              title="PIN-backed operations"
-              description="Wallet PIN APIs are already available on the backend for secure sensitive actions."
-            />
-            <ReadinessRow
-              icon={RefreshCcw}
-              title="Phase 2 ready"
-              description="Funding, ledger history, and payout flows can plug into this layout without restructuring the page."
-            />
-          </div>
-        </AccountPanel>
       </div>
     </ProtectedShell>
   );
