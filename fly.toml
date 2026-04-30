@@ -1,0 +1,27 @@
+app = "zentry-api-prod"
+primary_region = "lhr"
+
+[build]
+  dockerfile = "apps/api/Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "4000"
+
+[deploy]
+  release_command = "node_modules/.bin/prisma migrate deploy --schema=apps/api/prisma/schema.prisma"
+  release_command_timeout = "10m"
+
+[http_service]
+  internal_port = 4000
+  force_https = true
+  auto_start_machines = true
+  auto_stop_machines = "off"
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "30s"
+    interval = "15s"
+    method = "GET"
+    path = "/health"
+    timeout = "5s"
