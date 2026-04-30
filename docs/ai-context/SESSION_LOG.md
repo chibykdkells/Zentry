@@ -1,4 +1,4 @@
-# SESSION_LOG.md — Zentry AI Session Log
+# SESSION_LOG.md — ZenDocx AI Session Log
 
 > This file is updated by the AI assistant at the end of every session.
 > It serves as a living memory of what was done, decided, and changed.
@@ -13,6 +13,71 @@
 > ### Decisions Made
 > ### Phase Checklist Updates
 > ### Blockers / Notes for Next Session
+
+---
+
+## Session 2026-04-30 — Stack Correction: Fly.io replaces Railway, domain migrated to zendocx.net, Paystack set as primary payment provider
+
+**Phase:** Phase 10 — Admin Analytics, Security Audit & Launch
+**AI Assistant:** Claude Sonnet 4.6
+
+### What Was Done
+
+Three configuration corrections applied across the codebase:
+
+1. **Payment provider switched to Paystack** — `ACTIVE_PAYMENT_PROVIDER` changed from `FINTAVAPAY` to `PAYSTACK` in `.env` and `providers.module.ts`. Paystack is now the primary gateway; FintavaPay demoted to backup. No business logic changed — the PAL absorbed the switch.
+
+2. **Domain migrated from `zendocx.net` to `zendocx.net`** — All hardcoded domain references replaced across live code, config, seed, tests, and docs. Files changed: `tenant-resolver.service.ts`, `tenant-runtime.ts`, `tenant-theme.ts`, `resend.provider.ts`, `push-delivery.service.ts`, `seed.ts`, `.env`, `.env.example`, `tenant-resolver.service.spec.ts`, and all `docs/ai-context/` files.
+
+3. **API hosting corrected to Fly.io** — `fly.toml` added for `zendocx-api-prod`. Stack is now Fly.io (API + Postgres + Redis) + Vercel (frontend) + Cloudflare (DNS/WAF, domain registered directly on Cloudflare registrar). Railway is no longer in use. Docs updated to reflect this.
+
+4. **CORS improved for tenant subdomains** — `main.ts` updated to dynamically allow all `*.zendocx.net` origins using a subdomain suffix check, driven by new `PLATFORM_DOMAIN` env var. Hardcoded fallback in `tenant-resolver.service.ts` also now reads from `PLATFORM_DOMAIN`.
+
+### Files Created / Modified
+
+- `apps/api/.env` — `ACTIVE_PAYMENT_PROVIDER=PAYSTACK`, `RESEND_FROM_EMAIL=noreply@zendocx.net`, `PLATFORM_DOMAIN=zendocx.net`
+- `.env.example` — same keys updated + `PLATFORM_DOMAIN` added
+- `apps/api/src/providers/providers.module.ts` — Paystack as default payment provider
+- `apps/api/src/providers/payment/fintavapay.provider.ts` — demoted to backup
+- `apps/api/src/modules/tenant/tenant-resolver.service.ts` — `PLATFORM_HOSTNAME` reads from `PLATFORM_DOMAIN` env var
+- `apps/api/src/modules/tenant/tenant-resolver.service.spec.ts` — domain updated in tests
+- `apps/api/src/providers/email/resend.provider.ts` — fallback email updated
+- `apps/api/src/modules/notifications/push-delivery.service.ts` — VAPID subject updated
+- `apps/api/prisma/seed.ts` — super admin email updated to `admin@zendocx.net`
+- `apps/api/src/main.ts` — `PLATFORM_DOMAIN` env var read; wildcard subdomain CORS check added
+- `apps/web/src/lib/tenant-runtime.ts` — subdomain regex updated
+- `apps/web/src/lib/tenant-theme.ts` — subdomain regex updated
+- `fly.toml` — NEW: Fly.io service config (app: `zendocx-api-prod`, region: `lhr`)
+- `CLAUDE.md` — Payments and domain updated
+- `docs/ai-context/PROVIDERS.md` — active payment provider and domain updated
+- `docs/ai-context/PHASES.md` — Railway/Render → Fly.io
+
+### Decisions Made
+
+- **Fly.io over Railway for API**: Fly.io gives persistent containers with global anycast routing, dedicated IPs, and built-in Postgres + Redis — fewer moving parts than Railway's service-per-resource model.
+- **Domain registered on Cloudflare Registrar**: Eliminates the separate registrar step. DNS is managed natively in the same Cloudflare dashboard as WAF and proxying.
+- **Paystack as primary payment provider**: `zendocx.net` domain was unavailable; simultaneous rebrand to `zendocx.net`. FintavaPay kept as backup adapter — zero code deletion required by PAL design.
+- **`PLATFORM_DOMAIN` env var**: Replaces the hardcoded `'zendocx.net'` / `'zendocx.net'` string in both the CORS handler and the tenant resolver. Future domain changes now require only an env var update.
+
+### Phase Checklist Updates
+
+Phase 10:
+- [x] Fly.io deployment config: `fly.toml` added
+- [ ] Fly.io dashboard wiring: create app, set secrets, allocate IPs (user action)
+- [ ] Cloudflare DNS records: A → Fly.io, CNAME → Vercel (user action)
+- [ ] Resend domain verification for `zendocx.net` (user action)
+
+### Blockers / Notes for Next Session
+
+**User actions still needed to go live:**
+1. `fly ips allocate-v4 --app zendocx-api-prod` + `fly ips allocate-v6 --app zendocx-api-prod`
+2. `fly certs add api.zendocx.net --app zendocx-api-prod`
+3. Add DNS records in Cloudflare (A → Fly IPs for `api`, CNAME → Vercel for `app`, `www`, `*`, `@`)
+4. Add domains in Vercel dashboard (`zendocx.net`, `www`, `app`, `*`)
+5. `fly secrets set ...` — all vars from `.env.example` with real values
+6. Verify `zendocx.net` as sending domain in Resend dashboard
+7. Generate VAPID keys: `npx web-push generate-vapid-keys`
+8. Add Paystack live keys: `PAYSTACK_SECRET_KEY`, `PAYSTACK_WEBHOOK_SECRET`
 
 ---
 
@@ -38,7 +103,7 @@ Production deployment config added for the full stack (Railway API + Vercel web 
 
 5. **`railway.toml`** — Railway service config: dockerfile builder pointing to `apps/api/Dockerfile`, healthcheck at `/health` with 300s timeout, on-failure restart policy.
 
-6. **`apps/web/vercel.json`** — Vercel config for the pnpm monorepo: install command runs from repo root, build runs `pnpm --filter=@zentry/web build`, output directory `.next`.
+6. **`apps/web/vercel.json`** — Vercel config for the pnpm monorepo: install command runs from repo root, build runs `pnpm --filter=@zendocx/web build`, output directory `.next`.
 
 7. **`.github/workflows/ci.yml`** — GitHub Actions CI: triggers on push/PR to `main`, runs lint → typecheck → build with dummy env vars so Next.js build passes in CI without real secrets.
 
@@ -57,7 +122,7 @@ Production deployment config added for the full stack (Railway API + Vercel web 
 
 - **Railway over Render** for the API: Railway runs persistent containers (required for Socket.io WebSockets + Bull queue). Render's free tier sleeps on inactivity, which breaks both.
 - **Vercel for frontend**: Native Next.js support, no config friction for App Router + PWA.
-- **Cloudflare as DNS + WAF layer** in front of both (not as the app host): proxy `api.zentry.ng` → Railway, `app.zentry.ng` → Vercel.
+- **Cloudflare as DNS + WAF layer** in front of both (not as the app host): proxy `api.zendocx.net` → Railway, `app.zendocx.net` → Vercel.
 - **`prisma migrate deploy` in entrypoint** (not `migrate dev`): `migrate deploy` applies pending migrations without resetting data, safe for production on every deploy.
 - **CI builds with dummy env vars**: real secrets are never in CI. Dummy values satisfy TypeScript/NestJS config checks at build time only.
 
@@ -73,7 +138,7 @@ Phase 10:
 **User actions still needed to go live:**
 1. Create Railway project → connect GitHub repo → set env vars (all from .env.example)
 2. Connect Vercel to GitHub repo → set Root Directory = `apps/web` → set env vars
-3. Add `zentry.ng` to Cloudflare → set DNS records pointing to Railway + Vercel
+3. Add `zendocx.net` to Cloudflare → set DNS records pointing to Railway + Vercel
 4. Generate VAPID keys: `npx web-push generate-vapid-keys`
 5. Get real provider credentials: FintavaPay, Termii, Resend, Cloudinary, VTU provider
 6. Create Sentry projects (zentry-api + zentry-web) and add DSNs to env vars
@@ -184,16 +249,16 @@ Both `apps/api` and `apps/web` typecheck clean (`tsc --noEmit`).
 1. **Tenant brand persistence across auth pages** — Converted `AuthShell` to a
    `'use client'` component and added the `mounted` state pattern to defer
    `useTenantStore` reads until after hydration. Previously the server rendered
-   the default "Zentry" brand and the client hydrated with the tenant's name,
+   the default "ZenDocx" brand and the client hydrated with the tenant's name,
    causing React hydration mismatch errors. Now both server and first client paint
-   use the same default ("Zentry"), and the tenant brand applies after mount.
+   use the same default ("ZenDocx"), and the tenant brand applies after mount.
    - `tenant?.name` used as `brandName`, `tenant?.logoUrl` shows logo if present.
    - Same `mounted` pattern applied to `ProtectedShell` for sidebar brand label.
 
 2. **Sidebar brand label is tenant-aware** — `getSidebarTitle()` in
    `ProtectedShell` now accepts the tenant name. Any user belonging to a tenant
    sees the tenant's business name (with "CBT" suffix for `CBT_CENTER` role).
-   Platform-level (no tenant) users continue to see "Zentry Admin" / "Zentry".
+   Platform-level (no tenant) users continue to see "ZenDocx Admin" / "ZenDocx".
 
 3. **SUPER_ADMIN can deactivate/delete TENANT_ADMIN accounts** — Added
    `toggleTenantUserActiveForPlatformAdmin` and `deleteTenantUserForPlatformAdmin`
@@ -237,7 +302,7 @@ Both `apps/api` and `apps/web` typecheck clean (`tsc --noEmit`).
   retry mechanism handles the brief bootstrap window with minimal code change.
 - **`mounted` pattern for SSR-safe hydration** — Tenant store reads are deferred
   until after React hydrates, keeping server and first-client renders identical
-  (both show "Zentry"). After mount, the client picks up the persisted tenant.
+  (both show "ZenDocx"). After mount, the client picks up the persisted tenant.
 
 ### Phase Checklist Updates
 
@@ -349,7 +414,7 @@ None — polish/UX items not tracked in PHASES.md.
 
 ### What Was Done
 
-Continued from the previous session context. Fixed remaining "Zentry" branding
+Continued from the previous session context. Fixed remaining "ZenDocx" branding
 issues for tenant-user accounts (specifically confirmed with "Ruby Digital Tech" screenshots).
 
 1. **`TenantBootstrap` resolves by `tenantId`** — Previously only resolved tenant
@@ -387,19 +452,19 @@ issues for tenant-user accounts (specifically confirmed with "Ruby Digital Tech"
    spinner instead of redirecting. No `_hasHydrated` dependency.
 
 8. **`TopBar` now shows tenant brand** — Added `useTenantStore` + `mounted` pattern.
-   `brandName` falls back to `'Zentry'`; `brandInitial` from first char of brand name.
+   `brandName` falls back to `'ZenDocx'`; `brandInitial` from first char of brand name.
    Mobile TopBar logo box and text both reflect tenant brand.
 
 9. **`(dashboard)/layout.tsx` — tenant-aware sidebar** — Converted from server
    component to `'use client'`. Reads `useTenantStore` with `mounted` guard.
-   `brandLabel` = tenant name (if tenant user) or `'Zentry'`.
+   `brandLabel` = tenant name (if tenant user) or `'ZenDocx'`.
 
 10. **`(cbt)/layout.tsx` — tenant-aware sidebar** — Same pattern. `brandLabel` =
-    `"${tenant.name} CBT"` for tenant-bound CBT centers, `"Zentry CBT"` for
+    `"${tenant.name} CBT"` for tenant-bound CBT centers, `"ZenDocx CBT"` for
     platform-level centers.
 
 11. **`(admin)/layout.tsx`** — No change needed. `SUPER_ADMIN` always has
-    `tenantId === null`; `"Zentry Admin"` is always correct.
+    `tenantId === null`; `"ZenDocx Admin"` is always correct.
 
 12. **`(tenant-admin)/layout.tsx` + `protected-shell.tsx` + `auth-shell.tsx`** —
     All already had `mounted` pattern applied from previous context in this session.
@@ -454,7 +519,7 @@ was dedicated to understanding the product vision, refining the architecture,
 and establishing the AI context documentation system.
 
 **Product Concept Finalized:**
-- Zentry: a multi-role government services escrow marketplace (PWA)
+- ZenDocx: a multi-role government services escrow marketplace (PWA)
 - Operates in Nigeria — serves JAMB, NIMC, NECO, and VTU services
 - Three user types: Student, Cyber Cafe (proxy), CBT Center (fulfiller)
 - Platform admin controls all pricing and commissions
@@ -462,7 +527,7 @@ and establishing the AI context documentation system.
 - CBT centers require admin approval (license vetting)
 
 **Brand Established:**
-- Name: Zentry
+- Name: ZenDocx
 - Tagline: "Fast. Trusted. Government Services, Simplified."
 - Primary color: #0D1B3E (Deep Navy)
 - Accent: #F5A623 (Golden Amber)
@@ -541,7 +606,7 @@ this session. It covers:
 - Termii API key (needed for Phase 1 SMS OTP)
 - Resend API key (needed for Phase 1 email)
 - Cloudinary account (needed for Phase 1 file uploads)
-- Domain: zentry.ng (needs to be registered if not already)
+- Domain: zendocx.net (needs to be registered if not already)
 - Production hosting accounts: Vercel, Railway/Render, Neon/Supabase
 
 ---
@@ -680,7 +745,7 @@ this session. It covers:
 
 - Transactional tenant verification now uses seeded tenant accounts for the
   runtime-sensitive business flow assertions:
-  `user@test.com`, `cbt@test.com`, `tenant@test.com`, and `admin@zentry.ng`.
+  `user@test.com`, `cbt@test.com`, `tenant@test.com`, and `admin@zendocx.net`.
 - Automated runtime verification currently prefers a tenant-scoped VTU airtime
   service and a tenant-scoped manual CBT service that does not require
   requester documents, so the verifier stays deterministic and self-contained.
@@ -1162,7 +1227,7 @@ Everything that can be verified without live services passes.
 ### Blockers / Notes for Next Session
 
 **To fully run Phase 1 locally, the developer needs:**
-1. PostgreSQL running: `createdb zentry_db`
+1. PostgreSQL running: `createdb zendocx_db`
 2. Redis running: `redis-server`
 3. Copy `.env.example` to `apps/api/.env` and fill in:
    - `DATABASE_URL` — point to local postgres
@@ -1207,9 +1272,9 @@ PWA install foundation.
   app-wide without changing route-level pages
 
 **Verification results:**
-- `pnpm --filter @zentry/web lint` — PASS
-- `pnpm --filter @zentry/web build` — PASS
-- `pnpm --filter @zentry/web typecheck` — PASS
+- `pnpm --filter @zendocx/web lint` — PASS
+- `pnpm --filter @zendocx/web build` — PASS
+- `pnpm --filter @zendocx/web typecheck` — PASS
 
 ### Files Created / Modified
 
@@ -1264,9 +1329,9 @@ the audit-log interceptor.
   write success audits directly
 
 **Verification results:**
-- `pnpm --filter @zentry/api lint` — PASS
-- `pnpm --filter @zentry/api build` — PASS
-- `pnpm --filter @zentry/api typecheck` — PASS
+- `pnpm --filter @zendocx/api lint` — PASS
+- `pnpm --filter @zendocx/api build` — PASS
+- `pnpm --filter @zendocx/api typecheck` — PASS
 
 ### Files Created / Modified
 
@@ -1314,14 +1379,14 @@ auth validation alignment.
 **Validation improvements:**
 - Added a global Zod validation pipe to the API bootstrap
 - Linked the existing auth DTO classes to the shared Zod schemas from
-  `@zentry/validators`
+  `@zendocx/validators`
 - Kept the existing class-validator DTO structure in place while adding Zod as a
   shared validation layer for the auth routes that already have matching schemas
 
 **Verification results:**
-- `pnpm --filter @zentry/api lint` — PASS
-- `pnpm --filter @zentry/api build` — PASS
-- `pnpm --filter @zentry/api typecheck` — PASS
+- `pnpm --filter @zendocx/api lint` — PASS
+- `pnpm --filter @zendocx/api build` — PASS
+- `pnpm --filter @zendocx/api typecheck` — PASS
 
 ### Files Created / Modified
 
@@ -1379,12 +1444,12 @@ backend users-module profile support and the frontend profile update flow.
   toast feedback, and React Query cache refresh
 
 **Verification results:**
-- `pnpm --filter @zentry/api lint` — PASS
-- `pnpm --filter @zentry/api build` — PASS
-- `pnpm --filter @zentry/api typecheck` — PASS
-- `pnpm --filter @zentry/web lint` — PASS
-- `pnpm --filter @zentry/web build` — PASS
-- `pnpm --filter @zentry/web typecheck` — PASS
+- `pnpm --filter @zendocx/api lint` — PASS
+- `pnpm --filter @zendocx/api build` — PASS
+- `pnpm --filter @zendocx/api typecheck` — PASS
+- `pnpm --filter @zendocx/web lint` — PASS
+- `pnpm --filter @zendocx/web build` — PASS
+- `pnpm --filter @zendocx/web typecheck` — PASS
 
 ### Files Created / Modified
 
@@ -1445,9 +1510,9 @@ the provider abstraction layer foundation.
   provider-service foundation without introducing new business routes
 
 **Verification results:**
-- `pnpm --filter @zentry/api lint` — PASS
-- `pnpm --filter @zentry/api build` — PASS
-- `pnpm --filter @zentry/api typecheck` — PASS
+- `pnpm --filter @zendocx/api lint` — PASS
+- `pnpm --filter @zendocx/api build` — PASS
+- `pnpm --filter @zendocx/api typecheck` — PASS
 
 ### Files Created / Modified
 
@@ -1510,9 +1575,9 @@ app providers and TanStack Query foundation.
   TanStack Query while preserving the same consumer-facing API shape
 
 **Verification results:**
-- `pnpm --filter @zentry/web lint` — PASS
-- `pnpm --filter @zentry/web build` — PASS
-- `pnpm --filter @zentry/web typecheck` — PASS
+- `pnpm --filter @zendocx/web lint` — PASS
+- `pnpm --filter @zendocx/web build` — PASS
+- `pnpm --filter @zendocx/web typecheck` — PASS
 
 ### Files Created / Modified
 
@@ -1566,9 +1631,9 @@ shared desktop sidebar extraction.
   reducing layout duplication
 
 **Verification results:**
-- `pnpm --filter @zentry/web lint` — PASS
-- `pnpm --filter @zentry/web build` — PASS
-- `pnpm --filter @zentry/web typecheck` — PASS
+- `pnpm --filter @zendocx/web lint` — PASS
+- `pnpm --filter @zendocx/web build` — PASS
+- `pnpm --filter @zendocx/web typecheck` — PASS
 
 ### Files Created / Modified
 
@@ -1625,9 +1690,9 @@ OTP verification UX and shared loading states.
 - Upgraded the verify-email suspense fallback to use the same skeleton system
 
 **Verification results:**
-- `pnpm --filter @zentry/web lint` — PASS
-- `pnpm --filter @zentry/web build` — PASS
-- `pnpm --filter @zentry/web typecheck` — PASS
+- `pnpm --filter @zendocx/web lint` — PASS
+- `pnpm --filter @zendocx/web build` — PASS
+- `pnpm --filter @zendocx/web typecheck` — PASS
 
 ### Files Created / Modified
 
@@ -1684,9 +1749,9 @@ the public landing and auth entry experience.
   security messaging
 
 **Verification results:**
-- `pnpm --filter @zentry/web lint` — PASS
-- `pnpm --filter @zentry/web build` — PASS
-- `pnpm --filter @zentry/web typecheck` — PASS
+- `pnpm --filter @zendocx/web lint` — PASS
+- `pnpm --filter @zendocx/web build` — PASS
+- `pnpm --filter @zendocx/web typecheck` — PASS
 
 ### Files Created / Modified
 
@@ -1740,9 +1805,9 @@ the admin workspace.
   duplicating copy and structure
 
 **Verification results:**
-- `pnpm --filter @zentry/web lint` — PASS
-- `pnpm --filter @zentry/web build` — PASS
-- `pnpm --filter @zentry/web typecheck` — PASS
+- `pnpm --filter @zendocx/web lint` — PASS
+- `pnpm --filter @zendocx/web build` — PASS
+- `pnpm --filter @zendocx/web typecheck` — PASS
 
 ### Files Created / Modified
 
@@ -1826,9 +1891,9 @@ and placeholders into a coherent fulfiller workspace.
 
 ### Verification Results
 
-- `pnpm --filter @zentry/web lint` — PASS
-- `pnpm --filter @zentry/web build` — PASS
-- `pnpm --filter @zentry/web typecheck` — PASS
+- `pnpm --filter @zendocx/web lint` — PASS
+- `pnpm --filter @zendocx/web build` — PASS
+- `pnpm --filter @zendocx/web typecheck` — PASS
 
 ### Blockers / Notes for Next Session
 
@@ -1879,9 +1944,9 @@ disputes with structured frontend workspaces.
 
 ### Verification Results
 
-- `pnpm --filter @zentry/web lint` — PASS
-- `pnpm --filter @zentry/web build` — PASS
-- `pnpm --filter @zentry/web typecheck` — PASS
+- `pnpm --filter @zendocx/web lint` — PASS
+- `pnpm --filter @zendocx/web build` — PASS
+- `pnpm --filter @zendocx/web typecheck` — PASS
 
 ### Blockers / Notes for Next Session
 
@@ -1997,9 +2062,9 @@ real frontend workspaces for the main individual/cyber-cafe user flow.
 
 ### Verification Results
 
-- `pnpm --filter @zentry/web lint` — PASS
-- `pnpm --filter @zentry/web build` — PASS
-- `pnpm --filter @zentry/web typecheck` — PASS
+- `pnpm --filter @zendocx/web lint` — PASS
+- `pnpm --filter @zendocx/web build` — PASS
+- `pnpm --filter @zendocx/web typecheck` — PASS
 
 ### Blockers / Notes for Next Session
 
@@ -2059,9 +2124,9 @@ account pages without crossing into Phase 2 payment implementation.
 
 ### Verification Results
 
-- `pnpm --filter @zentry/web lint` — PASS
-- `pnpm --filter @zentry/web build` — PASS
-- `pnpm --filter @zentry/web typecheck` — PASS
+- `pnpm --filter @zendocx/web lint` — PASS
+- `pnpm --filter @zendocx/web build` — PASS
+- `pnpm --filter @zendocx/web typecheck` — PASS
 
 ### Blockers / Notes for Next Session
 
@@ -2146,9 +2211,9 @@ immediately instead of staying visible to the user.
 
 ### Verification Results
 
-- `pnpm --filter @zentry/web lint` — PASS
-- `pnpm --filter @zentry/web build` — PASS
-- `pnpm --filter @zentry/web typecheck` — PASS
+- `pnpm --filter @zendocx/web lint` — PASS
+- `pnpm --filter @zendocx/web build` — PASS
+- `pnpm --filter @zendocx/web typecheck` — PASS
 
 ### Blockers / Notes for Next Session
 
@@ -2192,9 +2257,9 @@ This session fixed two UX issues discovered during browser testing.
 
 ### Verification Results
 
-- `pnpm --filter @zentry/web typecheck` — PASS
-- `pnpm --filter @zentry/web lint` — PASS
-- `pnpm --filter @zentry/web build` — PASS
+- `pnpm --filter @zendocx/web typecheck` — PASS
+- `pnpm --filter @zendocx/web lint` — PASS
+- `pnpm --filter @zendocx/web build` — PASS
 
 ### Blockers / Notes for Next Session
 
@@ -2229,9 +2294,9 @@ This session fixed a regression in the seeded public test login after the
   stale values behind
 
 **Verification results:**
-- `pnpm --filter @zentry/api typecheck` — PASS
-- `pnpm --filter @zentry/api lint` — PASS
-- `pnpm --filter @zentry/api db:seed` — could not be completed from this
+- `pnpm --filter @zendocx/api typecheck` — PASS
+- `pnpm --filter @zendocx/api lint` — PASS
+- `pnpm --filter @zendocx/api db:seed` — could not be completed from this
   sandbox because Postgres at `localhost:5432` is not reachable here
 
 ### Files Created / Modified
@@ -2286,8 +2351,8 @@ feature slice.
 - `pnpm build` — PASS
 - `pnpm typecheck` — PASS
 - `pnpm lint` — PASS
-- `pnpm --filter @zentry/api exec prisma generate` — PASS
-- `pnpm --filter @zentry/api exec prisma validate` — PASS
+- `pnpm --filter @zendocx/api exec prisma generate` — PASS
+- `pnpm --filter @zendocx/api exec prisma validate` — PASS
 
 ### Files Created / Modified
 
@@ -2387,7 +2452,7 @@ secure, and verifiable.
 
 **Frontend/runability cleanup:**
 - Removed the build-time Google font dependency from the root layout
-- Replaced the default Next.js starter landing page with a Zentry-branded root page
+- Replaced the default Next.js starter landing page with a ZenDocx-branded root page
 - Forced the web production build onto webpack to avoid Turbopack-specific sandbox issues
 - Fixed the `/home` prerender failure by making the dashboard home page a client component
 
@@ -2598,9 +2663,9 @@ This session investigated the web startup failure triggered by `pnpm dev` in
   without reintroducing the Tailwind resolution bug
 
 **Verification results:**
-- `pnpm --filter @zentry/web typecheck` — PASS
-- `pnpm --filter @zentry/web build` — PASS
-- `pnpm --filter @zentry/web dev` no longer produced the Tailwind resolution error;
+- `pnpm --filter @zendocx/web typecheck` — PASS
+- `pnpm --filter @zendocx/web build` — PASS
+- `pnpm --filter @zendocx/web dev` no longer produced the Tailwind resolution error;
   the only live-run blocker in this sandbox was `EPERM` while binding to port 3000
 
 ### Files Created / Modified
@@ -2655,9 +2720,9 @@ profile and wallet shell pages.
 - Updated the mobile top bar logo target to route users back to their role default page
 
 **Verification results:**
-- `pnpm --filter @zentry/web build` — PASS
-- `pnpm --filter @zentry/web lint` — PASS
-- `pnpm --filter @zentry/web typecheck` — PASS
+- `pnpm --filter @zendocx/web build` — PASS
+- `pnpm --filter @zendocx/web lint` — PASS
+- `pnpm --filter @zendocx/web typecheck` — PASS
 
 ### Files Created / Modified
 
@@ -2712,20 +2777,20 @@ product can continue stabilizing without accidental multi-tenant drift.
 - Defined each white-label customer as a tenant with isolated users, staff,
   orders, wallet views, disputes, support, reports, branding, and mini-admin
 - Confirmed that tenant users exist only inside their tenant portal and that
-  Zentry platform admins can oversee all tenants from the main platform
+  ZenDocx platform admins can oversee all tenants from the main platform
 - Captured the commercial model:
-  - `brand.zentry.ng` for free plan
+  - `brand.zendocx.net` for free plan
   - custom domains for paid plan
-  - Zentry-controlled subscriptions and withdrawal charges
+  - ZenDocx-controlled subscriptions and withdrawal charges
   - optional commission or revenue-share partnerships
 - Chose the hybrid wallet model where tenants see isolated balances and ledger
-  views while Zentry retains platform settlement and control
+  views while ZenDocx retains platform settlement and control
 - Defined the staged provider plan:
-  - first white-label release uses Zentry-managed providers only
+  - first white-label release uses ZenDocx-managed providers only
   - later allow tenant-managed providers for VTU and NIN only
   - expand further only if justified
 - Defined the recommendation that white-label remain a Phase 2 / Phase 3
-  expansion after core Zentry stabilization
+  expansion after core ZenDocx stabilization
 
 **Architecture governance updates:**
 - Recorded the white-label direction as a new ADR so future sessions do not
@@ -2747,7 +2812,7 @@ product can continue stabilizing without accidental multi-tenant drift.
 
 - White-label will be treated as a proper multi-tenant SaaS expansion, not as a
   branding-only feature
-- White-label implementation must not begin until the core Zentry platform is
+- White-label implementation must not begin until the core ZenDocx platform is
   stabilized enough to support tenancy safely
 - Tenant-managed providers are intentionally delayed and initially limited to
   VTU and NIN in later stages only
@@ -2760,7 +2825,7 @@ product can continue stabilizing without accidental multi-tenant drift.
 ### Blockers / Notes for Next Session
 
 - Do not start white-label implementation yet
-- Continue core Zentry stabilization and verified delivery of current scope
+- Continue core ZenDocx stabilization and verified delivery of current scope
 - Use `docs/ai-context/WHITE_LABEL_ROADMAP.md` as the source of truth when the
   white-label expansion is eventually scheduled
 
@@ -2772,7 +2837,7 @@ product can continue stabilizing without accidental multi-tenant drift.
 ### What Was Done
 
 This session refined the white-label roadmap so the future architecture now
-clearly treats Zentry as the infrastructure platform rather than the permanent
+clearly treats ZenDocx as the infrastructure platform rather than the permanent
 customer-facing business brand.
 
 **Platform-first refinements:**
@@ -2804,7 +2869,7 @@ customer-facing business brand.
 
 ### Decisions Made
 
-- Zentry is the platform/infrastructure layer
+- ZenDocx is the platform/infrastructure layer
 - The launch business must eventually be represented as a first-party tenant
 - The first-party tenant should not receive a permanent privileged product path
 - PWA and security must remain first-class architecture constraints during the
@@ -2941,7 +3006,7 @@ brand-token design system cleanup for the web app.
 
 ### Phase Checklist Updates
 
-- Marked `Tailwind config with Zentry brand tokens` as complete
+- Marked `Tailwind config with ZenDocx brand tokens` as complete
 - Left `Plus Jakarta Sans fully configured from local assets` unchecked because
   that still requires a real local font-asset setup
 
@@ -3121,12 +3186,12 @@ the NestJS API.
 
 ### Verification Result
 
-- `pnpm --filter @zentry/web lint` passed
-- `pnpm --filter @zentry/web build` passed
-- `pnpm --filter @zentry/web typecheck` passed
-- `pnpm --filter @zentry/api lint` passed
-- `pnpm --filter @zentry/api build` passed
-- `pnpm --filter @zentry/api typecheck` passed
+- `pnpm --filter @zendocx/web lint` passed
+- `pnpm --filter @zendocx/web build` passed
+- `pnpm --filter @zendocx/web typecheck` passed
+- `pnpm --filter @zendocx/api lint` passed
+- `pnpm --filter @zendocx/api build` passed
+- `pnpm --filter @zendocx/api typecheck` passed
 
 ### Files Created / Modified
 
@@ -3172,9 +3237,9 @@ artifacts are stale or missing.
 
 ### Verification Result
 
-- `pnpm --filter @zentry/web typecheck` passed
-- `pnpm --filter @zentry/web lint` passed
-- `pnpm --filter @zentry/web build` passed
+- `pnpm --filter @zendocx/web typecheck` passed
+- `pnpm --filter @zendocx/web lint` passed
+- `pnpm --filter @zendocx/web build` passed
 
 ### Files Created / Modified
 
@@ -3280,7 +3345,7 @@ Phase 1 and cleaned up the Prisma config warning on top of it.
 - `pnpm infra:up` passed
 - `pnpm db:migrate` passed
 - `pnpm db:seed` passed
-- `pnpm --filter @zentry/api exec prisma migrate status` reported the schema is
+- `pnpm --filter @zendocx/api exec prisma migrate status` reported the schema is
   up to date
 
 ### Files Created / Modified
@@ -3338,7 +3403,7 @@ current local stack instead of relying on one-off manual curl tests.
   - `user@test.com`
   - `cafe@test.com`
   - `cbt@test.com`
-  - `admin@zentry.ng`
+  - `admin@zendocx.net`
 
 ### Files Created / Modified
 
@@ -3421,9 +3486,9 @@ and production PWA verification passes were already in place.
 
 ### Verification
 
-- `pnpm --filter @zentry/web lint`
-- `pnpm --filter @zentry/web typecheck`
-- `pnpm --filter @zentry/web build`
+- `pnpm --filter @zendocx/web lint`
+- `pnpm --filter @zendocx/web typecheck`
+- `pnpm --filter @zendocx/web build`
 
 ### Blockers / Notes for Next Session
 
@@ -3491,12 +3556,12 @@ page to dedicated live wallet data.
 
 ### Verification
 
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api build`
-- `pnpm --filter @zentry/web lint`
-- `pnpm --filter @zentry/web typecheck`
-- `pnpm --filter @zentry/web build`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api build`
+- `pnpm --filter @zendocx/web lint`
+- `pnpm --filter @zendocx/web typecheck`
+- `pnpm --filter @zendocx/web build`
 - `pnpm db:seed`
 - Temporary live API verification on `http://localhost:4101/api/v1`:
   - seeded login succeeded
@@ -3562,12 +3627,12 @@ flow without moving ahead into webhook confirmation yet.
 
 ### Verification
 
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api build`
-- `pnpm --filter @zentry/web lint`
-- `pnpm --filter @zentry/web typecheck`
-- `pnpm --filter @zentry/web build`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api build`
+- `pnpm --filter @zendocx/web lint`
+- `pnpm --filter @zendocx/web typecheck`
+- `pnpm --filter @zendocx/web build`
 - Temporary live API verification on `http://localhost:4102/api/v1`:
   - seeded login succeeded
   - `POST /wallet/fund` returned `201`
@@ -3634,12 +3699,12 @@ crediting path.
 
 ### Verification
 
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api build`
-- `pnpm --filter @zentry/web lint`
-- `pnpm --filter @zentry/web typecheck`
-- `pnpm --filter @zentry/web build`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api build`
+- `pnpm --filter @zendocx/web lint`
+- `pnpm --filter @zendocx/web typecheck`
+- `pnpm --filter @zendocx/web build`
 - Temporary live API verification on `http://localhost:4103/api/v1`:
   - seeded login succeeded
   - `POST /wallet/fund` returned a sandbox funding reference
@@ -3701,12 +3766,12 @@ This batch made the live wallet ledger meaningfully navigable.
 
 ### Verification
 
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api build`
-- `pnpm --filter @zentry/web lint`
-- `pnpm --filter @zentry/web typecheck`
-- `pnpm --filter @zentry/web build`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api build`
+- `pnpm --filter @zendocx/web lint`
+- `pnpm --filter @zendocx/web typecheck`
+- `pnpm --filter @zendocx/web build`
 - Temporary live API verification on `http://localhost:4104/api/v1`:
   - seeded login succeeded
   - `GET /wallet/transactions?type=WALLET_FUNDING&status=SUCCESS&startDate=2026-04-06&endDate=2026-04-06`
@@ -3765,12 +3830,12 @@ This batch turned the admin finance page into a live wallet oversight workspace.
 
 ### Verification
 
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api build`
-- `pnpm --filter @zentry/web lint`
-- `pnpm --filter @zentry/web typecheck`
-- `pnpm --filter @zentry/web build`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api build`
+- `pnpm --filter @zendocx/web lint`
+- `pnpm --filter @zendocx/web typecheck`
+- `pnpm --filter @zendocx/web build`
 - Temporary live API verification on `http://localhost:4105/api/v1`:
   - super admin login succeeded
   - `GET /wallet/admin/overview` returned live wallet totals
@@ -3830,12 +3895,12 @@ visibility.
 
 ### Verification
 
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api build`
-- `pnpm --filter @zentry/web lint`
-- `pnpm --filter @zentry/web typecheck`
-- `pnpm --filter @zentry/web build`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api build`
+- `pnpm --filter @zendocx/web lint`
+- `pnpm --filter @zendocx/web typecheck`
+- `pnpm --filter @zendocx/web build`
 - Temporary live API verification on `http://localhost:4106/api/v1`:
   - super admin login succeeded
   - `GET /wallet/admin/transactions?type=WITHDRAWAL&status=SUCCESS&role=CBT_CENTER&limit=5&page=1`
@@ -3895,12 +3960,12 @@ real backend-backed catalog.
 
 ### Verification
 
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api build`
-- `pnpm --filter @zentry/web lint`
-- `pnpm --filter @zentry/web typecheck`
-- `pnpm --filter @zentry/web build`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api build`
+- `pnpm --filter @zendocx/web lint`
+- `pnpm --filter @zendocx/web typecheck`
+- `pnpm --filter @zendocx/web build`
 - Temporary live API verification on `http://localhost:4107/api/v1`:
   - seeded login succeeded
   - `GET /services/catalog?categorySlug=nimc&search=validation` returned the
@@ -3961,12 +4026,12 @@ This batch turned the live catalog into the first real request flow.
 
 ### Verification
 
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api build`
-- `pnpm --filter @zentry/web lint`
-- `pnpm --filter @zentry/web typecheck`
-- `pnpm --filter @zentry/web build`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api build`
+- `pnpm --filter @zendocx/web lint`
+- `pnpm --filter @zendocx/web typecheck`
+- `pnpm --filter @zendocx/web build`
 - Temporary live API verification on `http://localhost:4108/api/v1`:
   - seeded login succeeded
   - fetched the seeded `NIN Validation` service from the live catalog
@@ -4030,12 +4095,12 @@ This batch added service-driven document uploads to the live requester flow.
 
 ### Verification
 
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api build`
-- `pnpm --filter @zentry/web lint`
-- `pnpm --filter @zentry/web typecheck`
-- `pnpm --filter @zentry/web build`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api build`
+- `pnpm --filter @zendocx/web lint`
+- `pnpm --filter @zendocx/web typecheck`
+- `pnpm --filter @zendocx/web build`
 - `pnpm db:seed`
 - Temporary live API verification on `http://localhost:4108/api/v1`:
   - seeded login succeeded
@@ -4113,12 +4178,12 @@ This batch introduced the first real admin-side catalog controls.
 
 ### Verification
 
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api build`
-- `pnpm --filter @zentry/web lint`
-- `pnpm --filter @zentry/web typecheck`
-- `pnpm --filter @zentry/web build`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api build`
+- `pnpm --filter @zendocx/web lint`
+- `pnpm --filter @zendocx/web typecheck`
+- `pnpm --filter @zendocx/web build`
 - `pnpm db:seed`
 - Temporary live API verification on `http://localhost:4108/api/v1`:
   - seeded super-admin login succeeded
@@ -4177,12 +4242,12 @@ This batch introduced the first real admin-side catalog controls.
 
 ### Verification
 
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api build`
-- `pnpm --filter @zentry/web lint`
-- `pnpm --filter @zentry/web typecheck`
-- `pnpm --filter @zentry/web build`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api build`
+- `pnpm --filter @zendocx/web lint`
+- `pnpm --filter @zendocx/web typecheck`
+- `pnpm --filter @zendocx/web build`
 - Temporary live API verification on `http://localhost:4109/api/v1`:
   - seeded requester login succeeded
   - requester order list and detail returned live data
@@ -4241,12 +4306,12 @@ This batch introduced the first real admin-side catalog controls.
 
 ### Verification
 
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api build`
-- `pnpm --filter @zentry/web lint`
-- `pnpm --filter @zentry/web typecheck`
-- `pnpm --filter @zentry/web build`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api build`
+- `pnpm --filter @zendocx/web lint`
+- `pnpm --filter @zendocx/web typecheck`
+- `pnpm --filter @zendocx/web build`
 - `pnpm db:seed`
 - Temporary live API verification on `http://127.0.0.1:4110/api/v1`:
   - seeded CBT login succeeded
@@ -4301,12 +4366,12 @@ This batch introduced the first real admin-side catalog controls.
 
 ### Verification
 
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api build`
-- `pnpm --filter @zentry/web lint`
-- `pnpm --filter @zentry/web typecheck`
-- `pnpm --filter @zentry/web build`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api build`
+- `pnpm --filter @zendocx/web lint`
+- `pnpm --filter @zendocx/web typecheck`
+- `pnpm --filter @zendocx/web build`
 - Temporary live API verification on `http://127.0.0.1:4111/api/v1`:
   - seeded CBT login succeeded
   - claim moved `ZTR-SEED-CAFE-001` into `ASSIGNED`
@@ -4365,12 +4430,12 @@ This batch introduced the first real admin-side catalog controls.
 
 ### Verification
 
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api build`
-- `pnpm --filter @zentry/web lint`
-- `pnpm --filter @zentry/web typecheck`
-- `pnpm --filter @zentry/web build`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api build`
+- `pnpm --filter @zendocx/web lint`
+- `pnpm --filter @zendocx/web typecheck`
+- `pnpm --filter @zendocx/web build`
 - Temporary live API verification on `http://127.0.0.1:4112/api/v1`:
   - seeded CBT login succeeded
   - result upload moved `ZTR-SEED-CBT-001` to `COMPLETED`
@@ -4428,12 +4493,12 @@ This batch introduced the first real admin-side catalog controls.
 
 ### Verification
 
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api build`
-- `pnpm --filter @zentry/web lint`
-- `pnpm --filter @zentry/web typecheck`
-- `pnpm --filter @zentry/web build`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api build`
+- `pnpm --filter @zendocx/web lint`
+- `pnpm --filter @zendocx/web typecheck`
+- `pnpm --filter @zendocx/web build`
 - Temporary live API verification on `http://127.0.0.1:4113/api/v1`:
   - a CBT-completed order returned `releaseState = AWAITING_WINDOW`
   - admin filtered order listing with `releaseState=AWAITING_WINDOW` included
@@ -4492,12 +4557,12 @@ This batch introduced the first real admin-side catalog controls.
 
 ### Verification
 
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api build`
-- `pnpm --filter @zentry/web lint`
-- `pnpm --filter @zentry/web typecheck`
-- `pnpm --filter @zentry/web build`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api build`
+- `pnpm --filter @zendocx/web lint`
+- `pnpm --filter @zendocx/web typecheck`
+- `pnpm --filter @zendocx/web build`
 - `pnpm db:seed`
 - Temporary live API verification on `http://127.0.0.1:4114/api/v1`:
   - admin overview returned live fulfillment and release-readiness metrics
@@ -4555,12 +4620,12 @@ This batch introduced the first real admin-side catalog controls.
 
 ### Verification
 
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api build`
-- `pnpm --filter @zentry/web lint`
-- `pnpm --filter @zentry/web typecheck`
-- `pnpm --filter @zentry/web build`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api build`
+- `pnpm --filter @zendocx/web lint`
+- `pnpm --filter @zendocx/web typecheck`
+- `pnpm --filter @zendocx/web build`
 - Temporary live API verification on `http://127.0.0.1:4114/api/v1`:
   - super-admin login succeeded
   - `releaseState=READY_FOR_RELEASE` returned seeded order `ZTR-SEED-READY-001`
@@ -4625,12 +4690,12 @@ This batch introduced the first real admin-side catalog controls.
 
 ### Verification
 
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api build`
-- `pnpm --filter @zentry/web lint`
-- `pnpm --filter @zentry/web typecheck`
-- `pnpm --filter @zentry/web build`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api build`
+- `pnpm --filter @zendocx/web lint`
+- `pnpm --filter @zendocx/web typecheck`
+- `pnpm --filter @zendocx/web build`
 - Temporary live API verification on `http://127.0.0.1:4114/api/v1`:
   - super-admin login succeeded
   - `GET /orders/admin/release-scheduler-preview` returned both a ready and a
@@ -4688,12 +4753,12 @@ This batch introduced the first real admin-side catalog controls.
 ### Verification
 
 - `pnpm db:seed`
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api build`
-- `pnpm --filter @zentry/web lint`
-- `pnpm --filter @zentry/web typecheck`
-- `pnpm --filter @zentry/web build`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api build`
+- `pnpm --filter @zendocx/web lint`
+- `pnpm --filter @zendocx/web typecheck`
+- `pnpm --filter @zendocx/web build`
 - Temporary live API verification on `http://127.0.0.1:4114/api/v1`:
   - admin overview scheduler counts matched the scheduler preview summary
   - ready candidates: `ZTR-SEED-READY-001`, `ZTR-20260406-Q8IKIR`
@@ -4755,9 +4820,9 @@ This batch introduced the first real admin-side catalog controls.
 
 ### Verification
 
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api build`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api build`
 - `pnpm db:seed`
 - Temporary live API verification on `http://127.0.0.1:4114/api/v1`:
   - startup recovery skipped `ZTR-SEED-BLOCKED-001` because of its open dispute
@@ -4831,13 +4896,13 @@ This batch introduced the first real admin-side catalog controls.
 
 - `pnpm db:migrate`
 - `pnpm db:seed`
-- `pnpm --filter @zentry/api exec prisma generate`
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api build`
-- `pnpm --filter @zentry/web lint`
-- `pnpm --filter @zentry/web typecheck`
-- `pnpm --filter @zentry/web build`
+- `pnpm --filter @zendocx/api exec prisma generate`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api build`
+- `pnpm --filter @zendocx/web lint`
+- `pnpm --filter @zendocx/web typecheck`
+- `pnpm --filter @zendocx/web build`
 - Temporary live API verification on `http://127.0.0.1:4115/api/v1`:
   - `nimc-nin-validation` returned `deliveryMode = API_AUTOMATED`
   - `nimc-nin-modification` returned `deliveryMode = CBT_MANUAL`
@@ -4894,12 +4959,12 @@ This batch introduced the first real admin-side catalog controls.
 
 ### Verification
 
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api build`
-- `pnpm --filter @zentry/web lint`
-- `pnpm --filter @zentry/web typecheck`
-- `pnpm --filter @zentry/web build`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api build`
+- `pnpm --filter @zendocx/web lint`
+- `pnpm --filter @zendocx/web typecheck`
+- `pnpm --filter @zendocx/web build`
 - Temporary live API verification on `http://127.0.0.1:4116/api/v1`:
   - `GET /wallet/cbt/earnings?page=1&limit=5` returned:
     - `totalEarned = 120000`
@@ -4958,12 +5023,12 @@ This batch introduced the first real admin-side catalog controls.
 
 ### Verification
 
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api build`
-- `pnpm --filter @zentry/web lint`
-- `pnpm --filter @zentry/web typecheck`
-- `pnpm --filter @zentry/web build`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api build`
+- `pnpm --filter @zendocx/web lint`
+- `pnpm --filter @zendocx/web typecheck`
+- `pnpm --filter @zendocx/web build`
 - Temporary live API verification on `http://127.0.0.1:4118/api/v1`:
   - `GET /wallet/admin/cbt-earnings` returned:
     - `releasedCommissionVolume = 10000`
@@ -5040,12 +5105,12 @@ This batch introduced the first real admin-side catalog controls.
 
 ### Verification
 
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api build`
-- `pnpm --filter @zentry/web lint`
-- `pnpm --filter @zentry/web typecheck`
-- `pnpm --filter @zentry/web build`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api build`
+- `pnpm --filter @zendocx/web lint`
+- `pnpm --filter @zendocx/web typecheck`
+- `pnpm --filter @zendocx/web build`
 - `pnpm db:seed`
 - Temporary live API verification on `http://127.0.0.1:4119/api/v1`:
   - CBT request submission created 2 pending payout requests
@@ -5111,11 +5176,11 @@ follow-up route.
 
 ### Verification
 
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api build`
-- `pnpm --filter @zentry/web typecheck`
-- `pnpm --filter @zentry/web build`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api build`
+- `pnpm --filter @zendocx/web typecheck`
+- `pnpm --filter @zendocx/web build`
 - `pnpm db:seed`
 - Live verification on fresh local API `http://127.0.0.1:4301/api/v1` using
   controlled DB fixtures:
@@ -5189,13 +5254,13 @@ an automated-purchase flow instead of the manual-order copy.
 
 ### Verification
 
-- `pnpm --filter @zentry/api exec prisma generate`
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/api build`
-- `pnpm --filter @zentry/web typecheck`
-- `pnpm --filter @zentry/web lint`
-- `pnpm --filter @zentry/web build`
+- `pnpm --filter @zendocx/api exec prisma generate`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/api build`
+- `pnpm --filter @zendocx/web typecheck`
+- `pnpm --filter @zendocx/web lint`
+- `pnpm --filter @zendocx/web build`
 - `pnpm db:migrate`
 - `pnpm db:seed`
 - Live verification on a fresh local API at `http://127.0.0.1:4302/api/v1`:
@@ -5263,12 +5328,12 @@ ledger debits plus instant platform commission recognition.
 
 ### Verification
 
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/api build`
-- `pnpm --filter @zentry/web typecheck`
-- `pnpm --filter @zentry/web lint`
-- `pnpm --filter @zentry/web build`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/api build`
+- `pnpm --filter @zendocx/web typecheck`
+- `pnpm --filter @zendocx/web lint`
+- `pnpm --filter @zendocx/web build`
 - `pnpm db:seed`
 - Live verification on a fresh local API at `http://127.0.0.1:4302/api/v1`:
   - authenticated user completed GOtv smartcard verification successfully
@@ -5332,12 +5397,12 @@ service boundary now also wraps provider failures in user-safe
 
 ### Verification
 
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/api build`
-- `pnpm --filter @zentry/web typecheck`
-- `pnpm --filter @zentry/web lint`
-- `pnpm --filter @zentry/web build`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/api build`
+- `pnpm --filter @zendocx/web typecheck`
+- `pnpm --filter @zendocx/web lint`
+- `pnpm --filter @zendocx/web build`
 - Live verification on a fresh local API at `http://127.0.0.1:4302/api/v1`:
   - repeated `GET /services/vtu/data-plans/:serviceId` returned
     `cached = false` on first read and `cached = true` on second read
@@ -5399,12 +5464,12 @@ automated services are currently attached to that provider layer.
 
 ### Verification
 
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/api build`
-- `pnpm --filter @zentry/web typecheck`
-- `pnpm --filter @zentry/web lint`
-- `pnpm --filter @zentry/web build`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/api build`
+- `pnpm --filter @zendocx/web typecheck`
+- `pnpm --filter @zendocx/web lint`
+- `pnpm --filter @zendocx/web build`
 - Live mock-mode readiness proof on a fresh local API at
   `http://127.0.0.1:4304/api/v1`:
   - admin readiness returned `mode = mock`
@@ -5480,13 +5545,13 @@ back to mock without redeploying the API.
 ### Verification
 
 - `pnpm db:migrate`
-- `pnpm --filter @zentry/api exec prisma generate`
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/api build`
-- `pnpm --filter @zentry/web typecheck`
-- `pnpm --filter @zentry/web lint`
-- `pnpm --filter @zentry/web build`
+- `pnpm --filter @zendocx/api exec prisma generate`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/api build`
+- `pnpm --filter @zendocx/web typecheck`
+- `pnpm --filter @zendocx/web lint`
+- `pnpm --filter @zendocx/web build`
 - `pnpm db:seed`
 - Live proof on a fresh local API at `http://127.0.0.1:4307/api/v1` backed by
   the fake VTU server at `http://127.0.0.1:4310`:
@@ -5553,12 +5618,12 @@ whether the last result was healthy or mock-only, and when that happened.
 
 ### Verification
 
-- `pnpm --filter @zentry/api exec prisma generate`
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/api build`
-- `pnpm --filter @zentry/web typecheck`
-- `pnpm --filter @zentry/web lint`
+- `pnpm --filter @zendocx/api exec prisma generate`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/api build`
+- `pnpm --filter @zendocx/web typecheck`
+- `pnpm --filter @zendocx/web lint`
 - `pnpm db:migrate`
 - Live proof on a fresh local API at `http://127.0.0.1:4308/api/v1` backed by
   the fake VTU server at `http://127.0.0.1:4310`:
@@ -5689,7 +5754,7 @@ Full white-label SaaS multi-tenancy architecture implemented across all layers.
 - SUPER_ADMIN creates tenant accounts manually — no self-registration
 - Platform sets base commission rate (SystemConfig); tenants add margin on top
 - Tenant services use platform-wide services (tenantId: null) + tenant-specific (tenantId: tenant.id)
-- TenantResolverService: `*.zentry.ng` subdomain extraction + customDomain lookup; Redis TTL 60s
+- TenantResolverService: `*.zendocx.net` subdomain extraction + customDomain lookup; Redis TTL 60s
 - JWT includes `tenantId: string | null` (null = SUPER_ADMIN)
 - Registration endpoints require `@RequiresTenant()` — users register under a specific tenant
 - CBT job pool is tenant-scoped — CBTs only see orders from their own tenant
@@ -5728,12 +5793,12 @@ Full white-label SaaS multi-tenancy architecture implemented across all layers.
 
 ### Verification
 
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/api build`
-- `pnpm --filter @zentry/web typecheck`
-- `pnpm --filter @zentry/web lint`
-- `pnpm --filter @zentry/web build`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/api build`
+- `pnpm --filter @zendocx/web typecheck`
+- `pnpm --filter @zendocx/web lint`
+- `pnpm --filter @zendocx/web build`
 
 ### Notes
 
@@ -5759,10 +5824,10 @@ Full white-label SaaS multi-tenancy architecture implemented across all layers.
 
 ### Verification
 
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api test`
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/web lint`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api test`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/web lint`
 
 ### Notes
 
@@ -5793,7 +5858,7 @@ Full white-label SaaS multi-tenancy architecture implemented across all layers.
 ### Verification
 
 - `node --check scripts/verify-tenant-runtime.mjs`
-- `pnpm --filter @zentry/web lint`
+- `pnpm --filter @zendocx/web lint`
 - `pnpm verify:tenant:runtime` (live run against local stack; failed on stale API process as described above)
 
 ## 2026-04-11 — Multi-tenancy Batch 14 (Tenant data-model hardening)
@@ -5849,13 +5914,13 @@ Full white-label SaaS multi-tenancy architecture implemented across all layers.
 
 ### Verification
 
-- `pnpm --filter @zentry/api exec prisma generate`
+- `pnpm --filter @zendocx/api exec prisma generate`
 - `pnpm db:migrate`
 - `pnpm db:seed`
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api test`
-- `pnpm --filter @zentry/web lint`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api test`
+- `pnpm --filter @zendocx/web lint`
 
 ### Notes
 
@@ -5917,9 +5982,9 @@ Full white-label SaaS multi-tenancy architecture implemented across all layers.
 
 ### Verification
 
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api test -- --runInBand services.service.spec.ts`
-- `pnpm --filter @zentry/api lint`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api test -- --runInBand services.service.spec.ts`
+- `pnpm --filter @zendocx/api lint`
 
 ### Notes
 
@@ -5966,9 +6031,9 @@ Full white-label SaaS multi-tenancy architecture implemented across all layers.
 
 ### Verification
 
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/api test -- --runInBand provider-one.provider.spec.ts services.service.spec.ts`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/api test -- --runInBand provider-one.provider.spec.ts services.service.spec.ts`
 
 ### Notes
 
@@ -6121,10 +6186,10 @@ Multi-tenancy re-architecture Batch 4 (backend scoping) is fully complete. Batch
 
 ### Verification
 
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/web typecheck`
-- `pnpm --filter @zentry/web lint`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/web typecheck`
+- `pnpm --filter @zendocx/web lint`
 
 ### Blockers / Notes for Next Session
 
@@ -6188,11 +6253,11 @@ Multi-tenancy re-architecture Batch 4 (backend scoping) is fully complete. Batch
 
 ### Verification
 
-- `pnpm --filter @zentry/api exec prisma generate`
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api lint`
-- `pnpm --filter @zentry/web typecheck`
-- `pnpm --filter @zentry/web lint`
+- `pnpm --filter @zendocx/api exec prisma generate`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api lint`
+- `pnpm --filter @zendocx/web typecheck`
+- `pnpm --filter @zendocx/web lint`
 
 ### Blockers / Notes for Next Session
 
@@ -6246,8 +6311,8 @@ Multi-tenancy re-architecture Batch 4 (backend scoping) is fully complete. Batch
 
 ### Verification
 
-- `pnpm --filter @zentry/web lint`
-- `pnpm --filter @zentry/web typecheck`
+- `pnpm --filter @zendocx/web lint`
+- `pnpm --filter @zendocx/web typecheck`
 
 ### Blockers / Notes for Next Session
 
@@ -6302,8 +6367,8 @@ Multi-tenancy re-architecture Batch 4 (backend scoping) is fully complete. Batch
 
 ### Verification
 
-- `pnpm --filter @zentry/api typecheck`
-- `pnpm --filter @zentry/api lint`
+- `pnpm --filter @zendocx/api typecheck`
+- `pnpm --filter @zendocx/api lint`
 - `pnpm db:seed`
 - `pnpm verify:tenant:runtime`
 

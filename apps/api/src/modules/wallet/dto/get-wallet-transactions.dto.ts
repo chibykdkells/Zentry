@@ -6,7 +6,7 @@ import {
   Max,
   Min,
 } from 'class-validator';
-import { TransactionStatus, TransactionType } from '@zentry/types';
+import { TransactionStatus, TransactionType } from '@zendocx/types';
 
 export class GetWalletTransactionsQueryDto {
   @IsOptional()

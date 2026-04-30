@@ -1,12 +1,12 @@
-This is the Zentry web app: a [Next.js](https://nextjs.org) 16 Progressive Web
-App built inside the Zentry pnpm monorepo.
+This is the ZenDocx web app: a [Next.js](https://nextjs.org) 16 Progressive Web
+App built inside the ZenDocx pnpm monorepo.
 
 ## Getting Started
 
 From the repo root, start the web app with:
 
 ```bash
-pnpm --filter @zentry/web dev
+pnpm --filter @zendocx/web dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.

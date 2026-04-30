@@ -14,7 +14,7 @@ import {
 } from '@/hooks/use-tenant-admin';
 import { getApiErrorMessage } from '@/lib/api-error';
 import { formatDate } from '@/lib/format';
-import { UserRole } from '@zentry/types';
+import { UserRole } from '@zendocx/types';
 import { cn } from '@/lib/utils';
 
 export default function TenantUsersPage() {

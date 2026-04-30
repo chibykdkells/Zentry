@@ -20,7 +20,7 @@ import {
   ShieldCheck,
   Trash2,
 } from 'lucide-react';
-import { ServiceDeliveryMode } from '@zentry/types';
+import { ServiceDeliveryMode } from '@zendocx/types';
 import { AccountPanel } from '@/components/shared/account-panel';
 import { EmptyState } from '@/components/shared/empty-state';
 import { StatCard } from '@/components/shared/stat-card';

@@ -10,7 +10,7 @@ import { useWallet } from '@/hooks/use-wallet';
 import { formatDate, formatNaira } from '@/lib/format';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PageHero } from '@/components/shared/page-hero';
-import { TransactionType } from '@zentry/types';
+import { TransactionType } from '@zendocx/types';
 
 export default function HomePage() {
   const { profile, loading, error } = useAuthProfile();

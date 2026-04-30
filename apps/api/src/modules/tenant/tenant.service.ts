@@ -6,13 +6,13 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { randomBytes } from 'crypto';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { Prisma, Tenant } from '@prisma/client';
 import { ProviderCredentialsService } from '../../providers/provider-credentials.service';
 import { StorageService } from '../../providers/storage/storage.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
-import { TenantPublic, UserRole } from '@zentry/types';
+import { TenantPublic, UserRole } from '@zendocx/types';
 import { TenantResolverService } from './tenant-resolver.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';

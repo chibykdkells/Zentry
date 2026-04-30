@@ -14,7 +14,7 @@ import {
   ResetPasswordSchema,
   SetPinSchema,
   VerifyOtpSchema,
-} from '@zentry/validators';
+} from '@zendocx/validators';
 
 export class LoginDto {
   static schema = LoginSchema;

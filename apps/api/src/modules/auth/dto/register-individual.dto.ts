@@ -5,7 +5,7 @@ import {
   MaxLength,
   Matches,
 } from 'class-validator';
-import { RegisterIndividualSchema } from '@zentry/validators';
+import { RegisterIndividualSchema } from '@zendocx/validators';
 
 const nigerianPhoneRegex = /^(\+234|0)[789][01]\d{8}$/;
 const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;

@@ -8,7 +8,7 @@ import { useForm } from 'react-hook-form';
 import {
   InitiateWalletFundingInput,
   InitiateWalletFundingSchema,
-} from '@zentry/validators';
+} from '@zendocx/validators';
 import { FeedbackBanner } from '@/components/shared/feedback-banner';
 import apiClient from '@/lib/api-client';
 import { getApiErrorMessage } from '@/lib/api-error';

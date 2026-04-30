@@ -1,4 +1,4 @@
-# DATABASE.md — Zentry Database Rules & Schema Guide
+# DATABASE.md — ZenDocx Database Rules & Schema Guide
 
 > Last updated: 2026-04-03
 > Read this before writing any Prisma schema, migration, query, or
@@ -151,7 +151,7 @@ Do NOT add indexes speculatively. Only index what is actually queried.
 
 ## Soft Delete Policy
 
-Zentry does **not** use soft deletes by default. Exceptions:
+ZenDocx does **not** use soft deletes by default. Exceptions:
 - Users: use `isActive: false` (never delete users — financial history)
 - Services: use `isActive: false` (never delete — order history references)
 - Orders: NEVER deleted — immutable financial record
@@ -162,7 +162,7 @@ Zentry does **not** use soft deletes by default. Exceptions:
 ## Seed Data (prisma/seed.ts)
 
 The seed always creates:
-1. Super Admin: `admin@zentry.ng` / `Admin@Zentry2024!`
+1. Super Admin: `admin@zendocx.net` / `Admin@ZenDocx2024!`
 2. Test tenant: `testbiz`
 3. Tenant Admin: `tenant@test.com` / `Test@1234!`
 4. Test Individual: `user@test.com` / `Test@1234!`

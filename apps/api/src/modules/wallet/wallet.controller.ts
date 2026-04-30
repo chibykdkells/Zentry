@@ -10,8 +10,8 @@ import {
   Query,
   Req,
 } from '@nestjs/common';
-import type { JwtUser } from '@zentry/types';
-import { UserRole } from '@zentry/types';
+import type { JwtUser } from '@zendocx/types';
+import { UserRole } from '@zendocx/types';
 import type { Request } from 'express';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';

@@ -50,7 +50,7 @@ describe('TenantResolverService', () => {
     service = new TenantResolverService(prisma as never, redis as never);
   });
 
-  it('resolves explicit tenant slug for localhost development', async () => {
+  it('resolves explicit tenant slug regardless of host (localhost)', async () => {
     prisma.tenant.findFirst.mockResolvedValue(tenant);
 
     const result = await service.resolveFromRequestContext({
@@ -60,18 +60,51 @@ describe('TenantResolverService', () => {
 
     expect(result).toEqual(tenant);
     expect(prisma.tenant.findFirst).toHaveBeenCalledWith({
-      where: {
-        slug: 'testbiz',
-        isActive: true,
-      },
+      where: { slug: 'testbiz', isActive: true },
     });
   });
 
-  it('returns null for the platform hostname', async () => {
-    const result = await service.resolveFromHostname('zentry.ng');
+  it('resolves explicit tenant slug regardless of host (production www domain)', async () => {
+    prisma.tenant.findFirst.mockResolvedValue(tenant);
+
+    const result = await service.resolveFromRequestContext({
+      hostname: 'www.zendocx.net',
+      explicitSlug: 'testbiz',
+    });
+
+    expect(result).toEqual(tenant);
+    expect(prisma.tenant.findFirst).toHaveBeenCalledWith({
+      where: { slug: 'testbiz', isActive: true },
+    });
+  });
+
+  it('resolves explicit tenant slug regardless of host (api subdomain)', async () => {
+    prisma.tenant.findFirst.mockResolvedValue(tenant);
+
+    const result = await service.resolveFromRequestContext({
+      hostname: 'api.zendocx.net',
+      explicitSlug: 'testbiz',
+    });
+
+    expect(result).toEqual(tenant);
+    expect(prisma.tenant.findFirst).toHaveBeenCalledWith({
+      where: { slug: 'testbiz', isActive: true },
+    });
+  });
+
+  it('returns null for the platform root hostname', async () => {
+    const result = await service.resolveFromHostname('zendocx.net');
 
     expect(result).toBeNull();
     expect(redis.getJson).not.toHaveBeenCalled();
+    expect(prisma.tenant.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('returns null for reserved platform subdomains', async () => {
+    for (const sub of ['www', 'api', 'app']) {
+      const result = await service.resolveFromHostname(`${sub}.zendocx.net`);
+      expect(result).toBeNull();
+    }
     expect(prisma.tenant.findFirst).not.toHaveBeenCalled();
   });
 
@@ -79,10 +112,10 @@ describe('TenantResolverService', () => {
     redis.getJson.mockResolvedValue(null);
     prisma.tenant.findFirst.mockResolvedValue(tenant);
 
-    const result = await service.resolveFromHostname('testbiz.zentry.ng');
+    const result = await service.resolveFromHostname('testbiz.zendocx.net');
 
     expect(result).toEqual(tenant);
-    expect(redis.getJson).toHaveBeenCalledWith('tenant:host:testbiz.zentry.ng');
+    expect(redis.getJson).toHaveBeenCalledWith('tenant:host:testbiz.zendocx.net');
     expect(prisma.tenant.findFirst).toHaveBeenCalledWith({
       where: {
         slug: 'testbiz',
@@ -90,7 +123,7 @@ describe('TenantResolverService', () => {
       },
     });
     expect(redis.setJson).toHaveBeenCalledWith(
-      'tenant:host:testbiz.zentry.ng',
+      'tenant:host:testbiz.zendocx.net',
       tenant,
       60,
     );

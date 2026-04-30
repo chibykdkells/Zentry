@@ -13,7 +13,7 @@ import { useServiceCatalog } from '@/hooks/use-service-catalog';
 import { formatNaira } from '@/lib/format';
 import { catalogCategoriesMeta } from '@/lib/service-catalog';
 import { cn } from '@/lib/utils';
-import { ServiceDeliveryMode } from '@zentry/types';
+import { ServiceDeliveryMode } from '@zendocx/types';
 
 export default function ServicesPage() {
   const [query, setQuery] = useState('');

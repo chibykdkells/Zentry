@@ -154,8 +154,8 @@ export default function NotificationsPage() {
           {pushConfig?.enabled ? (
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
               {pushStatus?.isSubscribed
-                ? 'Background push is active for this browser. You can receive updates even when Zentry is not open.'
-                : 'Background push is available. Enable it to receive updates when Zentry is in the background.'}
+                ? 'Background push is active for this browser. You can receive updates even when ZenDocx is not open.'
+                : 'Background push is available. Enable it to receive updates when ZenDocx is in the background.'}
             </div>
           ) : (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">

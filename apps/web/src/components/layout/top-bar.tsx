@@ -27,7 +27,7 @@ export function TopBar({ title, className }: TopBarProps) {
   const homeHref = effectiveRole ? getDefaultRouteForRole(effectiveRole) : '/home';
 
   const resolvedTenant = mounted ? tenant : null;
-  const brandName = resolvedTenant?.name ?? 'Zentry';
+  const brandName = resolvedTenant?.name ?? 'ZenDocx';
   const brandInitial = brandName.charAt(0).toUpperCase();
 
   const initials = user

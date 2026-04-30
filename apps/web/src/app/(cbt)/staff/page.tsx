@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Plus, Trash2, User, Mail, Phone, Calendar, AlertCircle, X, Eye, EyeOff } from 'lucide-react';
 import { useCbtStaff, useCreateCbtStaff, useDeleteCbtStaff } from '@/hooks/use-cbt-staff';
 import { useAuthStore } from '@/stores/auth.store';
-import { UserRole } from '@zentry/types';
+import { UserRole } from '@zendocx/types';
 import { cn } from '@/lib/utils';
 
 function formatDate(iso: string) {

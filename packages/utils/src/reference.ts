@@ -11,12 +11,12 @@ export function generateOrderNumber(): string {
 
 /**
  * Generate a unique transaction reference.
- * Format: ZEN-TXN-{timestamp}-{random} (URL-safe, unique)
+ * Format: ZDX-TXN-{timestamp}-{random} (URL-safe, unique)
  */
 export function generateTransactionRef(): string {
   const timestamp = Date.now().toString(36).toUpperCase();
   const random = Math.random().toString(36).toUpperCase().slice(2, 8);
-  return `ZEN-TXN-${timestamp}-${random}`;
+  return `ZDX-TXN-${timestamp}-${random}`;
 }
 
 /**

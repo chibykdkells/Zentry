@@ -1,4 +1,4 @@
-# CONVENTIONS.md — Zentry Code Conventions
+# CONVENTIONS.md — ZenDocx Code Conventions
 
 > Last updated: 2026-04-06
 > These conventions are non-negotiable. Consistent code is maintainable code.
@@ -141,7 +141,7 @@ export class CreateOrderDto {
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { formatNaira } from '@/lib/format'
-import type { Order } from '@zentry/types'
+import type { Order } from '@zendocx/types'
 
 // 2. Types/interfaces
 interface OrderCardProps {
@@ -297,7 +297,7 @@ from TanStack Query. Do not access `response.data.data` in components.
 
 1. Node built-ins (`path`, `crypto`)
 2. External packages (`react`, `next`, `framer-motion`)
-3. Internal packages (`@zentry/types`, `@zentry/utils`)
+3. Internal packages (`@zendocx/types`, `@zendocx/utils`)
 4. App-level imports (`@/lib/...`, `@/components/...`)
 5. Relative imports (`./wallet-card`)
 6. Type imports (`import type { ... }`)

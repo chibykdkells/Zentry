@@ -4,7 +4,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 
 const TENANT_CACHE_TTL = 60; // 60 seconds
-const PLATFORM_HOSTNAME = 'zentry.ng';
+const PLATFORM_HOSTNAME =
+  process.env['PLATFORM_DOMAIN'] ?? 'zendocx.net';
 
 @Injectable()
 export class TenantResolverService {
@@ -37,10 +38,9 @@ export class TenantResolverService {
     hostname: string;
     explicitSlug?: string | null;
   }): Promise<Tenant | null> {
-    const host = input.hostname.split(':')[0];
     const explicitSlug = input.explicitSlug?.trim();
 
-    if (explicitSlug && this.isLocalDevelopmentHost(host)) {
+    if (explicitSlug) {
       return this.resolveFromSlug(explicitSlug);
     }
 
@@ -52,7 +52,7 @@ export class TenantResolverService {
    *
    * Resolution order:
    * 1. Check Redis cache (key: tenant:host:{hostname})
-   * 2. Extract slug from subdomain: "testbiz.zentry.ng" → slug = "testbiz"
+   * 2. Extract slug from subdomain: "testbiz.zendocx.net" → slug = "testbiz"
    * 3. Fall back to querying customDomain field
    *
    * Returns null for the platform's own hostname (admin dashboard traffic).
@@ -60,11 +60,15 @@ export class TenantResolverService {
   async resolveFromHostname(hostname: string): Promise<Tenant | null> {
     if (!hostname) return null;
 
-    // Strip port from hostname if present (e.g., "testbiz.zentry.ng:3000")
+    // Strip port from hostname if present (e.g., "testbiz.zendocx.net:3000")
     const host = hostname.split(':')[0];
 
-    // Platform root domain — no tenant needed (SUPER_ADMIN access)
-    if (host === PLATFORM_HOSTNAME || host === `www.${PLATFORM_HOSTNAME}`) {
+    // Platform root domain and reserved subdomains — no tenant resolution
+    const PLATFORM_SUBDOMAINS = ['www', 'api', 'app', 'mail', 'cdn', 'static'];
+    if (
+      host === PLATFORM_HOSTNAME ||
+      PLATFORM_SUBDOMAINS.some((sub) => host === `${sub}.${PLATFORM_HOSTNAME}`)
+    ) {
       return null;
     }
 
@@ -81,7 +85,7 @@ export class TenantResolverService {
 
     let tenant: Tenant | null = null;
 
-    // Try subdomain extraction: "testbiz.zentry.ng" → slug = "testbiz"
+    // Try subdomain extraction: "testbiz.zendocx.net" → slug = "testbiz"
     if (host.endsWith(`.${PLATFORM_HOSTNAME}`)) {
       const slug = host.replace(`.${PLATFORM_HOSTNAME}`, '');
       if (slug) {

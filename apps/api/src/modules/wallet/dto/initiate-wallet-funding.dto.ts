@@ -1,5 +1,5 @@
 import { IsNumber, Max, Min } from 'class-validator';
-import { InitiateWalletFundingSchema } from '@zentry/validators';
+import { InitiateWalletFundingSchema } from '@zendocx/validators';
 
 export class InitiateWalletFundingDto {
   static schema = InitiateWalletFundingSchema;

@@ -1,5 +1,5 @@
 import { Controller, Get, Query, Res } from '@nestjs/common';
-import { UserRole, type JwtUser } from '@zentry/types';
+import { UserRole, type JwtUser } from '@zendocx/types';
 import type { Response } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -72,7 +72,7 @@ export class AnalyticsController {
     const csv = await this.analyticsService.exportOrdersCsv(
       user.tenantId ?? null,
     );
-    const filename = `zentry-orders-${new Date().toISOString().slice(0, 10)}.csv`;
+    const filename = `zendocx-orders-${new Date().toISOString().slice(0, 10)}.csv`;
     res.set({
       'Content-Type': 'text/csv',
       'Content-Disposition': `attachment; filename="${filename}"`,
@@ -85,7 +85,7 @@ export class AnalyticsController {
     const csv = await this.analyticsService.exportTransactionsCsv(
       user.tenantId ?? null,
     );
-    const filename = `zentry-transactions-${new Date().toISOString().slice(0, 10)}.csv`;
+    const filename = `zendocx-transactions-${new Date().toISOString().slice(0, 10)}.csv`;
     res.set({
       'Content-Type': 'text/csv',
       'Content-Disposition': `attachment; filename="${filename}"`,

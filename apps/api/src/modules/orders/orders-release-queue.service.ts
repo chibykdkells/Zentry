@@ -15,7 +15,7 @@ import {
   UserRole,
 } from '@prisma/client';
 import { Queue } from 'bull';
-import { generateTransactionRef } from '@zentry/utils';
+import { generateTransactionRef } from '@zendocx/utils';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import {
@@ -41,7 +41,15 @@ export class OrdersReleaseQueueService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    await this.schedulePendingReleaseJobs();
+    try {
+      await this.schedulePendingReleaseJobs();
+    } catch (error) {
+      this.logger.error(
+        `Skipping release scheduler warm-up during bootstrap: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    }
   }
 
   async scheduleReleaseForOrder(orderId: string) {

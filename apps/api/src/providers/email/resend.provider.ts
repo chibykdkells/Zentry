@@ -14,9 +14,9 @@ export class ResendEmailProvider implements IEmailProvider {
     this.apiKey = config.get<string>('RESEND_API_KEY', '');
     this.defaultFromEmail = config.get<string>(
       'RESEND_FROM_EMAIL',
-      'noreply@zentry.ng',
+      'noreply@zendocx.net',
     );
-    this.defaultFromName = config.get<string>('RESEND_FROM_NAME', 'Zentry');
+    this.defaultFromName = config.get<string>('RESEND_FROM_NAME', 'ZenDocx');
   }
 
   sendEmail(input: SendEmailInput): Promise<SendEmailResult> {

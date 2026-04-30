@@ -1,26 +1,26 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: zentry-postgres
+    container_name: zendocx-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: zentry_db
+      POSTGRES_DB: zendocx_db
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
     ports:
       - "5432:5432"
     volumes:
-      - zentry-postgres-data:/var/lib/postgresql/data
+      - zendocx-postgres-data:/var/lib/postgresql/data
 
   redis:
     image: redis:7-alpine
-    container_name: zentry-redis
+    container_name: zendocx-redis
     restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
-      - zentry-redis-data:/data
+      - zendocx-redis-data:/data
 
 volumes:
-  zentry-postgres-data:
-  zentry-redis-data:
+  zendocx-postgres-data:
+  zendocx-redis-data:

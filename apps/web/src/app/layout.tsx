@@ -6,13 +6,13 @@ import { getTenantThemeBootstrapScript } from '@/lib/tenant-theme';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Zentry — Government Services, Simplified',
+  title: 'ZenDocx — Government Services, Simplified',
   description: 'Fast. Trusted. Government Services at your fingertips. JAMB, NIMC, NECO, Airtime, Data, and more.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'Zentry',
+    title: 'ZenDocx',
   },
   icons: {
     icon: '/icons/icon-192.png',

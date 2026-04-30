@@ -12,7 +12,7 @@ import { useMediaQuery } from '@/hooks/use-media-query';
 import type { OrderDetail } from '@/hooks/use-orders';
 import { getApiErrorMessage } from '@/lib/api-error';
 import { formatDate, formatNaira } from '@/lib/format';
-import { DisputeStatus, FulfillmentType } from '@zentry/types';
+import { DisputeStatus, FulfillmentType } from '@zendocx/types';
 
 export function AdminDisputeReviewPanel({ detail }: { detail: OrderDetail }) {
   const reviewDispute = useReviewOrderDispute();

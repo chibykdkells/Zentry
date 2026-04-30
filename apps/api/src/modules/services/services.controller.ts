@@ -8,8 +8,8 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import type { JwtUser } from '@zentry/types';
-import { UserRole } from '@zentry/types';
+import type { JwtUser } from '@zendocx/types';
+import { UserRole } from '@zendocx/types';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CreateServiceCategoryDto } from './dto/create-service-category.dto';

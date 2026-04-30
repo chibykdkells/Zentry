@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { LineChart, Search, ShieldCheck, Wallet } from 'lucide-react';
-import { TransactionStatus, TransactionType, UserRole } from '@zentry/types';
+import { TransactionStatus, TransactionType, UserRole } from '@zendocx/types';
 import { AdminWithdrawalReview } from '@/components/admin/admin-withdrawal-review';
 import { AccountPanel } from '@/components/shared/account-panel';
 import { EmptyState } from '@/components/shared/empty-state';

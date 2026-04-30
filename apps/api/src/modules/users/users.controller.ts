@@ -8,7 +8,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { CbtApprovalStatus, UserRole, type JwtUser } from '@zentry/types';
+import { CbtApprovalStatus, UserRole, type JwtUser } from '@zendocx/types';
 import { Audit } from '../../common/decorators/audit.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';

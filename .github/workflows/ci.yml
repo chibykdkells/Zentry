@@ -39,9 +39,9 @@ jobs:
         run: pnpm build
         env:
           # Dummy values so Next.js build doesn't fail on missing env vars
-          NEXT_PUBLIC_API_URL: https://api.zentry.ng
-          NEXT_PUBLIC_APP_URL: https://app.zentry.ng
-          DATABASE_URL: postgresql://postgres:password@localhost:5432/zentry_db
+          NEXT_PUBLIC_API_URL: https://api.zendocx.net
+          NEXT_PUBLIC_APP_URL: https://app.zendocx.net
+          DATABASE_URL: postgresql://postgres:password@localhost:5432/zendocx_db
           REDIS_URL: redis://localhost:6379
           JWT_ACCESS_SECRET: ci_dummy_access_secret_minimum_64_characters_long_placeholder_value
           JWT_REFRESH_SECRET: ci_dummy_refresh_secret_minimum_64_characters_long_placeholder_value

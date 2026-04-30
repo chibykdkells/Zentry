@@ -11,7 +11,7 @@ export class TermiiSmsProvider implements ISmsProvider {
 
   constructor(private readonly config: ConfigService) {
     this.apiKey = config.get<string>('TERMII_API_KEY', '');
-    this.senderId = config.get<string>('TERMII_SENDER_ID', 'Zentry');
+    this.senderId = config.get<string>('TERMII_SENDER_ID', 'ZenDocx');
   }
 
   sendSms(input: SendSmsInput): Promise<SendSmsResult> {

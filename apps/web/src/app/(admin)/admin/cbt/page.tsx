@@ -22,7 +22,7 @@ import {
 import { useMediaQuery } from '@/hooks/use-media-query';
 import { getApiErrorMessage } from '@/lib/api-error';
 import { formatDate } from '@/lib/format';
-import { CbtApprovalStatus } from '@zentry/types';
+import { CbtApprovalStatus } from '@zendocx/types';
 
 const STATUS_OPTIONS: Array<{ label: string; value: CbtApprovalStatus | 'ALL' }> = [
   { label: 'All', value: 'ALL' },

@@ -1,5 +1,5 @@
 import { IsEnum } from 'class-validator';
-import { UserRole } from '@zentry/types';
+import { UserRole } from '@zendocx/types';
 
 export class UpdateTenantUserRoleDto {
   @IsEnum(UserRole)

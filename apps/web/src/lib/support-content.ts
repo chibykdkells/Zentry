@@ -36,9 +36,9 @@ export const supportQuickActions = [
 
 export const supportFaqs = [
   {
-    question: 'Who can use Zentry?',
+    question: 'Who can use ZenDocx?',
     answer:
-      'Zentry now supports individuals, approved CBT centers, and tenant-managed business portals. The public account flow is no longer limited to students.',
+      'ZenDocx now supports individuals, approved CBT centers, and tenant-managed business portals. The public account flow is no longer limited to students.',
   },
   {
     question: 'What if I cannot sign in?',

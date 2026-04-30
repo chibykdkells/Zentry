@@ -1,6 +1,6 @@
 /**
  * Convert Naira amount to Kobo (integer).
- * All money in Zentry is stored in Kobo to avoid floating point issues.
+ * All money in ZenDocx is stored in Kobo to avoid floating point issues.
  *
  * @example nairaToKobo(1500) → 150000n
  */

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { UserRole } from '@zentry/types';
+import { UserRole } from '@zendocx/types';
 import { ShieldCheck } from 'lucide-react';
 import { AccountPanel } from '@/components/shared/account-panel';
 import { EmptyState } from '@/components/shared/empty-state';

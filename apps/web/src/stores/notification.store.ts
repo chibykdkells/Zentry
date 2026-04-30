@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { UserRole } from '@zentry/types';
+import { UserRole } from '@zendocx/types';
 import {
   AppNotification,
   buildNotificationsForRole,
@@ -73,7 +73,7 @@ export const useNotificationStore = create<NotificationState>()(
         }),
     }),
     {
-      name: 'zentry-notifications',
+      name: 'zendocx-notifications',
       partialize: (state) => ({
         notifications: state.notifications,
         seededForRole: state.seededForRole,

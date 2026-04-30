@@ -1,4 +1,4 @@
-# CLAUDE.md — Zentry Project AI Context
+# CLAUDE.md — ZenDocx Project AI Context
 
 > **IMPORTANT FOR ALL AI ASSISTANTS:**
 > Read this file AND every file listed under "Required Reading" before writing
@@ -10,9 +10,9 @@
 
 ---
 
-## What Is Zentry?
+## What Is ZenDocx?
 
-Zentry is a **multi-role, wallet-based government services escrow marketplace**
+ZenDocx is a **multi-role, wallet-based government services escrow marketplace**
 built as a Progressive Web Application (PWA). It operates in Nigeria and
 connects individuals/cyber cafes (service requesters) with licensed CBT centers
 (service fulfillers) for government document services (JAMB, NIMC, NECO) and
@@ -54,7 +54,7 @@ admin only.
 ## Repo Structure (top level)
 
 ```
-zentry/
+zendocx/
 ├── apps/
 │   ├── web/          # Next.js 16 PWA — mobile-first, installable
 │   └── api/          # NestJS — REST + WebSocket
@@ -100,7 +100,7 @@ zentry/
 | Queue | Bull + Redis |
 | Real-time | Socket.io |
 | Auth | JWT (15min) + Refresh Token rotation (7d, httpOnly cookie) |
-| Payments | FintavaPay (primary), Paystack, Flutterwave (backups) |
+| Payments | Paystack (primary), FintavaPay, Flutterwave (backups) |
 | VTU | Pluggable via IVtuProvider interface |
 | SMS | Termii |
 | Email | Resend |
@@ -114,7 +114,7 @@ zentry/
 
 | Token | Value |
 |---|---|
-| Name | Zentry |
+| Name | ZenDocx |
 | Tagline | Fast. Trusted. Government Services, Simplified. |
 | Primary | `#0D1B3E` (Deep Navy) |
 | Accent | `#F5A623` (Golden Amber) |

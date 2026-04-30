@@ -1,7 +1,11 @@
-FROM node:20-alpine
+FROM node:20-bookworm-slim
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 WORKDIR /app
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends openssl \
+ && rm -rf /var/lib/apt/lists/*
 
 RUN corepack enable
 
@@ -41,4 +45,4 @@ RUN test -f apps/api/dist/main.js && echo "dist/main.js OK" || (echo "MISSING di
 
 ENV NODE_ENV=production
 EXPOSE 4000
-CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy --schema=apps/api/prisma/schema.prisma && node apps/api/dist/main"]
+CMD ["node", "apps/api/dist/main"]

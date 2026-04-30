@@ -1,4 +1,4 @@
-# SECURITY.md — Zentry Security Rules
+# SECURITY.md — ZenDocx Security Rules
 
 > Last updated: 2026-04-03
 > Security is not a phase. It is implemented from line 1.

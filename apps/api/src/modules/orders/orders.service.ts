@@ -19,8 +19,8 @@ import {
 } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import { createHmac, timingSafeEqual } from 'crypto';
-import { generateOrderNumber, generateTransactionRef } from '@zentry/utils';
-import { nairaToKobo } from '@zentry/utils';
+import { generateOrderNumber, generateTransactionRef } from '@zendocx/utils';
+import { nairaToKobo } from '@zendocx/utils';
 import { StorageService } from '../../providers/storage/storage.service';
 import { VtuService } from '../../providers/vtu/vtu.service';
 import { EmailService } from '../../providers/email/email.service';
@@ -569,7 +569,7 @@ export class OrdersService {
 
     return this.sendSmsSafely({
       to: input.phone,
-      message: `Zentry: ${input.serviceName} request received. Order ${input.orderNumber}. ${statusLine}`,
+      message: `ZenDocx: ${input.serviceName} request received. Order ${input.orderNumber}. ${statusLine}`,
     });
   }
 
@@ -624,7 +624,7 @@ export class OrdersService {
 
     return this.sendSmsSafely({
       to: input.phone,
-      message: `Zentry: ${input.serviceName} is ready. Order ${input.orderNumber}. ${bodyLine}`,
+      message: `ZenDocx: ${input.serviceName} is ready. Order ${input.orderNumber}. ${bodyLine}`,
     });
   }
 
@@ -663,14 +663,14 @@ export class OrdersService {
   }) {
     return this.sendSmsSafely({
       to: input.phone,
-      message: `Zentry: ${input.serviceName} (${input.orderNumber}) dispute update. ${input.message}`,
+      message: `ZenDocx: ${input.serviceName} (${input.orderNumber}) dispute update. ${input.message}`,
     });
   }
 
   private getResultFileSignatureSecret() {
     return this.configService.get<string>(
       'JWT_ACCESS_SECRET',
-      'zentry-result-file-secret',
+      'zendocx-result-file-secret',
     );
   }
 

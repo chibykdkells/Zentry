@@ -23,7 +23,7 @@ import { useAdminOrderDetail } from '@/hooks/use-orders';
 import { adminDisputesSections } from '@/lib/admin-content';
 import { formatDate, formatNaira } from '@/lib/format';
 import { cn } from '@/lib/utils';
-import { DisputeStatus } from '@zentry/types';
+import { DisputeStatus } from '@zendocx/types';
 
 const ALL_FILTER_VALUE = 'ALL';
 

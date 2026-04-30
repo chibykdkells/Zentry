@@ -10,7 +10,7 @@ import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { NotificationsService } from './notifications.service';
-import { UserRole } from '@zentry/types';
+import { UserRole } from '@zendocx/types';
 
 interface AuthenticatedSocket extends Socket {
   userId?: string;

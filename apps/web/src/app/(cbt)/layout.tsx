@@ -8,7 +8,7 @@ import { RouteGuard } from '@/components/auth/route-guard';
 import { cbtPrimaryNav, cbtStaffPrimaryNav, cbtSecondaryNav } from '@/lib/navigation';
 import { useTenantStore } from '@/stores/tenant.store';
 import { useAuthStore } from '@/stores/auth.store';
-import { UserRole } from '@zentry/types';
+import { UserRole } from '@zendocx/types';
 
 export default function CbtLayout({ children }: { children: React.ReactNode }) {
   const tenant = useTenantStore((state) => state.tenant);
@@ -19,8 +19,8 @@ export default function CbtLayout({ children }: { children: React.ReactNode }) {
   const brandLabel = mounted
     ? tenant
       ? `${tenant.name} CBT`
-      : 'Zentry CBT'
-    : 'Zentry CBT';
+      : 'ZenDocx CBT'
+    : 'ZenDocx CBT';
 
   const primaryNav = user?.role === UserRole.CBT_STAFF ? cbtStaffPrimaryNav : cbtPrimaryNav;
 

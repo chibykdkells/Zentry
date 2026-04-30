@@ -17,7 +17,7 @@ import {
 } from '@/components/shared/skeleton-loader';
 import { useMyDisputes } from '@/hooks/use-disputes';
 import { formatDate, formatTimeUntil } from '@/lib/format';
-import { DisputeStatus } from '@zentry/types';
+import { DisputeStatus } from '@zendocx/types';
 
 export default function DisputesPage() {
   const { metrics, disputes, meta, loading, error, reload } = useMyDisputes();

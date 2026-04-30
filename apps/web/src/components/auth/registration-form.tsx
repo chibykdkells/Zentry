@@ -12,8 +12,8 @@ import {
   RegisterCbtSchema,
   type RegisterIndividualInput,
   type RegisterCbtInput,
-} from '@zentry/validators';
-import { UserRole } from '@zentry/types';
+} from '@zendocx/validators';
+import { UserRole } from '@zendocx/types';
 import { AuthShell } from '@/components/auth/auth-shell';
 import { FeedbackBanner } from '@/components/shared/feedback-banner';
 import apiClient from '@/lib/api-client';
@@ -93,6 +93,7 @@ export function RegistrationForm({
   const [loading, setLoading] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const tenantReady = Boolean(tenant ?? resolveTenantSlugForRequest());
+  const requiresTenant = true;
 
   const resolver = useMemo(() => {
     switch (role) {
@@ -114,9 +115,9 @@ export function RegistrationForm({
   });
 
   const onSubmit = async (values: RegistrationFormValues) => {
-    if (!tenantReady) {
+    if (requiresTenant && !tenantReady) {
       setFormError(
-        'Registration is only available inside a business portal. Open the tenant storefront first, then try again.',
+        'Registration is only available inside a tenant business portal. Use the portal URL shared by your organization, then try again.',
       );
       return;
     }
@@ -153,11 +154,11 @@ export function RegistrationForm({
           />
         ) : null}
 
-        {!formError && !tenantReady ? (
+        {!formError && requiresTenant && !tenantReady ? (
           <FeedbackBanner
             tone="info"
             title="Business portal required"
-            message="This registration flow needs an active tenant portal. If you are working locally, make sure your dev tenant slug is configured and reload the page."
+            message="ZenDocx is platform software for tenant businesses. Users and CBT centers must register through their organization's tenant portal, not the main Zendocx.net website."
           />
         ) : null}
 
@@ -243,7 +244,7 @@ export function RegistrationForm({
 
         <button
           type="submit"
-          disabled={loading || !tenantReady}
+          disabled={loading || (requiresTenant && !tenantReady)}
           className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#0D1B3E] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#132754] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {loading ? <Loader2 size={16} className="animate-spin" /> : null}

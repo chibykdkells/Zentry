@@ -2,8 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { WithdrawalStatus } from '@zentry/types';
-import type { CreateWithdrawalRequestInput } from '@zentry/validators';
+import { WithdrawalStatus } from '@zendocx/types';
+import type { CreateWithdrawalRequestInput } from '@zendocx/validators';
 import apiClient from '@/lib/api-client';
 import { getApiErrorMessage } from '@/lib/api-error';
 

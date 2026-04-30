@@ -18,7 +18,7 @@ export default function OfflinePage() {
           You are temporarily offline
         </h1>
         <p className="mt-3 text-sm leading-6 text-slate-500">
-          Zentry could not reach the network right now. As soon as your
+          ZenDocx could not reach the network right now. As soon as your
           connection returns, you can continue with your account, services, and
           wallet activity.
         </p>

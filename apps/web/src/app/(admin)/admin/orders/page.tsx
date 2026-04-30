@@ -33,7 +33,7 @@ import { useMediaQuery } from '@/hooks/use-media-query';
 import { usePlatformAdminTenants } from '@/hooks/use-platform-admin-tenants';
 import { formatDate, formatNaira, formatTimeUntil } from '@/lib/format';
 import { cn } from '@/lib/utils';
-import { FulfillmentType, OrderStatus, UserRole } from '@zentry/types';
+import { FulfillmentType, OrderStatus, UserRole } from '@zendocx/types';
 
 const ALL_FILTER_VALUE = 'ALL';
 

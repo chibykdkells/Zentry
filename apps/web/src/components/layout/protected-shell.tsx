@@ -7,7 +7,7 @@ import { TopBar } from '@/components/layout/top-bar';
 import { useAuthStore } from '@/stores/auth.store';
 import { getNavigationForRole } from '@/lib/navigation';
 import { useTenantStore } from '@/stores/tenant.store';
-import { UserRole } from '@zentry/types';
+import { UserRole } from '@zendocx/types';
 
 interface ProtectedShellProps {
   title: string;
@@ -33,12 +33,12 @@ function getSidebarTitle(role: UserRole | undefined, tenantName: string | null |
   switch (role) {
     case UserRole.CBT_CENTER:
     case UserRole.CBT_STAFF:
-      return 'Zentry CBT';
+      return 'ZenDocx CBT';
     case UserRole.SUPER_ADMIN:
-      return 'Zentry Admin';
+      return 'ZenDocx Admin';
     case UserRole.INDIVIDUAL:
     default:
-      return 'Zentry';
+      return 'ZenDocx';
   }
 }
 

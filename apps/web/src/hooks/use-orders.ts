@@ -8,7 +8,7 @@ import {
   TransactionStatus,
   TransactionType,
   UserRole,
-} from '@zentry/types';
+} from '@zendocx/types';
 import apiClient from '@/lib/api-client';
 import { getApiErrorMessage } from '@/lib/api-error';
 

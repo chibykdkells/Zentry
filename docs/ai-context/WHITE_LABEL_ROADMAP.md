@@ -8,9 +8,9 @@
 
 ## Purpose
 
-This document defines the platform-first white-label expansion for Zentry.
+This document defines the platform-first white-label expansion for ZenDocx.
 
-The goal is for Zentry to operate as the infrastructure platform while tenant
+The goal is for ZenDocx to operate as the infrastructure platform while tenant
 businesses run branded service portals on top of it. That includes the launch
 business itself: the first live operating business must be modeled as a normal
 tenant, not a special-case app hardcoded into the platform.
@@ -31,7 +31,7 @@ features.
 
 ## Product Model
 
-### What white-label means in Zentry
+### What white-label means in ZenDocx
 
 Each white-label customer becomes a tenant with:
 - isolated staff, customers, orders, wallets, disputes, support, and reports
@@ -39,7 +39,7 @@ Each white-label customer becomes a tenant with:
 - tenant-owned customer relationship
 - a tenant mini-admin for operations and branding
 
-Zentry remains the platform owner and controls:
+ZenDocx remains the platform owner and controls:
 - subscriptions for white-label plans
 - withdrawal charges
 - optional commission or revenue-share partnerships
@@ -48,11 +48,11 @@ Zentry remains the platform owner and controls:
 
 ### Platform-first rule
 
-Zentry should be treated as the infrastructure company, not the permanent
+ZenDocx should be treated as the infrastructure company, not the permanent
 customer-facing business brand.
 
 That means the future model is:
-- one platform layer operated by Zentry
+- one platform layer operated by ZenDocx
 - one first-party tenant used to launch and test the software in production
 - many future third-party tenants using the same tenant architecture
 
@@ -61,9 +61,9 @@ capabilities, and restrictions as any other tenant.
 
 ### Commercial model
 
-- Free plan: `brand.zentry.ng`
+- Free plan: `brand.zendocx.net`
 - Paid plan: custom domain support such as `portal.theirbrand.com`
-- Zentry may charge:
+- ZenDocx may charge:
   - subscription fees
   - withdrawal fees
   - negotiated commission partnerships on tenant earnings
@@ -77,26 +77,26 @@ capabilities, and restrictions as any other tenant.
 - Each tenant has its own isolated users, staff, orders, wallet views, disputes,
   support workflows, reports, branding, and service settings.
 - Tenant users exist only inside that tenant's branded portal.
-- Tenant users do not log into the main Zentry consumer portal.
-- Zentry platform admins can see all tenants and all tenant data from the
+- Tenant users do not log into the main ZenDocx consumer portal.
+- ZenDocx platform admins can see all tenants and all tenant data from the
   platform dashboard, subject to platform permissions and audit logging.
 - The launch business is also a tenant and must follow the same isolation model.
 
 ### Domain strategy
 
-- Free white-label plan uses subdomains: `brand.zentry.ng`
+- Free white-label plan uses subdomains: `brand.zendocx.net`
 - Paid white-label plan supports custom domains
-- Reserved Zentry domains and routes must never be claimable by tenants
+- Reserved ZenDocx domains and routes must never be claimable by tenants
 - The first-party launch tenant should also be served through the tenant-domain
   model eventually, even if a temporary direct-platform frontend exists during
   migration.
 
 ### Wallet and settlement model
 
-Zentry will use a hybrid model:
+ZenDocx will use a hybrid model:
 - each tenant sees its own isolated wallet and business ledger
-- the underlying settlement and platform controls remain managed by Zentry
-- Zentry can enforce subscriptions, withdrawal charges, and commission
+- the underlying settlement and platform controls remain managed by ZenDocx
+- ZenDocx can enforce subscriptions, withdrawal charges, and commission
   partnerships while preserving tenant-facing isolation
 
 ### Provider strategy
@@ -164,7 +164,7 @@ Tenant context should be derived from:
 
 At request start, the platform should resolve:
 - which host was requested
-- whether the request is for Zentry platform or a tenant portal
+- whether the request is for ZenDocx platform or a tenant portal
 - which tenant is active
 - which branding, provider rules, and permissions apply
 
@@ -247,7 +247,7 @@ Do not bolt tenancy onto every table in one rushed migration.
 
 Recommended sequence:
 1. introduce tenant tables and nullable `tenantId`
-2. backfill direct Zentry records carefully
+2. backfill direct ZenDocx records carefully
 3. add tenant-aware indexes and constraints
 4. only then enforce stricter non-null tenant rules where appropriate
 
@@ -258,7 +258,7 @@ Recommended sequence:
 ### Public storefronts
 
 The frontend must eventually support:
-- Zentry platform marketing and platform-admin flows
+- ZenDocx platform marketing and platform-admin flows
 - tenant-branded storefronts resolved by host
 - tenant-specific login, registration, dashboard, support, and branding
 
@@ -298,7 +298,7 @@ No tenant architecture decision should quietly break the PWA model.
 ### Dashboard layers
 
 Separate dashboard experiences will eventually exist for:
-- Zentry platform admin
+- ZenDocx platform admin
 - tenant mini-admin
 - tenant staff
 - tenant customers
@@ -313,7 +313,7 @@ Authentication must become tenant-aware.
 
 Requirements:
 - tenant users can authenticate only inside their tenant portal
-- platform admins authenticate into the Zentry platform
+- platform admins authenticate into the ZenDocx platform
 - tenant-aware cookie/session and refresh flows must resolve the tenant context
 - audit logs must include tenant context when present
 - the first-party tenant must use the tenant-aware auth path just like any other
@@ -350,7 +350,7 @@ Support, disputes, and reports must become tenant-aware.
 
 Principles:
 - tenant teams manage first-line customer operations
-- Zentry platform admin manages escalation, oversight, billing disputes, and
+- ZenDocx platform admin manages escalation, oversight, billing disputes, and
   platform exceptions
 
 ### Security baseline
@@ -390,7 +390,7 @@ The platform controls:
 
 - customer wallet or payment intent layer
 - tenant ledger layer
-- Zentry platform fee layer
+- ZenDocx platform fee layer
 - settlement and withdrawal layer
 
 This gives tenant isolation without giving up platform control.
@@ -464,7 +464,7 @@ Build:
 Current state:
 - tenant mini-admin, subdomain/local tenant context, branding/settings shape,
   and isolated tenant users are already underway
-- providers are no longer purely Zentry-managed because VTU now supports
+- providers are no longer purely ZenDocx-managed because VTU now supports
   tenant-scoped readiness/configuration and tenant-first resolution
 
 ### Stage 3 — Tenant operations depth
@@ -529,9 +529,9 @@ Do not preserve a permanent direct-business shortcut outside the tenant model.
 These are not blockers for the roadmap, but they must be answered before coding:
 - exact tenant billing plans and feature gates
 - commission formulas for partnership tenants
-- how tenant support escalates to Zentry ops
+- how tenant support escalates to ZenDocx ops
 - whether a tenant can operate multiple storefront brands under one account
-- whether direct Zentry consumer accounts and tenant customer accounts can ever
+- whether direct ZenDocx consumer accounts and tenant customer accounts can ever
   be merged in the future
 - compliance and data-retention requirements for tenant-owned customer data
 

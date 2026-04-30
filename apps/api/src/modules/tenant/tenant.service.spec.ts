@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { Tenant } from '@prisma/client';
-import { UserRole } from '@zentry/types';
+import { UserRole } from '@zendocx/types';
 import { TenantService } from './tenant.service';
 
 describe('TenantService', () => {

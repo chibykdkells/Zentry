@@ -1,6 +1,6 @@
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { UserRole } from '@zentry/types';
+import { UserRole } from '@zendocx/types';
 
 describe('AuthService', () => {
   let prisma: {

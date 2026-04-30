@@ -35,7 +35,7 @@ import apiClient from '@/lib/api-client';
 import { formatDate, formatNaira, truncate } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
-import { TransactionStatus, TransactionType, UserRole } from '@zentry/types';
+import { TransactionStatus, TransactionType, UserRole } from '@zendocx/types';
 
 const ALL_FILTER_VALUE = 'ALL';
 const TRANSACTION_PAGE_LIMIT = 8;

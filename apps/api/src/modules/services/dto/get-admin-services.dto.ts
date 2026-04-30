@@ -8,7 +8,7 @@ import {
   Max,
   Min,
 } from 'class-validator';
-import { ServiceDeliveryMode } from '@zentry/types';
+import { ServiceDeliveryMode } from '@zendocx/types';
 
 function parseBooleanQuery(value: unknown): boolean | undefined | string {
   if (value === 'true') {

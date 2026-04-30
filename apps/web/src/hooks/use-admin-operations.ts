@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { OrderStatus, UserRole } from '@zentry/types';
+import { OrderStatus, UserRole } from '@zendocx/types';
 import apiClient from '@/lib/api-client';
 import { getApiErrorMessage } from '@/lib/api-error';
 

@@ -1,5 +1,5 @@
 import { IsString, MinLength, MaxLength } from 'class-validator';
-import { RegisterCbtSchema } from '@zentry/validators';
+import { RegisterCbtSchema } from '@zendocx/validators';
 import { RegisterIndividualDto } from './register-individual.dto';
 
 export class RegisterCbtDto extends RegisterIndividualDto {

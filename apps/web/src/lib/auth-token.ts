@@ -1,4 +1,4 @@
-import { UserRole } from '@zentry/types';
+import { UserRole } from '@zendocx/types';
 
 interface JwtPayload {
   role?: string;

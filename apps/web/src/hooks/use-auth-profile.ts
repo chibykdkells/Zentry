@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import apiClient from '@/lib/api-client';
 import { getApiErrorMessage } from '@/lib/api-error';
 import { useAuthStore } from '@/stores/auth.store';
-import { UserRole } from '@zentry/types';
+import { UserRole } from '@zendocx/types';
 
 export interface AuthProfile {
   id: string;

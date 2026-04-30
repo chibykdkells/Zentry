@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { UserRole } from '@zentry/types';
+import { UserRole } from '@zendocx/types';
 import { RegistrationForm } from '@/components/auth/registration-form';
 
 export default function RegisterCbtPage() {

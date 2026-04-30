@@ -1,7 +1,7 @@
 # PROVIDERS.md — Provider Abstraction Layer (PAL)
 
 > Last updated: 2026-04-03
-> This is the most critical architectural pattern in Zentry.
+> This is the most critical architectural pattern in ZenDocx.
 > Every external API (payment, VTU, SMS, email, storage) sits behind
 > a provider interface. Business logic NEVER calls external APIs directly.
 
@@ -9,7 +9,7 @@
 
 ## Why the PAL Exists
 
-Zentry must be able to switch providers — payment gateways, VTU providers,
+ZenDocx must be able to switch providers — payment gateways, VTU providers,
 SMS vendors — with zero impact on business logic. A provider change should
 require only:
 
@@ -316,7 +316,7 @@ cost. The service layer computes the user-facing price from DB config.
 
 | Type | Active | Backup 1 | Backup 2 |
 |---|---|---|---|
-| Payment | FintavaPay | Paystack | Flutterwave |
+| Payment | Paystack | FintavaPay | Flutterwave |
 | VTU | TBD (plug in at Phase 7) | — | — |
 | SMS | Termii | — | — |
 | Email | Resend | — | — |

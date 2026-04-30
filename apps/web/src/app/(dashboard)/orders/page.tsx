@@ -31,7 +31,7 @@ import {
   ordersLifecycle,
 } from '@/lib/service-catalog';
 import { cn } from '@/lib/utils';
-import { OrderStatus, TransactionStatus } from '@zentry/types';
+import { OrderStatus, TransactionStatus } from '@zendocx/types';
 
 export default function OrdersPage() {
   const [activeFilter, setActiveFilter] =

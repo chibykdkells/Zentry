@@ -3,7 +3,7 @@ import { Sidebar } from '@/components/layout/sidebar';
 import { TopBar } from '@/components/layout/top-bar';
 import { RouteGuard } from '@/components/auth/route-guard';
 import { adminPrimaryNav, adminSecondaryNav } from '@/lib/navigation';
-import { UserRole } from '@zentry/types';
+import { UserRole } from '@zendocx/types';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -11,7 +11,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <TopBar title="Admin Dashboard" />
       <div className="flex flex-1 min-h-0">
         <Sidebar
-          brandLabel="Zentry Admin"
+          brandLabel="ZenDocx Admin"
           sectionLabel="Oversight"
           items={adminPrimaryNav.map(({ label, href }) => ({ label, href }))}
           secondaryItems={adminSecondaryNav.map(({ label, href }) => ({ label, href }))}

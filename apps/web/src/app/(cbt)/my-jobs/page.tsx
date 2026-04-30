@@ -19,7 +19,7 @@ import {
 import { useMediaQuery } from '@/hooks/use-media-query';
 import { getApiErrorMessage } from '@/lib/api-error';
 import { formatDate, formatNaira } from '@/lib/format';
-import { OrderStatus } from '@zentry/types';
+import { OrderStatus } from '@zendocx/types';
 
 const ALL_FILTER_VALUE = 'ALL';
 const statusOptions: Array<{

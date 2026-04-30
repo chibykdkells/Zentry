@@ -18,7 +18,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { TenantContext } from '../../common/decorators/tenant-context.decorator';
-import { JwtUser, UserRole } from '@zentry/types';
+import { JwtUser, UserRole } from '@zendocx/types';
 import type { Tenant } from '@prisma/client';
 import type { Request } from 'express';
 import { TenantService } from './tenant.service';

@@ -8,7 +8,7 @@ import {
   Max,
   Min,
 } from 'class-validator';
-import { FulfillmentType, OrderStatus, UserRole } from '@zentry/types';
+import { FulfillmentType, OrderStatus, UserRole } from '@zendocx/types';
 
 export const adminOrderReleaseStates = [
   'AWAITING_WINDOW',

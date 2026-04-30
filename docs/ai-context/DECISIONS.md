@@ -265,7 +265,7 @@ FintavaPay downtime or failure — switchable via environment variable.
 **Date:** 2026-04-03
 **Status:** ACCEPTED
 
-**Decision:** Zentry is a Progressive Web Application only. No native iOS/Android
+**Decision:** ZenDocx is a Progressive Web Application only. No native iOS/Android
 app is planned for launch.
 
 **Reason:**
@@ -293,14 +293,14 @@ app is planned for launch.
 **Date:** 2026-04-05
 **Status:** ACCEPTED
 
-**Decision:** Zentry will support a future white-label offering as a proper
+**Decision:** ZenDocx will support a future white-label offering as a proper
 platform-first multi-tenant expansion after the core product is stabilized.
-Zentry is the infrastructure/platform layer. The launch business will become a
+ZenDocx is the infrastructure/platform layer. The launch business will become a
 first-party tenant operating under the same tenant model as every other tenant,
 not a privileged special case. Each tenant will have isolated users, staff,
 orders, wallet views, disputes, reports, branding, and tenant admin controls.
 Tenant users will exist only inside their tenant portal. Initial tenant
-launches will use Zentry-managed providers only, with tenant-managed providers
+launches will use ZenDocx-managed providers only, with tenant-managed providers
 considered later for VTU and NIN services.
 
 **Reason:**

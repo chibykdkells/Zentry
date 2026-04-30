@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { FulfillmentType, ServiceDeliveryMode } from '@zentry/types';
+import { FulfillmentType, ServiceDeliveryMode } from '@zendocx/types';
 import apiClient from '@/lib/api-client';
 import { getApiErrorMessage } from '@/lib/api-error';
 

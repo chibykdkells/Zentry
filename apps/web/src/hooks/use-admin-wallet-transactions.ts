@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { PaymentGateway, TransactionStatus, TransactionType, UserRole } from '@zentry/types';
+import { PaymentGateway, TransactionStatus, TransactionType, UserRole } from '@zendocx/types';
 import apiClient from '@/lib/api-client';
 import { getApiErrorMessage } from '@/lib/api-error';
 

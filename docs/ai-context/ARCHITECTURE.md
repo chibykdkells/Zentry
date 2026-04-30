@@ -1,4 +1,4 @@
-# ARCHITECTURE.md — Zentry System Architecture
+# ARCHITECTURE.md — ZenDocx System Architecture
 
 > Last updated: 2026-04-11
 > Read this before touching any folder structure, adding a module, or
@@ -8,7 +8,7 @@
 
 ## System Overview
 
-Zentry is a **pnpm monorepo** managed by **Turborepo**. It contains two
+ZenDocx is a **pnpm monorepo** managed by **Turborepo**. It contains two
 applications and three shared packages. Every external integration (payments,
 VTU, SMS, email, storage) is abstracted behind a provider interface — this
 is the **Provider Abstraction Layer (PAL)**.
@@ -16,7 +16,7 @@ is the **Provider Abstraction Layer (PAL)**.
 Current implementation is now in active migration away from the old direct-platform structure.
 The expansion direction is platform-first multi-tenancy, and this is already in
 flight in the live codebase:
-- Zentry becomes the infrastructure/platform layer
+- ZenDocx becomes the infrastructure/platform layer
 - the launch business becomes the first-party tenant
 - future external businesses become additional tenants
 - platform admin remains above all tenants
@@ -56,7 +56,7 @@ flight in the live codebase:
 ## Monorepo Structure
 
 ```
-zentry/
+zendocx/
 ├── apps/
 │   ├── web/                          # Next.js 16 PWA
 │   │   ├── public/

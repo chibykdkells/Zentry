@@ -64,7 +64,7 @@ export class ProviderCredentialsService {
     const secret =
       this.config.get<string>('APP_ENCRYPTION_KEY') ||
       this.config.get<string>('JWT_ACCESS_SECRET') ||
-      'zentry-provider-fallback-key';
+      'zendocx-provider-fallback-key';
 
     return createHash('sha256').update(secret).digest();
   }

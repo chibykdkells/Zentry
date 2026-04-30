@@ -11,7 +11,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import { ServiceDeliveryMode } from '@zentry/types';
+import { ServiceDeliveryMode } from '@zendocx/types';
 
 export class UpdateServiceDto {
   @IsOptional()

@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import { useState } from 'react';
-import { UserRole } from '@zentry/types';
+import { UserRole } from '@zendocx/types';
 import {
   useTenantOverview,
   useTenantUsers,

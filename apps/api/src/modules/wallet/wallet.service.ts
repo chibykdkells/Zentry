@@ -23,8 +23,8 @@ import type { Request } from 'express';
 import { PaymentService } from '../../providers/payment/payment.service';
 import { EmailService } from '../../providers/email/email.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { generateTransactionRef } from '@zentry/utils';
-import { nairaToKobo } from '@zentry/utils';
+import { generateTransactionRef } from '@zendocx/utils';
+import { nairaToKobo } from '@zendocx/utils';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   GetAdminWalletsQueryDto,
@@ -1539,7 +1539,7 @@ export class WalletService {
 
     // Auto-initiate bank transfer when admin approves
     if (dto.status === WithdrawalStatus.APPROVED) {
-      const payoutRef = `ZEN-PAYOUT-${result.id.replace(/-/g, '').slice(0, 16).toUpperCase()}`;
+      const payoutRef = `ZDX-PAYOUT-${result.id.replace(/-/g, '').slice(0, 16).toUpperCase()}`;
       try {
         const transferResult = await this.paymentService.initiateTransfer({
           amountKobo: result.amount,
@@ -1547,7 +1547,7 @@ export class WalletService {
           bankCode: result.bankCode,
           accountName: result.accountName,
           reference: payoutRef,
-          narration: `Zentry withdrawal ${result.id}`,
+          narration: `ZenDocx withdrawal ${result.id}`,
         });
 
         // Advance to PROCESSING and store the gateway reference
@@ -2503,7 +2503,7 @@ export class WalletService {
     });
 
     if (!withdrawalRequest) {
-      // Could be a non-Zentry transfer — ack without error
+      // Could be a non-ZenDocx transfer — ack without error
       return {
         message: 'Webhook acknowledged',
         data: { processed: false, reason: 'unknown ref' },

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ServiceDeliveryMode } from '@zentry/types';
+import { ServiceDeliveryMode } from '@zendocx/types';
 import { ChevronDown, ChevronUp, Layers3, Save, Zap } from 'lucide-react';
 import { EmptyState } from '@/components/shared/empty-state';
 import { FeedbackBanner } from '@/components/shared/feedback-banner';

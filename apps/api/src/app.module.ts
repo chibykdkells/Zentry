@@ -9,6 +9,8 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD, APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { BullModule } from '@nestjs/bull';
 
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
 import { PrismaModule } from './modules/prisma/prisma.module';
 import { RedisModule } from './modules/redis/redis.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -30,6 +32,7 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
 import { TenantContextMiddleware } from './common/middleware/tenant-context.middleware';
 
 @Module({
+  controllers: [AppController],
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
@@ -72,6 +75,7 @@ import { TenantContextMiddleware } from './common/middleware/tenant-context.midd
     SystemConfigModule,
   ],
   providers: [
+    AppService,
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: RolesGuard },

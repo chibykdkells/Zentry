@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { UserRole, type JwtUser } from '@zentry/types';
+import { UserRole, type JwtUser } from '@zendocx/types';
 import { CbtService } from './cbt.service';
 import { CreateCbtStaffDto } from './dto/create-cbt-staff.dto';
 

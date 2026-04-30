@@ -7,7 +7,7 @@ import { TopBar } from '@/components/layout/top-bar';
 import { RouteGuard } from '@/components/auth/route-guard';
 import { tenantPrimaryNav, tenantSecondaryNav } from '@/lib/navigation';
 import { useTenantStore } from '@/stores/tenant.store';
-import { UserRole } from '@zentry/types';
+import { UserRole } from '@zendocx/types';
 
 export default function TenantAdminLayout({ children }: { children: React.ReactNode }) {
   const tenant = useTenantStore((state) => state.tenant);

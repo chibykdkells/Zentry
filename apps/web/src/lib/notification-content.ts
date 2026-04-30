@@ -1,5 +1,5 @@
 import { Bell, CreditCard, ShieldCheck, Wallet } from 'lucide-react';
-import { UserRole } from '@zentry/types';
+import { UserRole } from '@zendocx/types';
 
 export interface AppNotification {
   id: string;

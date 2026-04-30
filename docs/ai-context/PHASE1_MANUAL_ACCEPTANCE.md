@@ -37,7 +37,7 @@ Expected ports:
 
 ## Seeded Accounts
 
-- `admin@zentry.ng` / `Admin@Zentry2024!`
+- `admin@zendocx.net` / `Admin@ZenDocx2024!`
 - `tenant@test.com` / `Test@1234!`
 - `user@test.com` / `Test@1234!`
 - `cbt@test.com` / `Test@1234!`
@@ -72,7 +72,7 @@ Expected flow:
 - `user@test.com` should land on `/home`
 - `cbt@test.com` should land on `/dashboard`
 - `tenant@test.com` should land on `/tenant/dashboard`
-- `admin@zentry.ng` should land on `/admin/dashboard`
+- `admin@zendocx.net` should land on `/admin/dashboard`
 
 ### 4. Session Expiry Handling
 

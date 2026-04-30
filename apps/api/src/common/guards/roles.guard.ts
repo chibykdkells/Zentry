@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
-import { UserRole, JwtUser } from '@zentry/types';
+import { UserRole, JwtUser } from '@zendocx/types';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 
 @Injectable()

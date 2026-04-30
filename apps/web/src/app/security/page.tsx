@@ -11,7 +11,7 @@ import {
   ShieldCheck,
   WalletCards,
 } from 'lucide-react';
-import { ChangePinInput, ChangePinSchema, SetPinInput, SetPinSchema } from '@zentry/validators';
+import { ChangePinInput, ChangePinSchema, SetPinInput, SetPinSchema } from '@zendocx/validators';
 import { ProtectedShell } from '@/components/layout/protected-shell';
 import { EmptyState } from '@/components/shared/empty-state';
 import { AccountPanel } from '@/components/shared/account-panel';

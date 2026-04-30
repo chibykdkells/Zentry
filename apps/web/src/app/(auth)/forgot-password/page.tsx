@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import toast from 'react-hot-toast';
 import { Loader2 } from 'lucide-react';
-import { ForgotPasswordSchema, type ForgotPasswordInput } from '@zentry/validators';
+import { ForgotPasswordSchema, type ForgotPasswordInput } from '@zendocx/validators';
 import { AuthShell } from '@/components/auth/auth-shell';
 import { FeedbackBanner } from '@/components/shared/feedback-banner';
 import apiClient from '@/lib/api-client';

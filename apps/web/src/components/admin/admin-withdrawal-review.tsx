@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { Loader2, Search } from 'lucide-react';
-import { WithdrawalStatus } from '@zentry/types';
+import { WithdrawalStatus } from '@zendocx/types';
 import { AccountPanel } from '@/components/shared/account-panel';
 import { EmptyState } from '@/components/shared/empty-state';
 import {

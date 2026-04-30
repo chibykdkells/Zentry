@@ -41,17 +41,17 @@ import { ProviderCredentialsService } from './provider-credentials.service';
       ) => {
         const activeProvider = config.get<string>(
           'ACTIVE_PAYMENT_PROVIDER',
-          'FINTAVAPAY',
+          'PAYSTACK',
         );
 
         switch (activeProvider) {
-          case 'PAYSTACK':
-            return paystack;
+          case 'FINTAVAPAY':
+            return fintavapay;
           case 'FLUTTERWAVE':
             return flutterwave;
-          case 'FINTAVAPAY':
+          case 'PAYSTACK':
           default:
-            return fintavapay;
+            return paystack;
         }
       },
       inject: [

@@ -1,4 +1,4 @@
-# PHASES.md — Zentry Build Phase Tracker
+# PHASES.md — ZenDocx Build Phase Tracker
 
 > Last updated: 2026-04-12
 > This file tracks exactly what has been built and what has not.
@@ -83,7 +83,7 @@ PWA installable, Provider Abstraction Layer interfaces defined.
 
 ### Frontend Checklist
 - [x] Frontend stack fully aligned with architecture doc
-- [x] Tailwind config with Zentry brand tokens
+- [x] Tailwind config with ZenDocx brand tokens
 - [x] Plus Jakarta Sans fully configured from local assets
 - [x] PWA manifest.json (name, icons, colors)
 - [x] next-pwa configured
@@ -185,13 +185,13 @@ PWA installable, Provider Abstraction Layer interfaces defined.
 - PWA install foundation completed on 2026-04-05:
   the web app now registers a custom service worker, caches the basic app shell, and surfaces an install prompt for supported browsers plus iOS Safari guidance, though `next-pwa` itself is still not configured.
 - White-label roadmap documented on 2026-04-05:
-  a dedicated future-state roadmap now exists in `docs/ai-context/WHITE_LABEL_ROADMAP.md`, defining the multi-tenant tenant model, hybrid wallet approach, tenant-owned customer relationship, subdomain/custom-domain strategy, and the staged provider plan of Zentry-managed providers first, then tenant-managed VTU and NIN only.
+  a dedicated future-state roadmap now exists in `docs/ai-context/WHITE_LABEL_ROADMAP.md`, defining the multi-tenant tenant model, hybrid wallet approach, tenant-owned customer relationship, subdomain/custom-domain strategy, and the staged provider plan of ZenDocx-managed providers first, then tenant-managed VTU and NIN only.
 - Platform-first refinement documented on 2026-04-06:
-  the roadmap and architecture docs now explicitly treat Zentry as the infrastructure layer, the launch business as the first-party tenant, and PWA/security as first-class constraints that must carry into the tenant expansion.
+  the roadmap and architecture docs now explicitly treat ZenDocx as the infrastructure layer, the launch business as the first-party tenant, and PWA/security as first-class constraints that must carry into the tenant expansion.
 - PWA hardening completed on 2026-04-06:
   `next-pwa` is now configured for production builds, the old hand-rolled service worker was replaced, an app-router offline fallback page now exists at `/offline`, and the install prompt now avoids stale local service workers during development.
 - Brand-token design system completed on 2026-04-06:
-  the Tailwind 4 theme layer in `globals.css` now defines shared Zentry brand tokens for surfaces, borders, text, navy, and accent colors, and the shared auth shell, wallet card, stat card, sidebar, top bar, and install prompt now consume those tokens instead of scattered hard-coded values.
+  the Tailwind 4 theme layer in `globals.css` now defines shared ZenDocx brand tokens for surfaces, borders, text, navy, and accent colors, and the shared auth shell, wallet card, stat card, sidebar, top bar, and install prompt now consume those tokens instead of scattered hard-coded values.
 - Local font setup completed on 2026-04-06:
   the web app now self-hosts Plus Jakarta Sans through `@fontsource-variable/plus-jakarta-sans`, removing the remaining missing-font gap and avoiding any dependency on remote font fetching at build or runtime.
 - Proxy convention migration completed on 2026-04-06:
@@ -691,7 +691,7 @@ optimized. Production deployed.
 - [ ] Production PostgreSQL with daily backups
 - [ ] Production Redis with persistence configured
 - [ ] Vercel deployment (frontend)
-- [ ] Railway/Render deployment (backend)
+- [ ] Fly.io deployment (backend — `fly.toml` committed, dashboard wiring + secrets pending)
 - [ ] Cloudflare DNS + WAF configured
 - [ ] All .env secrets moved to platform secret manager
 - [ ] Launch checklist signed off

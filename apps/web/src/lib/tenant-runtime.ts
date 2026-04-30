@@ -1,5 +1,5 @@
-const TENANT_SLUG_COOKIE = 'zentry-tenant-slug';
-const TENANT_SLUG_STORAGE_KEY = 'zentry-tenant-slug';
+const TENANT_SLUG_COOKIE = 'zendocx-tenant-slug';
+const TENANT_SLUG_STORAGE_KEY = 'zendocx-tenant-slug';
 
 export function isPrivateDevelopmentHost(hostname: string): boolean {
   return (
@@ -100,8 +100,8 @@ export function resolveTenantSlugForRequest(): string | null {
 
   const hostname = window.location.hostname.toLowerCase();
 
-  if (hostname.endsWith('.zentry.ng')) {
-    const slug = hostname.replace(/\.zentry\.ng$/, '');
+  if (hostname.endsWith('.zendocx.net')) {
+    const slug = hostname.replace(/\.zendocx\.net$/, '');
     if (slug && slug !== 'www') {
       persistTenantSlug(slug);
       return slug;

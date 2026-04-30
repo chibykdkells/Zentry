@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/auth.store';
 import { getDefaultRouteForRole } from '@/lib/auth-routes';
-import { UserRole } from '@zentry/types';
+import { UserRole } from '@zendocx/types';
 
 interface RouteGuardProps {
   children: React.ReactNode;

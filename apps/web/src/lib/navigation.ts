@@ -16,7 +16,7 @@ import {
   Wrench,
   Zap,
 } from 'lucide-react';
-import { UserRole } from '@zentry/types';
+import { UserRole } from '@zendocx/types';
 
 export interface AppNavItem {
   label: string;

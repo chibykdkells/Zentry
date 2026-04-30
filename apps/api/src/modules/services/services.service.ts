@@ -11,7 +11,7 @@ import {
   ProviderRolloutMode,
   ServiceDeliveryMode,
 } from '@prisma/client';
-import { nairaToKobo } from '@zentry/utils';
+import { nairaToKobo } from '@zendocx/utils';
 import { GetServiceCatalogQueryDto } from './dto/get-service-catalog.dto';
 import { UpdateVtuProviderConfigDto } from './dto/update-vtu-provider-config.dto';
 import { PrismaService } from '../prisma/prisma.service';

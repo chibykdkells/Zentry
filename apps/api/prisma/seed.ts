@@ -8,7 +8,7 @@ import {
   TransactionStatus,
   TransactionType,
 } from '@prisma/client';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
@@ -59,12 +59,12 @@ async function upsertSeedTransaction(input: {
 }
 
 async function main() {
-  console.log('🌱 Seeding Zentry database...');
+  console.log('🌱 Seeding ZenDocx database...');
 
   const BCRYPT_ROUNDS = 12;
   const PIN_ROUNDS = 10;
 
-  const adminPassword = await bcrypt.hash('Admin@Zentry2024!', BCRYPT_ROUNDS);
+  const adminPassword = await bcrypt.hash('Admin@ZenDocx2024!', BCRYPT_ROUNDS);
   const testPassword = await bcrypt.hash('Test@1234!', BCRYPT_ROUNDS);
   const testPin = await bcrypt.hash('123456', PIN_ROUNDS);
 
@@ -94,7 +94,7 @@ async function main() {
   // Super Admin — platform-level, no tenantId
   const existingAdmin = await prisma.user.findFirst({
     where: {
-      email: 'admin@zentry.ng',
+      email: 'admin@zendocx.net',
       tenantId: null,
     },
     select: { id: true },
@@ -104,7 +104,7 @@ async function main() {
     ? await prisma.user.update({
         where: { id: existingAdmin.id },
         data: {
-          firstName: 'Zentry',
+          firstName: 'ZenDocx',
           lastName: 'Admin',
           phone: '+2348000000001',
           passwordHash: adminPassword,
@@ -117,9 +117,9 @@ async function main() {
       })
     : await prisma.user.create({
         data: {
-          firstName: 'Zentry',
+          firstName: 'ZenDocx',
           lastName: 'Admin',
-          email: 'admin@zentry.ng',
+          email: 'admin@zendocx.net',
           phone: '+2348000000001',
           passwordHash: adminPassword,
           walletPin: testPin,
@@ -968,7 +968,7 @@ async function main() {
   console.log('✅ Seed complete!');
   console.log('');
   console.log('Test accounts:');
-  console.log('  Super Admin   : admin@zentry.ng   / Admin@Zentry2024!  PIN: 123456  (platform-level)');
+  console.log('  Super Admin   : admin@zendocx.net   / Admin@ZenDocx2024!  PIN: 123456  (platform-level)');
   console.log('  Tenant Admin  : tenant@test.com   / Test@1234!         PIN: 123456  (tenant: testbiz)');
   console.log('  Individual    : user@test.com     / Test@1234!         PIN: 123456  (tenant: testbiz)');
   console.log('  CBT Center    : cbt@test.com      / Test@1234!         PIN: 123456  (tenant: testbiz)');

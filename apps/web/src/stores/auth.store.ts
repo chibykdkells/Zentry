@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { UserRole } from '@zentry/types';
+import { UserRole } from '@zendocx/types';
 
 export interface AuthUser {
   id: string;
@@ -47,7 +47,7 @@ export const useAuthStore = create<AuthStore>()(
         })),
     }),
     {
-      name: 'zentry-auth',
+      name: 'zendocx-auth',
       // Persist user metadata only. Access tokens stay in memory.
       partialize: (state) => ({ user: state.user, isAuthenticated: state.isAuthenticated }),
     },

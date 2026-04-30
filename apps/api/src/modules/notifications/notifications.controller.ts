@@ -12,7 +12,7 @@ import {
   Req,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import type { JwtUser } from '@zentry/types';
+import type { JwtUser } from '@zendocx/types';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { TenantContext } from '../../common/decorators/tenant-context.decorator';
 import { GetNotificationsDto } from './dto/get-notifications.dto';

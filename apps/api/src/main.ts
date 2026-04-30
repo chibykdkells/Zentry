@@ -36,6 +36,8 @@ async function bootstrap() {
     .map((origin) => origin.trim())
     .filter(Boolean);
 
+  const platformDomain = config.get<string>('PLATFORM_DOMAIN', 'zendocx.net');
+
   const isPrivateDevHostname = (hostname: string) => {
     return (
       hostname === 'localhost' ||
@@ -85,6 +87,20 @@ async function bootstrap() {
         return;
       }
 
+      // Allow all tenant subdomains: acme.zendocx.net, etc.
+      try {
+        const { hostname, protocol } = new URL(origin);
+        if (
+          protocol === 'https:' &&
+          hostname.endsWith(`.${platformDomain}`)
+        ) {
+          callback(null, true);
+          return;
+        }
+      } catch {
+        // fall through to rejection
+      }
+
       if (!isProduction) {
         try {
           const url = new URL(origin);
@@ -118,8 +134,8 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api/v1', { exclude: ['/health'] });
 
-  await app.listen(port);
-  console.log(`🚀 Zentry API running on http://localhost:${port}/api/v1`);
+  await app.listen(port, '0.0.0.0');
+  console.log(`🚀 ZenDocx API running on http://0.0.0.0:${port}/api/v1`);
 }
 
 void bootstrap();

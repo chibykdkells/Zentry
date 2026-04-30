@@ -21,7 +21,7 @@ import {
 } from '@/components/shared/skeleton-loader';
 import { useAuthProfile } from '@/hooks/use-auth-profile';
 import { formatDate } from '@/lib/format';
-import { UserRole } from '@zentry/types';
+import { UserRole } from '@zendocx/types';
 import { cn } from '@/lib/utils';
 
 export default function ProfilePage() {

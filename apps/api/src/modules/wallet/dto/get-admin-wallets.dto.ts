@@ -1,5 +1,5 @@
 import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
-import { UserRole } from '@zentry/types';
+import { UserRole } from '@zendocx/types';
 
 export class GetAdminWalletsQueryDto {
   @IsOptional()

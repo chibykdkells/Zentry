@@ -21,9 +21,9 @@
     "noFallthroughCasesInSwitch": true,
     "types": ["node", "jest"],
     "paths": {
-      "@zentry/types": ["../../packages/types/src"],
-      "@zentry/utils": ["../../packages/utils/src"],
-      "@zentry/validators": ["../../packages/validators/src"]
+      "@zendocx/types": ["../../packages/types/src"],
+      "@zendocx/utils": ["../../packages/utils/src"],
+      "@zendocx/validators": ["../../packages/validators/src"]
     }
   },
   "include": ["src/**/*", "prisma/**/*", "test/**/*"],

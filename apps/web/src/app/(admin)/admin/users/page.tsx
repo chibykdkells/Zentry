@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { Ban, Building2, Copy, PlusCircle, RefreshCcw, ShieldCheck, Trash2, Users } from 'lucide-react';
-import { UserRole } from '@zentry/types';
+import { UserRole } from '@zendocx/types';
 import { AccountPanel } from '@/components/shared/account-panel';
 import { EmptyState } from '@/components/shared/empty-state';
 import { FeedbackBanner } from '@/components/shared/feedback-banner';

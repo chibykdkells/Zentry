@@ -7,7 +7,7 @@ export interface InitiatePaymentInput {
   /** Amount in Kobo */
   amountKobo: bigint;
   email: string;
-  /** Internal unique reference (ZEN-TXN-...) */
+  /** Internal unique reference (ZDX-TXN-...) */
   reference: string;
   /** Where gateway should redirect the user after payment */
   callbackUrl: string;
@@ -50,7 +50,7 @@ export interface InitiateTransferInput {
   accountNumber: string;
   bankCode: string;
   accountName: string;
-  /** Internal unique reference (ZEN-WDR-...) */
+  /** Internal unique reference (ZDX-WDR-...) */
   reference: string;
   narration: string;
 }

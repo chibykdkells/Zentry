@@ -16,7 +16,7 @@ import type {
 /**
  * Paystack payment provider (Backup #1).
  * Docs: https://paystack.com/docs/api/
- * Amounts: Paystack uses Kobo natively (same as Zentry's internal format).
+ * Amounts: Paystack uses Kobo natively (same as ZenDocx's internal format).
  */
 @Injectable()
 export class PaystackProvider implements IPaymentProvider {

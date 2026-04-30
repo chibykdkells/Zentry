@@ -6,7 +6,7 @@ import {
   Param,
   Put,
 } from '@nestjs/common';
-import { UserRole, type JwtUser } from '@zentry/types';
+import { UserRole, type JwtUser } from '@zendocx/types';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { SystemConfigService } from './system-config.service';

@@ -1,5 +1,5 @@
 {
-  "name": "zentry",
+  "name": "zendocx",
   "version": "0.0.1",
   "private": true,
   "scripts": {
@@ -14,11 +14,11 @@
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
     "infra:logs": "docker compose logs -f postgres redis",
-    "db:migrate": "pnpm --filter @zentry/api db:migrate",
-    "db:seed": "pnpm --filter @zentry/api db:seed",
-    "db:studio": "pnpm --filter @zentry/api db:studio",
-    "db:generate": "pnpm --filter @zentry/api db:generate",
-    "db:reset": "pnpm --filter @zentry/api db:reset"
+    "db:migrate": "pnpm --filter @zendocx/api db:migrate",
+    "db:seed": "pnpm --filter @zendocx/api db:seed",
+    "db:studio": "pnpm --filter @zendocx/api db:studio",
+    "db:generate": "pnpm --filter @zendocx/api db:generate",
+    "db:reset": "pnpm --filter @zendocx/api db:reset"
   },
   "devDependencies": {
     "turbo": "^2.3.3",

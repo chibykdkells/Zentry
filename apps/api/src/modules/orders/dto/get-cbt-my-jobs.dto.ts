@@ -1,6 +1,6 @@
 import { Type } from 'class-transformer';
 import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
-import { OrderStatus } from '@zentry/types';
+import { OrderStatus } from '@zendocx/types';
 
 export class GetCbtMyJobsQueryDto {
   @IsOptional()

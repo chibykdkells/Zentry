@@ -8,9 +8,9 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
 }
 
-const DISMISS_KEY = 'zentry-pwa-install-dismissed-at';
+const DISMISS_KEY = 'zendocx-pwa-install-dismissed-at';
 const DISMISS_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
-const DEV_BROWSER_RESET_KEY = 'zentry-dev-browser-reset-v1';
+const DEV_BROWSER_RESET_KEY = 'zendocx-dev-browser-reset-v1';
 
 function getInitialDismissedState() {
   if (typeof window === 'undefined') {
@@ -188,11 +188,11 @@ export function InstallPrompt() {
             </div>
             <div>
               <h3 className="text-sm font-semibold text-brand-ink">
-                Install Zentry
+                Install ZenDocx
               </h3>
               <p className="mt-1 text-sm leading-6 text-brand-muted">
                 {deferredPrompt
-                  ? 'Add Zentry to your home screen for a faster, app-like experience.'
+                  ? 'Add ZenDocx to your home screen for a faster, app-like experience.'
                   : 'On iPhone or iPad, use Safari’s Share menu and choose “Add to Home Screen”.'}
               </p>
               {process.env.NODE_ENV === 'development' ? (

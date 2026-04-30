@@ -9,17 +9,17 @@ import {
 import { Prisma } from '@prisma/client';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { createHash, randomInt, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
-import { UserRole, OtpType, JwtUser } from '@zentry/types';
-import { generateTransactionRef } from '@zentry/utils';
+import { UserRole, OtpType, JwtUser } from '@zendocx/types';
+import { generateTransactionRef } from '@zendocx/utils';
 import { RegisterIndividualDto, RegisterCbtDto } from './dto';
 
 @Injectable()
 export class AuthService {
-  private static readonly REFRESH_TOKEN_KEY_PREFIX = 'zentry:auth:refresh';
+  private static readonly REFRESH_TOKEN_KEY_PREFIX = 'zendocx:auth:refresh';
 
   constructor(
     private readonly prisma: PrismaService,

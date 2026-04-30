@@ -7,7 +7,7 @@ import { useForm } from 'react-hook-form';
 import {
   CreateWithdrawalRequestInput,
   CreateWithdrawalRequestSchema,
-} from '@zentry/validators';
+} from '@zendocx/validators';
 import { FeedbackBanner } from '@/components/shared/feedback-banner';
 import { useCreateWithdrawalRequest } from '@/hooks/use-withdrawal-requests';
 import { useBanks } from '@/hooks/use-wallet';
