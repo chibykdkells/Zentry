@@ -1,4 +1,4 @@
-import { UserRole } from '@zentry/types';
+import { UserRole } from '@zendocx/types';
 
 export function getDefaultRouteForRole(role: UserRole): string {
   switch (role) {
