@@ -18,10 +18,17 @@ export class TenantContextMiddleware implements NestMiddleware {
 
   async use(req: Request, _res: Response, next: NextFunction): Promise<void> {
     const hostname = req.headers['host'] ?? '';
-    const requestedTenantSlug =
+    const headerTenantSlug =
       typeof req.headers['x-tenant-slug'] === 'string'
         ? req.headers['x-tenant-slug']
         : '';
+    const queryTenantSlug =
+      typeof req.query?.tenant === 'string'
+        ? req.query.tenant
+        : typeof req.query?.slug === 'string'
+          ? req.query.slug
+          : '';
+    const requestedTenantSlug = headerTenantSlug || queryTenantSlug;
 
     try {
       req.tenant = await this.resolver.resolveFromRequestContext({
