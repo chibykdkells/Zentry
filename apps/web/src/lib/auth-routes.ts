@@ -79,6 +79,9 @@ export function getSafePostLoginRoute(
 export function isAuthRoute(pathname: string): boolean {
   return (
     pathname === '/login' ||
+    pathname === '/admin' ||
+    pathname === '/platform' ||
+    pathname === '/platform/login' ||
     pathname === '/verify-email' ||
     pathname === '/forgot-password' ||
     pathname === '/reset-password' ||
@@ -87,6 +90,10 @@ export function isAuthRoute(pathname: string): boolean {
 }
 
 export function isProtectedRoute(pathname: string): boolean {
+  if (pathname === '/admin' || pathname === '/platform') {
+    return false;
+  }
+
   const protectedPrefixes = [
     '/home',
     '/services',

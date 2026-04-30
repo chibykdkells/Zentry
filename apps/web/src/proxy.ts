@@ -51,6 +51,9 @@ export function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     '/login',
+    '/admin',
+    '/platform',
+    '/platform/login',
     '/register/:path*',
     '/verify-email',
     '/forgot-password',
