@@ -23,29 +23,32 @@ export default function Home() {
 
               <div className="space-y-4">
                 <p className="text-sm font-semibold uppercase tracking-[0.28em] text-slate-500">
-                  Multi-Tenant Service Platform
+                  Government Services Platform
                 </p>
                 <h1 className="max-w-3xl text-4xl font-black tracking-tight text-[#0D1B3E] sm:text-5xl lg:text-6xl">
-                  SaaS infrastructure for tenant portals, fulfillment teams, and managed service operations.
+                  A calmer way to access services, manage requests, and keep operations moving.
                 </h1>
                 <p className="max-w-2xl text-base leading-8 text-slate-600 sm:text-lg">
-                  ZenDocx provides the software layer for tenant businesses to
-                  run branded portals, onboard their own users, coordinate CBT
-                  operations, and manage service workflows from a shared
-                  platform foundation.
+                  ZenDocx brings individuals, approved CBT centers, tenant-run
+                  business portals, and platform admins into one clear workspace
+                  for identity support, exam services, airtime, data, and
+                  wallet-based transactions.
                 </p>
               </div>
 
               <div className="flex flex-col gap-3 sm:flex-row">
                 <Link
                   className="inline-flex items-center justify-center rounded-2xl bg-[#0D1B3E] px-6 py-3 font-semibold text-white transition hover:bg-[#132754]"
-                  href="/platform/login"
+                  href="/login"
                 >
-                  Platform owner login
+                  Sign in
                 </Link>
-                <div className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-6 py-3 text-center text-sm font-medium text-slate-600">
-                  Tenant users sign in through their organization&apos;s portal URL.
-                </div>
+                <Link
+                  className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-6 py-3 font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                  href="/register"
+                >
+                  Create an account
+                </Link>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-3">
@@ -71,13 +74,18 @@ export default function Home() {
             <AccountPanel
               className="border-slate-200 bg-slate-50 shadow-none"
               title="Choose the right entry point"
-              description="ZenDocx is the platform layer. Tenant businesses share their own portal URL with their users and CBT teams."
+              description="Regular users sign up directly. CBT centers have dedicated onboarding, while tenant business admins are provisioned into their branded portal."
             >
               <div className="space-y-3">
                 {landingAudienceCards.map((item) => {
                   const Icon = item.icon;
-                  const cardContent = (
-                    <>
+
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className="group flex items-start gap-4 rounded-[1.5rem] border border-slate-200 bg-white px-5 py-5 transition hover:border-slate-300 hover:shadow-sm"
+                    >
                       <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#0D1B3E]">
                         <Icon size={20} className="text-amber-400" />
                       </div>
@@ -86,35 +94,12 @@ export default function Home() {
                         <p className="mt-2 text-sm leading-6 text-slate-500">{item.description}</p>
                         <p className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[#0D1B3E]">
                           {item.cta}
-                          {item.href ? (
-                            <ArrowRight
-                              size={16}
-                              className="transition group-hover:translate-x-0.5"
-                            />
-                          ) : null}
+                          <ArrowRight
+                            size={16}
+                            className="transition group-hover:translate-x-0.5"
+                          />
                         </p>
                       </div>
-                    </>
-                  );
-
-                  if (!item.href) {
-                    return (
-                      <div
-                        key={item.title}
-                        className="flex items-start gap-4 rounded-[1.5rem] border border-slate-200 bg-white px-5 py-5"
-                      >
-                        {cardContent}
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className="group flex items-start gap-4 rounded-[1.5rem] border border-slate-200 bg-white px-5 py-5 transition hover:border-slate-300 hover:shadow-sm"
-                    >
-                      {cardContent}
                     </Link>
                   );
                 })}
@@ -126,7 +111,7 @@ export default function Home() {
         <section className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
           <AccountPanel
             title="Services covered"
-            description="Tenant portals can be configured for a broad mix of managed public-facing and back-office services."
+            description="The platform is open to everyday users as well as fulfillment and business operators."
           >
             <div className="grid gap-3 sm:grid-cols-2">
               {landingServiceAreas.map((item) => (
@@ -142,13 +127,13 @@ export default function Home() {
 
           <AccountPanel
             title="What Phase 1 already supports"
-            description="Platform owners can already manage the core software layer while tenant portals build on that foundation."
+            description="The platform foundation is already in place, and the next layers build on top of this base."
           >
             <div className="space-y-4">
               {[
-                'Platform admin dashboards already exist for tenant creation, user governance, and service oversight.',
-                'Tenant portals support their own users, CBT centers, business admins, and role-aware navigation.',
-                'Wallet, services, orders, support, notifications, disputes, and provider integrations are scaffolded into the shared platform.',
+                'Secure sign-in, registration, email verification, password reset, and wallet PIN flows are already wired.',
+                'Dedicated workspaces exist for individuals, CBT centers, tenant admins, and platform admins.',
+                'Wallet, services, orders, support, notifications, disputes, and role-based navigation are all scaffolded.',
               ].map((item) => (
                 <div
                   key={item}
