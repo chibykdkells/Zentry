@@ -1,4 +1,4 @@
-app = "zendocx-api-prod"
+app = "zentry-api-prod"
 primary_region = "lhr"
 
 [build]
