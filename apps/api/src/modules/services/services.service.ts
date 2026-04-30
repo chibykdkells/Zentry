@@ -541,6 +541,35 @@ export class ServicesService {
     dto: UpdateVtuProviderConfigDto,
     scope: ProviderScopeContext,
   ) {
+    if (scope.scopeType === 'TENANT' && dto.usePlatformDefault) {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.providerValidationEvent.deleteMany({
+          where: {
+            providerType: 'VTU',
+            providerKey: 'PROVIDER_ONE',
+            scopeType: scope.scopeType,
+            scopeKey: scope.scopeKey,
+          },
+        });
+
+        await tx.platformProviderConfig.deleteMany({
+          where: {
+            providerType: 'VTU',
+            providerKey: 'PROVIDER_ONE',
+            scopeType: scope.scopeType,
+            scopeKey: scope.scopeKey,
+          },
+        });
+      });
+
+      const readiness = await this.getScopedProviderReadiness(scope);
+
+      return {
+        message: 'This business is now using the Zendocx default provider.',
+        data: readiness.data,
+      };
+    }
+
     const existing = await this.prisma.platformProviderConfig.findUnique({
       where: {
         providerType_providerKey_scopeType_scopeKey: {
@@ -731,49 +760,90 @@ export class ServicesService {
     const probeStatus = readiness.probe.status;
     const probeMessage = readiness.probe.message;
 
-    const config = await this.prisma.platformProviderConfig.upsert({
-      where: {
-        providerType_providerKey_scopeType_scopeKey: {
+    const existingScopedConfig =
+      await this.prisma.platformProviderConfig.findUnique({
+        where: {
+          providerType_providerKey_scopeType_scopeKey: {
+            providerType: 'VTU',
+            providerKey: 'PROVIDER_ONE',
+            scopeType: scope.scopeType,
+            scopeKey: scope.scopeKey,
+          },
+        },
+        select: { id: true, rolloutMode: true, baseUrl: true },
+      });
+
+    const effectiveConfig =
+      existingScopedConfig ??
+      (readiness.resolvedScope.type !== scope.scopeType ||
+      readiness.resolvedScope.key !== scope.scopeKey
+        ? await this.prisma.platformProviderConfig.findUnique({
+            where: {
+              providerType_providerKey_scopeType_scopeKey: {
+                providerType: 'VTU',
+                providerKey: 'PROVIDER_ONE',
+                scopeType: readiness.resolvedScope.type,
+                scopeKey: readiness.resolvedScope.key,
+              },
+            },
+            select: { id: true, rolloutMode: true, baseUrl: true },
+          })
+        : null);
+
+    if (existingScopedConfig) {
+      await this.prisma.platformProviderConfig.update({
+        where: { id: existingScopedConfig.id },
+        data: {
+          lastValidatedAt: new Date(readiness.probe.checkedAt),
+          lastValidationStatus: probeStatus,
+          lastValidationMessage: probeMessage,
+        },
+      });
+    } else if (scope.scopeType === 'PLATFORM') {
+      await this.prisma.platformProviderConfig.upsert({
+        where: {
+          providerType_providerKey_scopeType_scopeKey: {
+            providerType: 'VTU',
+            providerKey: 'PROVIDER_ONE',
+            scopeType: scope.scopeType,
+            scopeKey: scope.scopeKey,
+          },
+        },
+        update: {
+          lastValidatedAt: new Date(readiness.probe.checkedAt),
+          lastValidationStatus: probeStatus,
+          lastValidationMessage: probeMessage,
+        },
+        create: {
           providerType: 'VTU',
           providerKey: 'PROVIDER_ONE',
           scopeType: scope.scopeType,
           scopeKey: scope.scopeKey,
+          displayName: 'Provider One VTU',
+          lastValidatedAt: new Date(readiness.probe.checkedAt),
+          lastValidationStatus: probeStatus,
+          lastValidationMessage: probeMessage,
         },
-      },
-      update: {
-        lastValidatedAt: new Date(readiness.probe.checkedAt),
-        lastValidationStatus: probeStatus,
-        lastValidationMessage: probeMessage,
-      },
-      create: {
-        providerType: 'VTU',
-        providerKey: 'PROVIDER_ONE',
-        scopeType: scope.scopeType,
-        scopeKey: scope.scopeKey,
-        displayName:
-          scope.scopeType === 'TENANT'
-            ? 'Tenant VTU Provider One'
-            : 'Provider One VTU',
-        lastValidatedAt: new Date(readiness.probe.checkedAt),
-        lastValidationStatus: probeStatus,
-        lastValidationMessage: probeMessage,
-      },
-      select: { id: true, rolloutMode: true, baseUrl: true },
-    });
+      });
+    }
 
     await this.prisma.providerValidationEvent.create({
       data: {
-        providerConfigId: config.id,
+        providerConfigId: effectiveConfig?.id ?? existingScopedConfig?.id ?? null,
         providerType: 'VTU',
         providerKey: 'PROVIDER_ONE',
         scopeType: scope.scopeType,
         scopeKey: scope.scopeKey,
-        rolloutMode: config.rolloutMode,
+        rolloutMode:
+          existingScopedConfig?.rolloutMode ??
+          effectiveConfig?.rolloutMode ??
+          ProviderRolloutMode.AUTO,
         effectiveMode: readiness.mode,
         probeStatus,
         probeMessage,
         missingConfig: readiness.missingConfig,
-        endpointBaseUrl: config.baseUrl,
+        endpointBaseUrl:
+          existingScopedConfig?.baseUrl ?? effectiveConfig?.baseUrl ?? null,
       },
     });
 

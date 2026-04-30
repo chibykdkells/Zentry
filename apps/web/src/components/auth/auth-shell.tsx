@@ -84,44 +84,51 @@ export function AuthShell({
       ];
 
   return (
-    <div className="min-h-screen bg-brand-canvas px-4 py-10 sm:py-12">
-      <div className="mx-auto flex min-h-[calc(100vh-6rem)] w-full max-w-5xl items-center justify-center">
-        <div className="grid w-full gap-10 lg:grid-cols-[0.95fr_1.05fr]">
-          <section className="hidden rounded-[2rem] border border-brand-line bg-brand-navy p-8 text-white shadow-xl shadow-slate-200/60 lg:block">
+    <div className="min-h-screen bg-[linear-gradient(180deg,#eef3fb_0%,#f7f9fd_45%,#ffffff_100%)] px-4 py-8 sm:py-10">
+      <div className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-6xl items-center justify-center">
+        <div className="grid w-full gap-8 lg:grid-cols-[1.02fr_0.98fr]">
+          <section className="hidden overflow-hidden rounded-[2.25rem] border border-white/10 bg-[linear-gradient(155deg,#0d1b3e_0%,#132754_52%,#10203c_100%)] p-10 text-white shadow-[0_28px_80px_rgba(13,27,62,0.24)] lg:block">
             <Link href={authHomeHref} className="inline-flex items-center gap-3">
               {resolvedTenant?.logoUrl ? (
                 <img
                   src={resolvedTenant.logoUrl}
                   alt={brandName}
-                  className="h-11 w-11 rounded-2xl object-cover"
+                  className="h-12 w-12 rounded-2xl object-cover ring-1 ring-white/15"
                 />
               ) : (
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/10">
                   <span className="text-xl font-black text-brand-accent">
                     {brandInitial}
                   </span>
                 </div>
               )}
-              <span className="text-2xl font-black tracking-tight">{brandName}</span>
+              <div>
+                <span className="block text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-300">
+                  {isPlatformVariant ? 'Platform access' : 'Tenant portal'}
+                </span>
+                <span className="mt-1 block text-2xl font-black tracking-[-0.03em] text-white">
+                  {brandName}
+                </span>
+              </div>
             </Link>
 
-            <div className="mt-14 space-y-5">
+            <div className="mt-16 space-y-6">
               <p className="text-sm font-semibold uppercase tracking-[0.28em] text-slate-300">
                 {isPlatformVariant ? 'Platform Access' : 'Account Access'}
               </p>
-              <h2 className="text-4xl font-black leading-tight">
+              <h2 className="max-w-xl text-[3.4rem] font-black leading-[0.98] tracking-[-0.05em]">
                 {isPlatformVariant
                   ? `Secure access for the ${brandName} control layer.`
                   : `Clear, secure access for every part of the ${brandName} platform.`}
               </h2>
-              <p className="max-w-md text-base leading-8 text-slate-300">
+              <p className="max-w-lg text-base leading-8 text-slate-300">
                 {isPlatformVariant
                   ? 'Platform owners use this shared sign-in point to reach the admin dashboard. Tenant users should stay on their organization portal.'
                   : 'Sign in to continue, or choose the account path that matches how you use the portal.'}
               </p>
             </div>
 
-            <div className="mt-10 space-y-3">
+            <div className="mt-10 grid gap-3">
               {entryCards.map((item) => {
                 const Icon = item.icon;
 
@@ -129,9 +136,9 @@ export function AuthShell({
                   <Link
                     key={item.href}
                     href={appendTenantContextToPath(item.href, tenantSlug)}
-                    className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-4 transition hover:border-white/20 hover:bg-white/8"
+                    className="group flex items-start gap-3 rounded-[1.6rem] border border-white/10 bg-white/6 px-4 py-4 transition hover:border-white/20 hover:bg-white/10"
                   >
-                    <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/10">
+                    <div className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/10">
                       <Icon size={18} className="text-brand-accent" />
                     </div>
                     <div className="min-w-0 flex-1">
@@ -140,13 +147,29 @@ export function AuthShell({
                         {item.description}
                       </p>
                     </div>
-                    <ArrowRight size={16} className="mt-1 shrink-0 text-slate-400" />
+                    <ArrowRight
+                      size={16}
+                      className="mt-1 shrink-0 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-white"
+                    />
                   </Link>
                 );
               })}
             </div>
 
-            <div className="mt-8 flex items-start gap-3 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-4 text-sm text-slate-200">
+            <div className="mt-8 rounded-[1.75rem] border border-white/10 bg-white/6 p-5">
+              <div className="flex flex-wrap gap-2">
+                {accessHighlights.map((highlight) => (
+                  <span
+                    key={highlight}
+                    className="rounded-full border border-white/10 bg-white/6 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-200"
+                  >
+                    {highlight}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-6 flex items-start gap-3 rounded-[1.75rem] border border-emerald-400/20 bg-emerald-400/10 px-4 py-4 text-sm text-slate-200">
               <ShieldCheck size={18} className="mt-0.5 shrink-0 text-emerald-300" />
               <p className="leading-6">
                 {isPlatformVariant
@@ -166,7 +189,7 @@ export function AuthShell({
                     className="h-10 w-10 rounded-xl object-cover"
                   />
                 ) : (
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-navy">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-navy shadow-lg shadow-[#0D1B3E]/20">
                     <span className="text-lg font-black text-brand-accent">
                       {brandInitial}
                     </span>
@@ -190,29 +213,29 @@ export function AuthShell({
               </Link>
             </div>
 
-            <div className="rounded-[2rem] border border-brand-line bg-brand-surface p-8 shadow-xl shadow-slate-200/40">
-              <div className="mb-5 flex flex-wrap gap-2">
+            <div className="rounded-[2.25rem] border border-white/70 bg-white/95 p-8 shadow-[0_28px_80px_rgba(15,23,42,0.08)] backdrop-blur xl:p-10">
+              <div className="mb-6 flex flex-wrap gap-2">
                 {accessHighlights.map((highlight) => (
                   <span
                     key={highlight}
-                    className="rounded-full border border-brand-line bg-brand-canvas px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-muted"
+                    className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500"
                   >
                     {highlight}
                   </span>
                 ))}
               </div>
 
-              <h1 className="text-3xl font-bold tracking-tight text-brand-ink">
+              <h1 className="text-[2.35rem] font-black leading-[1.02] tracking-[-0.04em] text-slate-950 md:text-[2.7rem]">
                 {title}
               </h1>
-              <p className="mt-2 text-sm leading-6 text-brand-muted">
+              <p className="mt-3 max-w-xl text-sm leading-7 text-slate-500">
                 {description}
               </p>
 
-              <div className="mt-8">{children}</div>
+              <div className="mt-9">{children}</div>
 
               {footer ? (
-                <div className="mt-6 border-t border-brand-line pt-5 text-left text-sm text-brand-muted md:text-center">
+                <div className="mt-7 border-t border-slate-100 pt-5 text-left text-sm text-slate-500 md:text-center">
                   {footer}
                 </div>
               ) : null}

@@ -15,6 +15,7 @@ export const TENANT_SERVICE_CATALOG_QUERY_KEY = ['tenant', 'service-catalog'] as
 export const TENANT_SERVICE_MANAGEMENT_QUERY_KEY = ['tenant', 'service-management'] as const;
 
 export interface UpdateTenantVtuProviderConfigInput {
+  usePlatformDefault?: boolean;
   isEnabled?: boolean;
   rolloutMode?: 'AUTO' | 'MOCK' | 'LIVE';
   baseUrl?: string | null;

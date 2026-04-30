@@ -86,6 +86,15 @@ export function LoginForm({ mode = 'auto' }: { mode?: LoginMode }) {
   const inferredTenantSlug =
     typeof window !== 'undefined' ? resolveTenantSlugForRequest() : null;
   const platformMode = mode === 'platform';
+  const registerHref = appendTenantContextToPath('/register', inferredTenantSlug);
+  const cbtRegisterHref = appendTenantContextToPath(
+    '/register/cbt',
+    inferredTenantSlug,
+  );
+  const forgotPasswordHref = appendTenantContextToPath(
+    '/forgot-password',
+    inferredTenantSlug,
+  );
   const infoMessage =
     !formError && sessionExpired
       ? 'Your session expired. Please sign in again to continue.'
@@ -241,7 +250,7 @@ export function LoginForm({ mode = 'auto' }: { mode?: LoginMode }) {
       <p>
         New here?{' '}
         <Link
-          href="/register"
+          href={registerHref}
           className="font-semibold text-[#0D1B3E] hover:text-[#132754]"
         >
           Create an individual account
@@ -250,7 +259,7 @@ export function LoginForm({ mode = 'auto' }: { mode?: LoginMode }) {
       <p>
         Operate a CBT center?{' '}
         <Link
-          href="/register/cbt"
+          href={cbtRegisterHref}
           className="font-semibold text-[#0D1B3E] hover:text-[#132754]"
         >
           Apply as a CBT center
@@ -262,15 +271,15 @@ export function LoginForm({ mode = 'auto' }: { mode?: LoginMode }) {
   return (
     <AuthShell
       variant={platformMode ? 'platform' : 'default'}
-      title={platformMode ? 'Platform owner sign in' : 'Sign in'}
+      title={platformMode ? 'Platform owner sign in' : 'Welcome back'}
       description={
         platformMode
           ? 'Use this ZenDocx access point to manage tenants, provision tenant admins, and operate the platform dashboard.'
-          : 'Access your ZenDocx workspace with a cleaner, role-aware sign-in flow.'
+          : 'Sign in to continue inside your ZenDocx workspace. If you arrived through a business portal, you will stay inside that tenant experience.'
       }
       footer={footer}
     >
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         {infoMessage ? (
           <FeedbackBanner tone="info" message={infoMessage} />
         ) : null}
@@ -292,7 +301,7 @@ export function LoginForm({ mode = 'auto' }: { mode?: LoginMode }) {
         ) : null}
 
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-slate-700">
+          <label className="mb-2 block text-[12px] font-semibold uppercase tracking-[0.16em] text-slate-500">
             Email address
           </label>
           <input
@@ -300,11 +309,11 @@ export function LoginForm({ mode = 'auto' }: { mode?: LoginMode }) {
             autoComplete="email"
             placeholder="you@example.com"
             className={cn(
-              'w-full rounded-2xl border px-4 py-3 text-sm outline-none transition',
-              'focus:border-[#0D1B3E] focus:ring-2 focus:ring-[#0D1B3E]/10',
+              'w-full rounded-[1.35rem] border px-4 py-3.5 text-[15px] font-medium text-slate-900 outline-none transition',
+              'focus:border-[#0D1B3E] focus:bg-white focus:ring-2 focus:ring-[#0D1B3E]/10',
               errors.email
                 ? 'border-red-300 bg-red-50'
-                : 'border-slate-200 bg-white',
+                : 'border-slate-200 bg-slate-50',
             )}
             {...register('email')}
           />
@@ -316,13 +325,13 @@ export function LoginForm({ mode = 'auto' }: { mode?: LoginMode }) {
         </div>
 
         <div>
-          <div className="mb-1.5 flex items-center justify-between gap-4">
-            <label className="block text-sm font-medium text-slate-700">
+          <div className="mb-2 flex items-center justify-between gap-4">
+            <label className="block text-[12px] font-semibold uppercase tracking-[0.16em] text-slate-500">
               Password
             </label>
             <Link
-              href="/forgot-password"
-              className="text-xs font-medium text-slate-500 hover:text-[#0D1B3E]"
+              href={forgotPasswordHref}
+              className="text-xs font-semibold text-slate-500 hover:text-[#0D1B3E]"
             >
               Forgot password?
             </Link>
@@ -333,11 +342,11 @@ export function LoginForm({ mode = 'auto' }: { mode?: LoginMode }) {
               autoComplete="current-password"
               placeholder="Enter your password"
               className={cn(
-                'w-full rounded-2xl border px-4 py-3 pr-11 text-sm outline-none transition',
-                'focus:border-[#0D1B3E] focus:ring-2 focus:ring-[#0D1B3E]/10',
+                'w-full rounded-[1.35rem] border px-4 py-3.5 pr-11 text-[15px] font-medium text-slate-900 outline-none transition',
+                'focus:border-[#0D1B3E] focus:bg-white focus:ring-2 focus:ring-[#0D1B3E]/10',
                 errors.password
                   ? 'border-red-300 bg-red-50'
-                  : 'border-slate-200 bg-white',
+                  : 'border-slate-200 bg-slate-50',
               )}
               {...register('password')}
             />
@@ -361,7 +370,7 @@ export function LoginForm({ mode = 'auto' }: { mode?: LoginMode }) {
           type="submit"
           disabled={loading}
           className={cn(
-            'flex w-full items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold transition',
+            'flex w-full items-center justify-center gap-2 rounded-[1.35rem] px-5 py-3.5 text-[15px] font-semibold transition',
             'bg-[#0D1B3E] text-white hover:bg-[#132754]',
             'disabled:cursor-not-allowed disabled:opacity-60',
           )}

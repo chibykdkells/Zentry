@@ -9,6 +9,10 @@ import {
 export class UpdateVtuProviderConfigDto {
   @IsOptional()
   @IsBoolean()
+  usePlatformDefault?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
   isEnabled?: boolean;
 
   @IsOptional()
