@@ -447,6 +447,79 @@ export class AuthService {
     return { message: 'Password reset successful. Please log in.' };
   }
 
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+    confirmPassword: string,
+  ) {
+    if (newPassword !== confirmPassword) {
+      throw new BadRequestException('Passwords do not match');
+    }
+
+    if (currentPassword === newPassword) {
+      throw new BadRequestException(
+        'New password must be different from current password',
+      );
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        tenantId: true,
+        passwordHash: true,
+        isActive: true,
+      },
+    });
+
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const currentPasswordValid = await bcrypt.compare(
+      currentPassword,
+      user.passwordHash,
+    );
+
+    if (!currentPasswordValid) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    const rounds = Number(this.config.get('BCRYPT_ROUNDS', '12'));
+    const passwordHash = await bcrypt.hash(newPassword, rounds);
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash },
+      }),
+      this.prisma.auditLog.create({
+        data: {
+          userId: user.id,
+          tenantId: user.tenantId ?? undefined,
+          action: 'PASSWORD_CHANGED',
+          entity: 'User',
+          entityId: user.id,
+        },
+      }),
+    ]);
+
+    const tokens = await this.issueSessionTokens(
+      user.id,
+      user.email,
+      user.role,
+      user.tenantId ?? null,
+    );
+
+    return {
+      message: 'Password changed successfully.',
+      data: tokens,
+    };
+  }
+
   // ── PIN management ────────────────────────────────────────────
 
   async setPin(userId: string, pin: string, confirmPin: string) {

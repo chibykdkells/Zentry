@@ -29,6 +29,7 @@ import {
   ResendOtpDto,
   ForgotPasswordDto,
   ResetPasswordDto,
+  ChangePasswordDto,
   SetPinDto,
   ChangePinDto,
 } from './dto';
@@ -337,6 +338,41 @@ export class AuthController {
       dto.password,
       dto.confirmPassword,
     );
+  }
+
+  @Post('change-password')
+  @HttpCode(HttpStatus.OK)
+  @Roles(
+    UserRole.INDIVIDUAL,
+    UserRole.CBT_CENTER,
+    UserRole.TENANT_ADMIN,
+    UserRole.SUPER_ADMIN,
+  )
+  @Audit({
+    action: 'PASSWORD_CHANGED',
+    entity: 'User',
+    lookup: 'current_user',
+    mergeExisting: true,
+  })
+  async changePassword(
+    @CurrentUser() user: JwtUser,
+    @Body() dto: ChangePasswordDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await this.authService.changePassword(
+      user.sub,
+      dto.currentPassword,
+      dto.newPassword,
+      dto.confirmPassword,
+    );
+    this.setRefreshTokenCookie(response, result.data.refreshToken);
+
+    return {
+      message: result.message,
+      data: {
+        accessToken: result.data.accessToken,
+      },
+    };
   }
 
   // ── PIN ───────────────────────────────────────────────────────

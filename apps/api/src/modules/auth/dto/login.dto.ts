@@ -7,6 +7,7 @@ import {
   Matches,
 } from 'class-validator';
 import {
+  ChangePasswordSchema,
   ChangePinSchema,
   ForgotPasswordSchema,
   LoginSchema,
@@ -66,6 +67,24 @@ export class ResetPasswordDto {
       'Password must have 8+ chars, uppercase, lowercase, number, and special character',
   })
   password: string;
+
+  @IsString()
+  confirmPassword: string;
+}
+
+export class ChangePasswordDto {
+  static schema = ChangePasswordSchema;
+
+  @IsString()
+  @MinLength(1, { message: 'Current password is required' })
+  currentPassword: string;
+
+  @IsString()
+  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/, {
+    message:
+      'Password must have 8+ chars, uppercase, lowercase, number, and special character',
+  })
+  newPassword: string;
 
   @IsString()
   confirmPassword: string;

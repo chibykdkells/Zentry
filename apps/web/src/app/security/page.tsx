@@ -11,7 +11,14 @@ import {
   ShieldCheck,
   WalletCards,
 } from 'lucide-react';
-import { ChangePinInput, ChangePinSchema, SetPinInput, SetPinSchema } from '@zendocx/validators';
+import {
+  ChangePasswordInput,
+  ChangePasswordSchema,
+  ChangePinInput,
+  ChangePinSchema,
+  SetPinInput,
+  SetPinSchema,
+} from '@zendocx/validators';
 import { ProtectedShell } from '@/components/layout/protected-shell';
 import { EmptyState } from '@/components/shared/empty-state';
 import { AccountPanel } from '@/components/shared/account-panel';
@@ -19,6 +26,7 @@ import { PageHero } from '@/components/shared/page-hero';
 import { useAuthProfile } from '@/hooks/use-auth-profile';
 import apiClient from '@/lib/api-client';
 import { getApiErrorMessage } from '@/lib/api-error';
+import { useAuthStore } from '@/stores/auth.store';
 import { cn } from '@/lib/utils';
 
 export default function SecurityPage() {
@@ -81,20 +89,29 @@ export default function SecurityPage() {
         />
 
         <div className="grid gap-5 md:gap-6 xl:grid-cols-[1fr_1fr]">
-          <AccountPanel
-            title={profile.hasWalletPin ? 'Change wallet PIN' : 'Set wallet PIN'}
-            description={
-              profile.hasWalletPin
-                ? 'Use a fresh 6-digit PIN to secure sensitive wallet actions.'
-                : 'Create a 6-digit PIN now so wallet-sensitive actions are protected.'
-            }
-          >
-            {profile.hasWalletPin ? (
-              <ChangePinForm onSuccess={reload} />
-            ) : (
-              <SetPinForm onSuccess={reload} />
-            )}
-          </AccountPanel>
+          <div className="space-y-6">
+            <AccountPanel
+              title="Change account password"
+              description="Update your password while staying signed in. Use this when you already know your current password."
+            >
+              <ChangePasswordForm />
+            </AccountPanel>
+
+            <AccountPanel
+              title={profile.hasWalletPin ? 'Change wallet PIN' : 'Set wallet PIN'}
+              description={
+                profile.hasWalletPin
+                  ? 'Use a fresh 6-digit PIN to secure sensitive wallet actions.'
+                  : 'Create a 6-digit PIN now so wallet-sensitive actions are protected.'
+              }
+            >
+              {profile.hasWalletPin ? (
+                <ChangePinForm onSuccess={reload} />
+              ) : (
+                <SetPinForm onSuccess={reload} />
+              )}
+            </AccountPanel>
+          </div>
 
           <div className="space-y-6">
             <AccountPanel
@@ -130,14 +147,14 @@ export default function SecurityPage() {
 
             <AccountPanel
               title="Recovery actions"
-              description="Use the current auth flows to recover or refresh access without waiting for a later phase."
+              description="Use these only if you are locked out or do not know your current password."
             >
               <div className="space-y-3">
                 <Link
                   href="/forgot-password"
                   className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm font-semibold text-slate-800 transition hover:bg-white"
                 >
-                  Start password reset
+                  Start account recovery
                   <span className="text-slate-400">Open</span>
                 </Link>
                 <Link
@@ -153,6 +170,83 @@ export default function SecurityPage() {
         </div>
       </div>
     </ProtectedShell>
+  );
+}
+
+function ChangePasswordForm() {
+  const [submitting, setSubmitting] = useState(false);
+  const setAccessToken = useAuthStore((state) => state.setAccessToken);
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    reset,
+  } = useForm<ChangePasswordInput>({
+    resolver: zodResolver(ChangePasswordSchema),
+  });
+
+  const onSubmit = async (values: ChangePasswordInput) => {
+    setSubmitting(true);
+
+    try {
+      const response = await apiClient.post<{
+        data: { accessToken: string };
+      }>('/auth/change-password', values);
+      setAccessToken(response.data.data.accessToken);
+      reset();
+      toast.success('Password changed successfully.');
+    } catch (requestError: unknown) {
+      toast.error(
+        getApiErrorMessage(
+          requestError,
+          'We could not update your password right now.',
+        ),
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      <SecurityInput
+        label="Current password"
+        error={errors.currentPassword?.message}
+        inputProps={{
+          type: 'password',
+          autoComplete: 'current-password',
+          ...register('currentPassword'),
+        }}
+      />
+
+      <SecurityInput
+        label="New password"
+        error={errors.newPassword?.message}
+        inputProps={{
+          type: 'password',
+          autoComplete: 'new-password',
+          ...register('newPassword'),
+        }}
+      />
+
+      <SecurityInput
+        label="Confirm new password"
+        error={errors.confirmPassword?.message}
+        inputProps={{
+          type: 'password',
+          autoComplete: 'new-password',
+          ...register('confirmPassword'),
+        }}
+      />
+
+      <button
+        type="submit"
+        disabled={submitting}
+        className="inline-flex items-center justify-center rounded-2xl bg-[#0D1B3E] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#132754] disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {submitting ? 'Updating...' : 'Change password'}
+      </button>
+    </form>
   );
 }
 
