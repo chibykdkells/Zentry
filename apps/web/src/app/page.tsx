@@ -18,7 +18,7 @@ export default function Home() {
                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#0D1B3E] font-black text-amber-400">
                   Z
                 </span>
-                Zentry
+                ZenDocx
               </div>
 
               <div className="space-y-4">
@@ -29,7 +29,7 @@ export default function Home() {
                   A calmer way to access services, manage requests, and keep operations moving.
                 </h1>
                 <p className="max-w-2xl text-base leading-8 text-slate-600 sm:text-lg">
-                  Zentry brings individuals, approved CBT centers, tenant-run
+                  ZenDocx brings individuals, approved CBT centers, tenant-run
                   business portals, and platform admins into one clear workspace
                   for identity support, exam services, airtime, data, and
                   wallet-based transactions.
