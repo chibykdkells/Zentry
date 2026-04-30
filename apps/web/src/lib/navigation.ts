@@ -88,6 +88,7 @@ export const adminSecondaryNav: AppNavItem[] = [
 export const tenantPrimaryNav: AppNavItem[] = [
   { label: 'Dashboard', href: '/tenant/dashboard', icon: LayoutDashboard },
   { label: 'Customers', href: '/tenant/users', icon: Users },
+  { label: 'Wallet', href: '/wallet', icon: Wallet },
   { label: 'CBT centers', href: '/tenant/cbt-management', icon: Users },
   { label: 'Services', href: '/tenant/services', icon: Zap },
   { label: 'API Integrations', href: '/tenant/providers', icon: Wrench },

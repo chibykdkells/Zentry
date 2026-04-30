@@ -2,22 +2,26 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Download, Share2, Smartphone, X } from 'lucide-react';
+import { useTenantStore } from '@/stores/tenant.store';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
 }
 
-const DISMISS_KEY = 'zendocx-pwa-install-dismissed-at';
 const DISMISS_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 const DEV_BROWSER_RESET_KEY = 'zendocx-dev-browser-reset-v1';
 
-function getInitialDismissedState() {
+function getDismissKey(tenantSlug?: string | null) {
+  return `zendocx-pwa-install-dismissed-at:${tenantSlug ?? 'platform'}`;
+}
+
+function getDismissedState(tenantSlug?: string | null) {
   if (typeof window === 'undefined') {
     return false;
   }
 
-  const dismissedAt = window.localStorage.getItem(DISMISS_KEY);
+  const dismissedAt = window.localStorage.getItem(getDismissKey(tenantSlug));
   return Boolean(
     dismissedAt && Date.now() - Number(dismissedAt) < DISMISS_DURATION_MS,
   );
@@ -56,11 +60,45 @@ function isLocalDevelopmentHostname(hostname: string) {
   );
 }
 
+function buildTenantManifestUrl(tenant: {
+  name: string;
+  slug: string;
+  primaryColor: string;
+  accentColor: string;
+}) {
+  const params = new URLSearchParams({
+    tenantName: tenant.name,
+    tenantSlug: tenant.slug,
+    primaryColor: tenant.primaryColor,
+    accentColor: tenant.accentColor,
+  });
+
+  return `/pwa/manifest?${params.toString()}`;
+}
+
+function buildTenantIconUrl(tenant: {
+  name: string;
+  primaryColor: string;
+  accentColor: string;
+}) {
+  const params = new URLSearchParams({
+    tenantName: tenant.name,
+    primaryColor: tenant.primaryColor,
+    accentColor: tenant.accentColor,
+    size: '192',
+  });
+
+  return `/pwa/icon?${params.toString()}`;
+}
+
 export function InstallPrompt() {
+  const tenant = useTenantStore((state) => state.tenant);
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(getInitialInstalledState);
-  const [isDismissed, setIsDismissed] = useState(getInitialDismissedState);
+  const [isDismissed, setIsDismissed] = useState(() =>
+    getDismissedState(tenant?.slug),
+  );
   const [isIos] = useState(() => /iPhone|iPad|iPod/i.test(getUserAgent()));
   const [isSafari] = useState(
     () =>
@@ -68,12 +106,71 @@ export function InstallPrompt() {
       !/Chrome|CriOS|Edg|FxiOS/i.test(getUserAgent()),
   );
 
+  const appName = tenant?.name?.trim() || 'ZenDocx';
+  const appInitial = appName.charAt(0).toUpperCase() || 'Z';
+  const tenantLogoUrl = tenant?.logoUrl?.trim() || null;
+  const installDescription = deferredPrompt
+    ? `Add ${appName} to your home screen for a faster, app-like experience.`
+    : `On iPhone or iPad, use Safari's Share menu and choose "Add to Home Screen" for ${appName}.`;
+
   function dismissPrompt(persist = true) {
     setIsDismissed(true);
     if (persist && typeof window !== 'undefined') {
-      window.localStorage.setItem(DISMISS_KEY, Date.now().toString());
+      window.localStorage.setItem(
+        getDismissKey(tenant?.slug),
+        Date.now().toString(),
+      );
     }
   }
+
+  useEffect(() => {
+    setIsDismissed(getDismissedState(tenant?.slug));
+  }, [tenant?.slug]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    const manifestLink = document.querySelector<HTMLLinkElement>(
+      'link[rel="manifest"]',
+    );
+    const appleTouchIconLink = document.querySelector<HTMLLinkElement>(
+      'link[rel="apple-touch-icon"]',
+    );
+
+    if (!manifestLink && !appleTouchIconLink) {
+      return;
+    }
+
+    const defaultManifestHref = '/manifest.json';
+    const nextManifestHref =
+      tenant?.slug && tenant.primaryColor && tenant.accentColor
+        ? buildTenantManifestUrl({
+            name: tenant.name,
+            slug: tenant.slug,
+            primaryColor: tenant.primaryColor,
+            accentColor: tenant.accentColor,
+          })
+        : defaultManifestHref;
+
+    const nextAppleIconHref =
+      tenant?.slug && tenant.primaryColor && tenant.accentColor
+        ? buildTenantIconUrl({
+            name: tenant.name,
+            primaryColor: tenant.primaryColor,
+            accentColor: tenant.accentColor,
+          })
+        : '/icons/icon-192.png';
+
+    if (manifestLink) {
+      manifestLink.href = nextManifestHref;
+    }
+
+    if (appleTouchIconLink) {
+      appleTouchIconLink.href = nextAppleIconHref;
+    }
+  }, [tenant]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -183,17 +280,25 @@ export function InstallPrompt() {
       <div className="pointer-events-auto w-full max-w-md rounded-[1.75rem] border border-brand-line bg-brand-surface p-5 shadow-2xl shadow-slate-300/30">
         <div className="flex items-start justify-between gap-4">
           <div className="flex gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand-navy text-brand-accent">
-              {deferredPrompt ? <Download size={20} /> : <Smartphone size={20} />}
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-brand-navy text-brand-accent">
+              {tenantLogoUrl ? (
+                <img
+                  src={tenantLogoUrl}
+                  alt={appName}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <span className="text-lg font-black text-brand-accent">
+                  {appInitial}
+                </span>
+              )}
             </div>
             <div>
               <h3 className="text-sm font-semibold text-brand-ink">
-                Install ZenDocx
+                Install {appName}
               </h3>
               <p className="mt-1 text-sm leading-6 text-brand-muted">
-                {deferredPrompt
-                  ? 'Add ZenDocx to your home screen for a faster, app-like experience.'
-                  : 'On iPhone or iPad, use Safari’s Share menu and choose “Add to Home Screen”.'}
+                {installDescription}
               </p>
               {process.env.NODE_ENV === 'development' ? (
                 <p className="mt-2 text-xs text-slate-400">
@@ -222,7 +327,7 @@ export function InstallPrompt() {
               }}
               className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-brand-navy px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand-navy-strong"
             >
-              <Download size={16} />
+              {deferredPrompt ? <Download size={16} /> : <Smartphone size={16} />}
               Install app
             </button>
           ) : (
