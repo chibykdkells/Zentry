@@ -10,19 +10,12 @@ import { getRoleFromJwt } from '@/lib/auth-token';
 
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
-  const sessionExpired = request.nextUrl.searchParams.get('reason') === 'session-expired';
   const tenantSlug =
     request.nextUrl.searchParams.get('tenant') ??
     request.cookies.get('zendocx-tenant-slug')?.value ??
     '';
   const refreshToken = request.cookies.get('refresh_token')?.value;
   const role = getRoleFromJwt(refreshToken);
-
-  if (role && isAuthRoute(pathname) && !sessionExpired) {
-    return NextResponse.redirect(
-      new URL(getDefaultRouteForRole(role), request.url),
-    );
-  }
 
   if (isProtectedRoute(pathname) && !role) {
     const loginUrl = new URL('/login', request.url);
@@ -43,6 +36,13 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(
       new URL(getDefaultRouteForRole(role), request.url),
     );
+  }
+
+  // Auth routes intentionally remain client-controlled.
+  // A refresh cookie can be structurally valid but already revoked server-side,
+  // so redirecting from middleware causes loops between /login and protected pages.
+  if (isAuthRoute(pathname)) {
+    return NextResponse.next();
   }
 
   return NextResponse.next();
