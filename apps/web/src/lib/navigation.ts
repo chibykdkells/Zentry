@@ -32,7 +32,7 @@ export interface RoleNavigation {
 export const individualPrimaryNav: AppNavItem[] = [
   { label: 'Home', href: '/home', icon: Home },
   { label: 'Services', href: '/services', icon: Zap },
-  { label: 'My Orders', href: '/orders', icon: ClipboardList },
+  { label: 'Orders', href: '/orders', icon: ClipboardList },
   { label: 'Wallet', href: '/wallet', icon: Wallet },
 ];
 
@@ -72,10 +72,10 @@ export const adminPrimaryNav: AppNavItem[] = [
   { label: 'Services', href: '/admin/services', icon: Zap },
   { label: 'Orders', href: '/admin/orders', icon: ClipboardList },
   { label: 'Disputes', href: '/admin/disputes', icon: MessageSquareWarning },
-  { label: 'CBT Centers', href: '/admin/cbt', icon: Users },
+  { label: 'Centers', href: '/admin/cbt', icon: Users },
   { label: 'Users', href: '/admin/users', icon: Users },
   { label: 'Finance', href: '/admin/finance', icon: Wallet },
-  { label: 'System Config', href: '/admin/system-config', icon: Wrench },
+  { label: 'Platform Settings', href: '/admin/system-config', icon: Wrench },
 ];
 
 export const adminSecondaryNav: AppNavItem[] = [
@@ -87,12 +87,12 @@ export const adminSecondaryNav: AppNavItem[] = [
 
 export const tenantPrimaryNav: AppNavItem[] = [
   { label: 'Dashboard', href: '/tenant/dashboard', icon: LayoutDashboard },
-  { label: 'Customers', href: '/tenant/users', icon: Users },
+  { label: 'Users', href: '/tenant/users', icon: Users },
   { label: 'Wallet', href: '/wallet', icon: Wallet },
-  { label: 'CBT centers', href: '/tenant/cbt-management', icon: Users },
+  { label: 'Centers', href: '/tenant/cbt-management', icon: Users },
   { label: 'Services', href: '/tenant/services', icon: Zap },
-  { label: 'API Integrations', href: '/tenant/providers', icon: Wrench },
-  { label: 'Settings', href: '/tenant/settings', icon: Settings },
+  { label: 'Service Connections', href: '/tenant/providers', icon: Wrench },
+  { label: 'Business Settings', href: '/tenant/settings', icon: Settings },
 ];
 
 export const tenantSecondaryNav: AppNavItem[] = [

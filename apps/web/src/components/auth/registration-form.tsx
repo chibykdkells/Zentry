@@ -18,7 +18,10 @@ import { AuthShell } from '@/components/auth/auth-shell';
 import { FeedbackBanner } from '@/components/shared/feedback-banner';
 import apiClient from '@/lib/api-client';
 import { getApiErrorMessage } from '@/lib/api-error';
-import { resolveTenantSlugForRequest } from '@/lib/tenant-runtime';
+import {
+  appendTenantContextToPath,
+  resolveTenantSlugForRequest,
+} from '@/lib/tenant-runtime';
 import { cn } from '@/lib/utils';
 import { useTenantStore } from '@/stores/tenant.store';
 
@@ -133,7 +136,12 @@ export function RegistrationForm({
     try {
       await apiClient.post(endpointMap[role], buildPayload(role, values));
       toast.success('Registration successful. Verify your email to continue.');
-      router.push(`/verify-email?email=${encodeURIComponent(values.email)}`);
+      router.push(
+        appendTenantContextToPath(
+          `/verify-email?email=${encodeURIComponent(values.email)}`,
+          resolveTenantSlugForRequest(),
+        ),
+      );
     } catch (error: unknown) {
       const message = getApiErrorMessage(error, 'Registration failed. Please try again.');
       setFormError(message);

@@ -10,12 +10,36 @@ import { getRoleFromJwt } from '@/lib/auth-token';
 
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
-  const tenantSlug =
-    request.nextUrl.searchParams.get('tenant') ??
-    request.cookies.get('zendocx-tenant-slug')?.value ??
-    '';
+  const explicitTenantSlug = request.nextUrl.searchParams.get('tenant') ?? '';
+  const tenantSlug = explicitTenantSlug || request.cookies.get('zendocx-tenant-slug')?.value || '';
   const refreshToken = request.cookies.get('refresh_token')?.value;
   const role = getRoleFromJwt(refreshToken);
+  const persistTenantCookie = (response: NextResponse) => {
+    if (!explicitTenantSlug) {
+      return response;
+    }
+
+    response.cookies.set('zendocx-tenant-slug', explicitTenantSlug, {
+      path: '/',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 30,
+    });
+
+    return response;
+  };
+
+  const appendTenantToPath = (href: string) => {
+    if (!tenantSlug || href.startsWith('/admin') || href.startsWith('/platform')) {
+      return href;
+    }
+
+    const url = new URL(href, request.url);
+    if (!url.searchParams.has('tenant') && !url.searchParams.has('slug')) {
+      url.searchParams.set('tenant', tenantSlug);
+    }
+
+    return `${url.pathname}${url.search}${url.hash}`;
+  };
 
   if (isProtectedRoute(pathname) && !role) {
     const loginUrl = new URL('/login', request.url);
@@ -29,12 +53,14 @@ export function proxy(request: NextRequest) {
       loginUrl.searchParams.set('next', redirectTarget);
     }
 
-    return NextResponse.redirect(loginUrl);
+    return persistTenantCookie(NextResponse.redirect(loginUrl));
   }
 
   if (role && !canAccessPath(role, pathname)) {
-    return NextResponse.redirect(
-      new URL(getDefaultRouteForRole(role), request.url),
+    return persistTenantCookie(
+      NextResponse.redirect(
+        new URL(appendTenantToPath(getDefaultRouteForRole(role)), request.url),
+      ),
     );
   }
 
@@ -42,10 +68,10 @@ export function proxy(request: NextRequest) {
   // A refresh cookie can be structurally valid but already revoked server-side,
   // so redirecting from middleware causes loops between /login and protected pages.
   if (isAuthRoute(pathname)) {
-    return NextResponse.next();
+    return persistTenantCookie(NextResponse.next());
   }
 
-  return NextResponse.next();
+  return persistTenantCookie(NextResponse.next());
 }
 
 export const config = {

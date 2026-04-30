@@ -17,6 +17,7 @@ import { FeedbackBanner } from '@/components/shared/feedback-banner';
 import { getSafePostLoginRoute } from '@/lib/auth-routes';
 import { getHumanLoginErrorMessage } from '@/lib/api-error';
 import {
+  appendTenantContextToPath,
   clearPersistedTenantSlug,
   persistActiveTenantSlug,
   resolveTenantSlugForRequest,
@@ -103,7 +104,10 @@ export function LoginForm({ mode = 'auto' }: { mode?: LoginMode }) {
     }
 
     if (accessToken) {
-      const targetRoute = getSafePostLoginRoute(user.role, nextPath);
+      const targetRoute = appendTenantContextToPath(
+        getSafePostLoginRoute(user.role, nextPath),
+        inferredTenantSlug,
+      );
       router.replace(targetRoute);
       return;
     }
@@ -121,7 +125,12 @@ export function LoginForm({ mode = 'auto' }: { mode?: LoginMode }) {
         }
 
         setAccessToken(refreshRes.data.data.accessToken);
-        router.replace(getSafePostLoginRoute(user.role, nextPath));
+        router.replace(
+          appendTenantContextToPath(
+            getSafePostLoginRoute(user.role, nextPath),
+            inferredTenantSlug,
+          ),
+        );
       } catch {
         if (!cancelled) {
           clearAuth();
@@ -200,7 +209,10 @@ export function LoginForm({ mode = 'auto' }: { mode?: LoginMode }) {
       setAuth(user, accessToken);
 
       toast.success(`Welcome back, ${user.firstName}!`);
-      const targetRoute = getSafePostLoginRoute(user.role, nextPath);
+      const targetRoute = appendTenantContextToPath(
+        getSafePostLoginRoute(user.role, nextPath),
+        tenantSlug,
+      );
 
       if (typeof window !== 'undefined') {
         reset();

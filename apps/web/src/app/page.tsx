@@ -6,8 +6,19 @@ import {
   landingFeatureCards,
   landingServiceAreas,
 } from '@/lib/landing-content';
+import { appendTenantContextToPath } from '@/lib/tenant-runtime';
 
-export default function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const resolvedSearchParams = (await searchParams) ?? {};
+  const rawTenantSlug = resolvedSearchParams.tenant;
+  const tenantSlug = Array.isArray(rawTenantSlug)
+    ? rawTenantSlug[0] ?? null
+    : rawTenantSlug ?? null;
+
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-7xl px-6 py-8 sm:px-8 sm:py-10 lg:px-10">
       <div className="w-full space-y-8">
@@ -39,13 +50,13 @@ export default function Home() {
               <div className="flex flex-col gap-3 sm:flex-row">
                 <Link
                   className="inline-flex items-center justify-center rounded-2xl bg-[#0D1B3E] px-6 py-3 font-semibold text-white transition hover:bg-[#132754]"
-                  href="/login"
+                  href={appendTenantContextToPath('/login', tenantSlug)}
                 >
                   Sign in
                 </Link>
                 <Link
                   className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-6 py-3 font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
-                  href="/register"
+                  href={appendTenantContextToPath('/register', tenantSlug)}
                 >
                   Create an account
                 </Link>
@@ -83,7 +94,7 @@ export default function Home() {
                   return (
                     <Link
                       key={item.href}
-                      href={item.href}
+                      href={appendTenantContextToPath(item.href, tenantSlug)}
                       className="group flex items-start gap-4 rounded-[1.5rem] border border-slate-200 bg-white px-5 py-5 transition hover:border-slate-300 hover:shadow-sm"
                     >
                       <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#0D1B3E]">

@@ -8,6 +8,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { useState } from 'react';
 import { getNavigationForRole } from '@/lib/navigation';
 import { inferRoleFromPath } from '@/lib/auth-routes';
+import { appendTenantContextToPath, resolveTenantSlugForRequest } from '@/lib/tenant-runtime';
 import { MoreSheet } from './more-sheet';
 
 export function BottomNav() {
@@ -15,17 +16,23 @@ export function BottomNav() {
   const { user } = useAuthStore();
   const [moreOpen, setMoreOpen] = useState(false);
   const effectiveRole = user?.role ?? inferRoleFromPath(pathname);
+  const tenantSlug =
+    typeof window !== 'undefined' ? resolveTenantSlugForRequest() : null;
 
   const { primary } = getNavigationForRole(effectiveRole);
-  const navItems = primary.slice(0, 4);
+  const navItems = primary.slice(0, 4).map((item) => ({
+    ...item,
+    href: appendTenantContextToPath(item.href, tenantSlug),
+  }));
 
   return (
     <>
       <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-white/95 backdrop-blur-md border-t border-slate-200 pb-[env(safe-area-inset-bottom)]">
         <div className="flex items-center justify-around h-16 px-2">
           {navItems.map((item) => {
+            const cleanHref = item.href.split('?')[0] ?? item.href;
             const isActive =
-              pathname === item.href || pathname.startsWith(`${item.href}/`);
+              pathname === cleanHref || pathname.startsWith(`${cleanHref}/`);
             return (
               <Link
                 key={item.href}

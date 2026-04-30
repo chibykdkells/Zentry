@@ -33,6 +33,7 @@ import {
 } from '@/hooks/use-tenant-services';
 import { getApiErrorMessage } from '@/lib/api-error';
 import { formatDate, formatNaira } from '@/lib/format';
+import { appendTenantContextToPath, resolveTenantSlugForRequest } from '@/lib/tenant-runtime';
 import { cn } from '@/lib/utils';
 
 type IntegrationView = 'services' | 'custom-api';
@@ -365,6 +366,8 @@ export default function TenantProvidersPage() {
   const [configJson, setConfigJson] = useState('');
   const [configJsonError, setConfigJsonError] = useState('');
   const [selectedServiceName, setSelectedServiceName] = useState<string | null>(null);
+  const tenantSlug =
+    typeof window !== 'undefined' ? resolveTenantSlugForRequest() : null;
 
   const { readiness, loading, error, reload } = useTenantProviderReadiness();
   const {
@@ -847,7 +850,7 @@ export default function TenantProvidersPage() {
               </button>
 
               <Link
-                href="/wallet"
+                href={appendTenantContextToPath('/wallet', tenantSlug)}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
               >
                 Open wallet workspace
@@ -1077,7 +1080,7 @@ export default function TenantProvidersPage() {
                 icon={PlugZap}
                 action={
                   <Link
-                    href="/tenant/services"
+                    href={appendTenantContextToPath('/tenant/services', tenantSlug)}
                     className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
                   >
                     Open services
@@ -1186,7 +1189,7 @@ export default function TenantProvidersPage() {
                   Configure shared API
                 </button>
                 <Link
-                  href="/tenant/services"
+                  href={appendTenantContextToPath('/tenant/services', tenantSlug)}
                   className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
                 >
                   Review service visibility

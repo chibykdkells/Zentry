@@ -11,6 +11,7 @@ import { disconnectSocket } from '@/lib/socket-client';
 import { useState } from 'react';
 import { getNavigationForRole } from '@/lib/navigation';
 import { inferRoleFromPath } from '@/lib/auth-routes';
+import { appendTenantContextToPath, resolveTenantSlugForRequest } from '@/lib/tenant-runtime';
 
 interface MoreSheetProps {
   open: boolean;
@@ -23,7 +24,12 @@ export function MoreSheet({ open, onClose }: MoreSheetProps) {
   const [loggingOut, setLoggingOut] = useState(false);
   const effectiveRole = user?.role ?? inferRoleFromPath(pathname);
   const { primary, secondary } = getNavigationForRole(effectiveRole);
-  const items = [...primary.slice(4), ...secondary];
+  const tenantSlug =
+    typeof window !== 'undefined' ? resolveTenantSlugForRequest() : null;
+  const items = [...primary.slice(4), ...secondary].map((item) => ({
+    ...item,
+    href: appendTenantContextToPath(item.href, tenantSlug),
+  }));
 
   const handleLogout = async () => {
     setLoggingOut(true);
@@ -37,7 +43,7 @@ export function MoreSheet({ open, onClose }: MoreSheetProps) {
       clearAuth();
       onClose();
       setLoggingOut(false);
-      window.location.href = '/login';
+      window.location.href = appendTenantContextToPath('/login', tenantSlug);
     }
   };
 
@@ -86,7 +92,8 @@ export function MoreSheet({ open, onClose }: MoreSheetProps) {
                   onClick={onClose}
                   className={cn(
                     'flex items-center gap-4 px-6 py-4 transition-colors',
-                    pathname === href || pathname.startsWith(`${href}/`)
+                    pathname === (href.split('?')[0] ?? href) ||
+                      pathname.startsWith(`${href.split('?')[0] ?? href}/`)
                       ? 'bg-brand-navy/[0.04]'
                       : 'hover:bg-slate-50',
                   )}
@@ -94,7 +101,8 @@ export function MoreSheet({ open, onClose }: MoreSheetProps) {
                   <div
                     className={cn(
                       'flex h-9 w-9 items-center justify-center rounded-xl',
-                      pathname === href || pathname.startsWith(`${href}/`)
+                      pathname === (href.split('?')[0] ?? href) ||
+                        pathname.startsWith(`${href.split('?')[0] ?? href}/`)
                         ? 'bg-brand-navy/[0.08]'
                         : 'bg-slate-100',
                     )}
@@ -102,7 +110,8 @@ export function MoreSheet({ open, onClose }: MoreSheetProps) {
                     <Icon
                       size={18}
                       className={cn(
-                        pathname === href || pathname.startsWith(`${href}/`)
+                        pathname === (href.split('?')[0] ?? href) ||
+                          pathname.startsWith(`${href.split('?')[0] ?? href}/`)
                           ? 'text-brand-navy'
                           : 'text-slate-600',
                       )}
@@ -111,7 +120,8 @@ export function MoreSheet({ open, onClose }: MoreSheetProps) {
                   <span
                     className={cn(
                       'font-medium',
-                      pathname === href || pathname.startsWith(`${href}/`)
+                      pathname === (href.split('?')[0] ?? href) ||
+                        pathname.startsWith(`${href.split('?')[0] ?? href}/`)
                         ? 'text-brand-navy'
                         : 'text-slate-700',
                     )}

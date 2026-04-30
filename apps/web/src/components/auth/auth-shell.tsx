@@ -11,6 +11,7 @@ import {
   UserRoundCog,
 } from 'lucide-react';
 import { useTenantStore } from '@/stores/tenant.store';
+import { appendTenantContextToPath } from '@/lib/tenant-runtime';
 
 interface AuthShellProps {
   title: string;
@@ -37,6 +38,10 @@ export function AuthShell({
   const brandName = resolvedTenant?.name ?? 'ZenDocx';
   const brandInitial = brandName.charAt(0).toUpperCase();
   const isPlatformVariant = variant === 'platform';
+  const tenantSlug = resolvedTenant?.slug ?? null;
+  const authHomeHref = tenantSlug
+    ? appendTenantContextToPath('/login', tenantSlug)
+    : '/';
 
   const accessHighlights = [
     'Role-aware routing',
@@ -63,16 +68,16 @@ export function AuthShell({
       ]
     : [
         {
-          title: 'Individual access',
+          title: 'Regular user access',
           description:
-            'Open a regular account for services, orders, and wallet activity.',
+            'Create or use a normal account for services, orders, and wallet activity.',
           href: '/register',
           icon: UserRound,
         },
         {
-          title: 'CBT center application',
+          title: 'CBT center access',
           description:
-            'Set up your fulfillment account and approval-ready profile.',
+            'Create a fulfillment account and complete the center approval flow.',
           href: '/register/cbt',
           icon: FileCheck2,
         },
@@ -83,7 +88,7 @@ export function AuthShell({
       <div className="mx-auto flex min-h-[calc(100vh-6rem)] w-full max-w-5xl items-center justify-center">
         <div className="grid w-full gap-10 lg:grid-cols-[0.95fr_1.05fr]">
           <section className="hidden rounded-[2rem] border border-brand-line bg-brand-navy p-8 text-white shadow-xl shadow-slate-200/60 lg:block">
-            <Link href="/" className="inline-flex items-center gap-3">
+            <Link href={authHomeHref} className="inline-flex items-center gap-3">
               {resolvedTenant?.logoUrl ? (
                 <img
                   src={resolvedTenant.logoUrl}
@@ -112,7 +117,7 @@ export function AuthShell({
               <p className="max-w-md text-base leading-8 text-slate-300">
                 {isPlatformVariant
                   ? 'Platform owners use this shared sign-in point to reach the admin dashboard. Tenant users should stay on their organization portal.'
-                  : 'Sign in to continue, or choose the right account path for personal use or CBT-center fulfillment.'}
+                  : 'Sign in to continue, or choose the account path that matches how you use the portal.'}
               </p>
             </div>
 
@@ -123,7 +128,7 @@ export function AuthShell({
                 return (
                   <Link
                     key={item.href}
-                    href={item.href}
+                    href={appendTenantContextToPath(item.href, tenantSlug)}
                     className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-4 transition hover:border-white/20 hover:bg-white/8"
                   >
                     <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/10">
@@ -153,7 +158,7 @@ export function AuthShell({
 
           <section className="w-full">
             <div className="mb-6 flex items-center justify-between gap-4 lg:hidden">
-              <Link href="/" className="flex items-center gap-3">
+              <Link href={authHomeHref} className="flex items-center gap-3">
                 {resolvedTenant?.logoUrl ? (
                   <img
                     src={resolvedTenant.logoUrl}
@@ -177,7 +182,7 @@ export function AuthShell({
                 </div>
               </Link>
               <Link
-                href="/"
+                href={authHomeHref}
                 className="inline-flex items-center gap-2 rounded-full border border-brand-line bg-brand-surface px-3 py-2 text-xs font-semibold text-brand-ink transition hover:bg-white"
               >
                 Back home

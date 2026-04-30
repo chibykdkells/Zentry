@@ -7,6 +7,7 @@ import { Bell } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth.store';
 import { useTenantStore } from '@/stores/tenant.store';
 import { getDefaultRouteForRole, inferRoleFromPath } from '@/lib/auth-routes';
+import { appendTenantContextToPath } from '@/lib/tenant-runtime';
 import { cn } from '@/lib/utils';
 import { useNotificationsUnreadCount } from '@/hooks/use-notifications';
 
@@ -22,11 +23,13 @@ export function TopBar({ title, className }: TopBarProps) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
+  const resolvedTenant = mounted ? tenant : null;
   const { data: unreadCount = 0 } = useNotificationsUnreadCount();
   const effectiveRole = user?.role ?? inferRoleFromPath(pathname);
-  const homeHref = effectiveRole ? getDefaultRouteForRole(effectiveRole) : '/home';
-
-  const resolvedTenant = mounted ? tenant : null;
+  const tenantSlug = resolvedTenant?.slug ?? null;
+  const homeHref = effectiveRole
+    ? appendTenantContextToPath(getDefaultRouteForRole(effectiveRole), tenantSlug)
+    : appendTenantContextToPath('/home', tenantSlug);
   const brandName = resolvedTenant?.name ?? 'ZenDocx';
   const brandInitial = brandName.charAt(0).toUpperCase();
 
@@ -71,7 +74,7 @@ export function TopBar({ title, className }: TopBarProps) {
       {/* Right: Notifications + Avatar */}
       <div className="flex items-center gap-2">
         <Link
-          href="/notifications"
+          href={appendTenantContextToPath('/notifications', tenantSlug)}
           className={cn(
             'relative flex h-10 w-10 items-center justify-center rounded-2xl transition-colors',
             notificationsActive
@@ -88,7 +91,7 @@ export function TopBar({ title, className }: TopBarProps) {
         </Link>
 
         <Link
-          href="/profile"
+          href={appendTenantContextToPath('/profile', tenantSlug)}
           className={cn(
             'rounded-full transition',
             profileActive && 'ring-2 ring-brand-navy/15 ring-offset-2 ring-offset-white',

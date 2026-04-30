@@ -21,11 +21,14 @@ import {
 } from '@/components/shared/skeleton-loader';
 import { useAuthProfile } from '@/hooks/use-auth-profile';
 import { formatDate } from '@/lib/format';
+import { appendTenantContextToPath, resolveTenantSlugForRequest } from '@/lib/tenant-runtime';
 import { UserRole } from '@zendocx/types';
 import { cn } from '@/lib/utils';
 
 export default function ProfilePage() {
   const { profile, loading, error, reload } = useAuthProfile();
+  const tenantSlug =
+    typeof window !== 'undefined' ? resolveTenantSlugForRequest() : null;
 
   if (loading) {
     return (
@@ -99,7 +102,7 @@ export default function ProfilePage() {
             description="This is the account information currently available across authentication, wallet, and notifications."
             actions={
               <Link
-                href="/wallet"
+                href={appendTenantContextToPath('/wallet', tenantSlug)}
                 className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-white"
               >
                 Open wallet
@@ -183,14 +186,14 @@ export default function ProfilePage() {
                   icon={Wallet}
                   title="Review wallet balances"
                   description="Track available funds, money on hold, and wallet readiness from one place."
-                  href="/wallet"
+                  href={appendTenantContextToPath('/wallet', tenantSlug)}
                   cta="Open wallet"
                 />
                 <ActionRow
                   icon={ShieldCheck}
                   title="Stay account ready"
                   description="Use verified email access and PIN protection to keep your orders and payouts secure."
-                  href="/security"
+                  href={appendTenantContextToPath('/security', tenantSlug)}
                   cta="View security"
                 />
               </div>
@@ -205,15 +208,15 @@ export default function ProfilePage() {
 function formatRole(role: UserRole): string {
   switch (role) {
     case UserRole.CBT_CENTER:
-      return 'CBT Center';
+      return 'CBT center';
     case UserRole.TENANT_ADMIN:
-      return 'Tenant Admin';
+      return 'Business admin';
     case UserRole.INDIVIDUAL:
-      return 'Individual';
+      return 'Regular user';
     case UserRole.SUPER_ADMIN:
-      return 'Super Admin';
+      return 'Platform admin';
     default:
-      return 'Individual';
+      return 'Regular user';
   }
 }
 

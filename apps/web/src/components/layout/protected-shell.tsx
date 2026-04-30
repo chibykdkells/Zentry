@@ -6,6 +6,7 @@ import { BottomNav } from '@/components/layout/bottom-nav';
 import { TopBar } from '@/components/layout/top-bar';
 import { useAuthStore } from '@/stores/auth.store';
 import { getNavigationForRole } from '@/lib/navigation';
+import { appendTenantContextToPath } from '@/lib/tenant-runtime';
 import { useTenantStore } from '@/stores/tenant.store';
 import { UserRole } from '@zendocx/types';
 
@@ -52,16 +53,17 @@ export function ProtectedShell({ title, children }: ProtectedShellProps) {
   useEffect(() => setMounted(true), []);
 
   const role = user?.role;
+  const tenantSlug = mounted ? tenant?.slug ?? null : null;
 
   const { primary, secondary } = getNavigationForRole(role);
   const sectionLabel =
     role === UserRole.CBT_CENTER || role === UserRole.CBT_STAFF
       ? 'Fulfiller'
       : role === UserRole.SUPER_ADMIN
-        ? 'Oversight'
+        ? 'Platform'
         : role === UserRole.TENANT_ADMIN
-          ? 'Business menu'
-        : 'Account';
+          ? 'Business'
+          : 'Account';
 
   return (
     <div className="min-h-screen flex flex-col md:h-screen md:overflow-hidden">
@@ -71,8 +73,14 @@ export function ProtectedShell({ title, children }: ProtectedShellProps) {
         <Sidebar
           brandLabel={getSidebarTitle(role, mounted ? tenant?.name : null)}
           sectionLabel={sectionLabel}
-          items={primary.map(({ label, href }) => ({ label, href }))}
-          secondaryItems={secondary.map(({ label, href }) => ({ label, href }))}
+          items={primary.map(({ label, href }) => ({
+            label,
+            href: appendTenantContextToPath(href, tenantSlug),
+          }))}
+          secondaryItems={secondary.map(({ label, href }) => ({
+            label,
+            href: appendTenantContextToPath(href, tenantSlug),
+          }))}
         />
 
         <main className="min-h-0 flex-1 overflow-y-auto pb-20 md:pb-0 md:h-full">

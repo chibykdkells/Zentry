@@ -12,6 +12,7 @@ import { useAuthStore, type AuthUser } from '@/stores/auth.store';
 import apiClient from '@/lib/api-client';
 import { getApiErrorMessage } from '@/lib/api-error';
 import { getDefaultRouteForRole } from '@/lib/auth-routes';
+import { appendTenantContextToPath, resolveTenantSlugForRequest } from '@/lib/tenant-runtime';
 import { UserRole } from '@zendocx/types';
 import { AuthShell } from '@/components/auth/auth-shell';
 import { OtpInput } from '@/components/auth/otp-input';
@@ -75,7 +76,12 @@ function VerifyEmailContent() {
 
     const user = profileResponse.data.data as AuthUser;
     setAuth(user, accessToken);
-    router.push(getDefaultRouteForRole(user.role));
+    router.push(
+      appendTenantContextToPath(
+        getDefaultRouteForRole(user.role),
+        resolveTenantSlugForRequest(),
+      ),
+    );
   };
 
   const onSubmit = async (values: VerifyOtpInput) => {
@@ -127,7 +133,10 @@ function VerifyEmailContent() {
       footer={
         <>
           Need a different email?{' '}
-          <Link href="/register" className="font-semibold text-amber-600 hover:text-amber-700">
+          <Link
+            href={appendTenantContextToPath('/register', resolveTenantSlugForRequest())}
+            className="font-semibold text-amber-600 hover:text-amber-700"
+          >
             Go back to registration
           </Link>
         </>

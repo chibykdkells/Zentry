@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { UserRole } from '@zendocx/types';
 import { RegistrationForm } from '@/components/auth/registration-form';
+import { appendTenantContextToPath, resolveTenantSlugForRequest } from '@/lib/tenant-runtime';
 
 export default function RegisterPage() {
   return (
@@ -11,7 +12,10 @@ export default function RegisterPage() {
       footer={
         <>
           Already have an account?{' '}
-          <Link href="/login" className="font-semibold text-[#0D1B3E] hover:text-[#132754]">
+          <Link
+            href={appendTenantContextToPath('/login', resolveTenantSlugForRequest())}
+            className="font-semibold text-[#0D1B3E] hover:text-[#132754]"
+          >
             Sign in
           </Link>
         </>

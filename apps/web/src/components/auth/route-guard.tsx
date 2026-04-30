@@ -4,6 +4,10 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/auth.store';
 import { getDefaultRouteForRole } from '@/lib/auth-routes';
+import {
+  appendTenantContextToPath,
+  resolveTenantSlugForRequest,
+} from '@/lib/tenant-runtime';
 import { UserRole } from '@zendocx/types';
 
 interface RouteGuardProps {
@@ -34,6 +38,8 @@ export function RouteGuard({ children, requiredRoles }: RouteGuardProps) {
   // the first React render, so user is always accurate on the first client paint.
   const isBootstrapping = !!user && !accessToken;
   const isAuthenticated = !!user && !!accessToken;
+  const tenantSlug =
+    typeof window !== 'undefined' ? resolveTenantSlugForRequest() : null;
   const hasWrongRole =
     isAuthenticated &&
     !!requiredRoles &&
@@ -44,14 +50,16 @@ export function RouteGuard({ children, requiredRoles }: RouteGuardProps) {
     if (isBootstrapping) return;
 
     if (!isAuthenticated) {
-      router.replace('/login');
+      router.replace(appendTenantContextToPath('/login', tenantSlug));
       return;
     }
 
     if (hasWrongRole && user) {
-      router.replace(getDefaultRouteForRole(user.role));
+      router.replace(
+        appendTenantContextToPath(getDefaultRouteForRole(user.role), tenantSlug),
+      );
     }
-  }, [isBootstrapping, isAuthenticated, hasWrongRole, user, router]);
+  }, [hasWrongRole, isAuthenticated, isBootstrapping, router, tenantSlug, user]);
 
   if (isBootstrapping || !isAuthenticated || hasWrongRole) {
     return (

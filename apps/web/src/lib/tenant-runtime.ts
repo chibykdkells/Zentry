@@ -52,6 +52,19 @@ function readTenantSlugFromStorage(): string | null {
   }
 }
 
+function readTenantSlugFromHostname(hostname: string): string | null {
+  if (!hostname.endsWith('.zendocx.net')) {
+    return null;
+  }
+
+  const slug = hostname.replace(/\.zendocx\.net$/, '');
+  if (!slug || slug === 'www') {
+    return null;
+  }
+
+  return normalizeTenantSlug(slug);
+}
+
 function persistTenantSlug(slug: string | null): void {
   if (typeof window === 'undefined') {
     return;
@@ -99,24 +112,17 @@ export function resolveTenantSlugForRequest(): string | null {
   }
 
   const hostname = window.location.hostname.toLowerCase();
-
-  if (hostname.endsWith('.zendocx.net')) {
-    const slug = hostname.replace(/\.zendocx\.net$/, '');
-    if (slug && slug !== 'www') {
-      persistTenantSlug(slug);
-      return slug;
-    }
+  const hostnameSlug = readTenantSlugFromHostname(hostname);
+  if (hostnameSlug) {
+    persistTenantSlug(hostnameSlug);
+    return hostnameSlug;
   }
 
-  if (isPrivateDevelopmentHost(hostname)) {
-    return (
-      readTenantSlugFromCookie() ??
-      readTenantSlugFromStorage() ??
-      getConfiguredDevTenantSlug()
-    );
-  }
-
-  return null;
+  return (
+    readTenantSlugFromCookie() ??
+    readTenantSlugFromStorage() ??
+    (isPrivateDevelopmentHost(hostname) ? getConfiguredDevTenantSlug() : null)
+  );
 }
 
 export function shouldAllowPlatformLoginFallback(): boolean {
@@ -125,4 +131,29 @@ export function shouldAllowPlatformLoginFallback(): boolean {
   }
 
   return isPrivateDevelopmentHost(window.location.hostname.toLowerCase());
+}
+
+export function appendTenantContextToPath(
+  href: string,
+  tenantSlug?: string | null,
+): string {
+  const normalizedSlug = normalizeTenantSlug(tenantSlug);
+  if (!normalizedSlug || !href.startsWith('/')) {
+    return href;
+  }
+
+  if (href.startsWith('/admin') || href.startsWith('/platform')) {
+    return href;
+  }
+
+  try {
+    const url = new URL(href, 'http://zendocx.local');
+    if (!url.searchParams.has('tenant') && !url.searchParams.has('slug')) {
+      url.searchParams.set('tenant', normalizedSlug);
+    }
+
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return href;
+  }
 }

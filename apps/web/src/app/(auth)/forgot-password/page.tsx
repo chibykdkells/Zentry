@@ -11,6 +11,7 @@ import { AuthShell } from '@/components/auth/auth-shell';
 import { FeedbackBanner } from '@/components/shared/feedback-banner';
 import apiClient from '@/lib/api-client';
 import { getApiErrorMessage } from '@/lib/api-error';
+import { appendTenantContextToPath, resolveTenantSlugForRequest } from '@/lib/tenant-runtime';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
 
@@ -33,7 +34,12 @@ export default function ForgotPasswordPage() {
     try {
       await apiClient.post('/auth/forgot-password', values);
       toast.success('If the email exists, a reset token has been issued.');
-      router.push(`/reset-password?email=${encodeURIComponent(values.email)}`);
+      router.push(
+        appendTenantContextToPath(
+          `/reset-password?email=${encodeURIComponent(values.email)}`,
+          resolveTenantSlugForRequest(),
+        ),
+      );
     } catch (error: unknown) {
       const message = getApiErrorMessage(error, 'Could not start password reset.');
       setFormError(message);
@@ -50,7 +56,10 @@ export default function ForgotPasswordPage() {
       footer={
         <>
           Remembered your password?{' '}
-          <Link href="/login" className="font-semibold text-amber-600 hover:text-amber-700">
+          <Link
+            href={appendTenantContextToPath('/login', resolveTenantSlugForRequest())}
+            className="font-semibold text-amber-600 hover:text-amber-700"
+          >
             Back to login
           </Link>
         </>

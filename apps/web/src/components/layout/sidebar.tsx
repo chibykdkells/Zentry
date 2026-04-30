@@ -8,6 +8,7 @@ import apiClient from '@/lib/api-client';
 import { useAuthStore } from '@/stores/auth.store';
 import { getDefaultRouteForRole } from '@/lib/auth-routes';
 import { disconnectSocket } from '@/lib/socket-client';
+import { appendTenantContextToPath, resolveTenantSlugForRequest } from '@/lib/tenant-runtime';
 import { cn } from '@/lib/utils';
 
 interface SidebarItem {
@@ -32,10 +33,16 @@ export function Sidebar({
   const clearAuth = useAuthStore((state) => state.clearAuth);
   const user = useAuthStore((state) => state.user);
   const [loggingOut, setLoggingOut] = useState(false);
-  const homeHref = user ? getDefaultRouteForRole(user.role) : '/home';
+  const tenantSlug =
+    typeof window !== 'undefined' ? resolveTenantSlugForRequest() : null;
+  const homeHref = user
+    ? appendTenantContextToPath(getDefaultRouteForRole(user.role), tenantSlug)
+    : appendTenantContextToPath('/home', tenantSlug);
 
-  const isActivePath = (href: string) =>
-    pathname === href || pathname.startsWith(`${href}/`);
+  const isActivePath = (href: string) => {
+    const cleanHref = href.split('?')[0] ?? href;
+    return pathname === cleanHref || pathname.startsWith(`${cleanHref}/`);
+  };
 
   const handleLogout = async () => {
     setLoggingOut(true);
@@ -48,7 +55,7 @@ export function Sidebar({
       disconnectSocket();
       clearAuth();
       setLoggingOut(false);
-      window.location.assign('/login');
+      window.location.assign(appendTenantContextToPath('/login', tenantSlug));
     }
   };
 

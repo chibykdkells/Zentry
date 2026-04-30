@@ -13,6 +13,7 @@ import { AuthShell } from '@/components/auth/auth-shell';
 import { FeedbackBanner } from '@/components/shared/feedback-banner';
 import apiClient from '@/lib/api-client';
 import { getApiErrorMessage } from '@/lib/api-error';
+import { appendTenantContextToPath, resolveTenantSlugForRequest } from '@/lib/tenant-runtime';
 import { cn } from '@/lib/utils';
 import { SkeletonBlock, SkeletonLine } from '@/components/shared/skeleton-loader';
 
@@ -58,7 +59,9 @@ function ResetPasswordContent() {
     try {
       await apiClient.post('/auth/reset-password', values);
       toast.success('Password reset successful. Sign in with your new password.');
-      router.push('/login');
+      router.push(
+        appendTenantContextToPath('/login', resolveTenantSlugForRequest()),
+      );
     } catch (error: unknown) {
       const message = getApiErrorMessage(error, 'Could not reset password.');
       setFormError(message);
@@ -75,7 +78,10 @@ function ResetPasswordContent() {
       footer={
         <>
           Back to{' '}
-          <Link href="/login" className="font-semibold text-amber-600 hover:text-amber-700">
+          <Link
+            href={appendTenantContextToPath('/login', resolveTenantSlugForRequest())}
+            className="font-semibold text-amber-600 hover:text-amber-700"
+          >
             login
           </Link>
         </>

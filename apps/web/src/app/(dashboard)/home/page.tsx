@@ -10,12 +10,15 @@ import { useWallet } from '@/hooks/use-wallet';
 import { formatDate, formatNaira } from '@/lib/format';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PageHero } from '@/components/shared/page-hero';
+import { appendTenantContextToPath, resolveTenantSlugForRequest } from '@/lib/tenant-runtime';
 import { TransactionType } from '@zendocx/types';
 
 export default function HomePage() {
   const { profile, loading, error } = useAuthProfile();
   const { metrics, orders } = useOrders();
   const { wallet: walletOverview } = useWallet();
+  const tenantSlug =
+    typeof window !== 'undefined' ? resolveTenantSlugForRequest() : null;
 
   if (loading) {
     return (
@@ -62,7 +65,9 @@ export default function HomePage() {
       <WalletCard
         availableBalance={wallet.availableBalance}
         escrowBalance={wallet.escrowBalance}
-        onFundClick={() => window.location.assign('/wallet')}
+        onFundClick={() =>
+          window.location.assign(appendTenantContextToPath('/wallet', tenantSlug))
+        }
       />
 
       <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4 md:gap-3">
@@ -101,7 +106,10 @@ export default function HomePage() {
                 Start from a focused set of services without the visual clutter.
               </p>
             </div>
-            <Link href="/services" className="shrink-0 text-sm font-semibold text-[#0D1B3E] hover:text-[#132754]">
+            <Link
+              href={appendTenantContextToPath('/services', tenantSlug)}
+              className="shrink-0 text-sm font-semibold text-[#0D1B3E] hover:text-[#132754]"
+            >
               View all
             </Link>
           </div>
@@ -113,11 +121,11 @@ export default function HomePage() {
               { label: 'Airtime & data', note: 'Everyday top-ups and digital bill support' },
               { label: 'Order tracking', note: 'Follow each request from start to finish' },
             ].map((service) => (
-              <Link
-                key={service.label}
-                href="/services"
-                className="group rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 transition hover:border-slate-300 hover:bg-white"
-              >
+                <Link
+                  key={service.label}
+                  href={appendTenantContextToPath('/services', tenantSlug)}
+                  className="group rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 transition hover:border-slate-300 hover:bg-white"
+                >
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="font-semibold text-slate-800">{service.label}</p>
