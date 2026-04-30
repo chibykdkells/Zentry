@@ -1,12 +1,10 @@
-'use client';
-
 import { Suspense } from 'react';
 import { LoginForm } from '@/components/auth/login-form';
 
-export default function LoginPage() {
+export default function PlatformLoginPage() {
   return (
     <Suspense fallback={null}>
-      <LoginForm />
+      <LoginForm mode="platform" />
     </Suspense>
   );
 }

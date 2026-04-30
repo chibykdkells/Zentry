@@ -2,7 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, FileCheck2, ShieldCheck, UserRound } from 'lucide-react';
+import {
+  ArrowRight,
+  Building2,
+  FileCheck2,
+  ShieldCheck,
+  UserRound,
+  UserRoundCog,
+} from 'lucide-react';
 import { useTenantStore } from '@/stores/tenant.store';
 
 interface AuthShellProps {
@@ -10,6 +17,7 @@ interface AuthShellProps {
   description: string;
   footer?: React.ReactNode;
   children: React.ReactNode;
+  variant?: 'default' | 'platform';
 }
 
 export function AuthShell({
@@ -17,6 +25,7 @@ export function AuthShell({
   description,
   footer,
   children,
+  variant = 'default',
 }: AuthShellProps) {
   const tenant = useTenantStore((state) => state.tenant);
   // Defer tenant reads until after hydration so server HTML (tenant = null)
@@ -25,14 +34,49 @@ export function AuthShell({
   useEffect(() => setMounted(true), []);
 
   const resolvedTenant = mounted ? tenant : null;
-  const brandName = resolvedTenant?.name ?? 'Zentry';
+  const brandName = resolvedTenant?.name ?? 'ZenDocx';
   const brandInitial = brandName.charAt(0).toUpperCase();
+  const isPlatformVariant = variant === 'platform';
 
   const accessHighlights = [
     'Role-aware routing',
     'Email verification',
     'Cookie-backed sessions',
   ];
+
+  const entryCards = isPlatformVariant
+    ? [
+        {
+          title: 'Platform owner access',
+          description:
+            'Use the shared control layer to create tenants, provision tenant admins, and manage platform-wide operations.',
+          href: '/platform/login',
+          icon: UserRoundCog,
+        },
+        {
+          title: 'Tenant user access',
+          description:
+            'End users, CBT centers, and tenant teams should sign in through the branded portal URL shared by their organization.',
+          href: '/',
+          icon: Building2,
+        },
+      ]
+    : [
+        {
+          title: 'Individual access',
+          description:
+            'Open a regular account for services, orders, and wallet activity.',
+          href: '/register',
+          icon: UserRound,
+        },
+        {
+          title: 'CBT center application',
+          description:
+            'Set up your fulfillment account and approval-ready profile.',
+          href: '/register/cbt',
+          icon: FileCheck2,
+        },
+      ];
 
   return (
     <div className="min-h-screen bg-brand-canvas px-4 py-10 sm:py-12">
@@ -58,32 +102,22 @@ export function AuthShell({
 
             <div className="mt-14 space-y-5">
               <p className="text-sm font-semibold uppercase tracking-[0.28em] text-slate-300">
-                Account Access
+                {isPlatformVariant ? 'Platform Access' : 'Account Access'}
               </p>
               <h2 className="text-4xl font-black leading-tight">
-                Clear, secure access for every part of the {brandName} platform.
+                {isPlatformVariant
+                  ? `Secure access for the ${brandName} control layer.`
+                  : `Clear, secure access for every part of the ${brandName} platform.`}
               </h2>
               <p className="max-w-md text-base leading-8 text-slate-300">
-                Sign in to continue, or choose the right account path for
-                personal use or CBT-center fulfillment.
+                {isPlatformVariant
+                  ? 'Platform owners use this shared sign-in point to reach the admin dashboard. Tenant users should stay on their organization portal.'
+                  : 'Sign in to continue, or choose the right account path for personal use or CBT-center fulfillment.'}
               </p>
             </div>
 
             <div className="mt-10 space-y-3">
-              {[
-                {
-                  title: 'Individual access',
-                  description: 'Open a regular account for services, orders, and wallet activity.',
-                  href: '/register',
-                  icon: UserRound,
-                },
-                {
-                  title: 'CBT center application',
-                  description: 'Set up your fulfillment account and approval-ready profile.',
-                  href: '/register/cbt',
-                  icon: FileCheck2,
-                },
-              ].map((item) => {
+              {entryCards.map((item) => {
                 const Icon = item.icon;
 
                 return (
@@ -110,8 +144,9 @@ export function AuthShell({
             <div className="mt-8 flex items-start gap-3 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-4 text-sm text-slate-200">
               <ShieldCheck size={18} className="mt-0.5 shrink-0 text-emerald-300" />
               <p className="leading-6">
-                Your session uses access tokens in memory and httpOnly cookie-based
-                refresh handling for a safer sign-in flow.
+                {isPlatformVariant
+                  ? 'Platform-owner sessions use the same token and cookie protections while keeping tenant access isolated to each business portal.'
+                  : 'Your session uses access tokens in memory and httpOnly cookie-based refresh handling for a safer sign-in flow.'}
               </p>
             </div>
           </section>
@@ -137,7 +172,7 @@ export function AuthShell({
                     {brandName}
                   </span>
                   <span className="block text-xs font-medium uppercase tracking-[0.16em] text-brand-muted">
-                    Secure access
+                    {isPlatformVariant ? 'Platform access' : 'Secure access'}
                   </span>
                 </div>
               </Link>

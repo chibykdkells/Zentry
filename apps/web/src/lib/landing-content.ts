@@ -1,21 +1,21 @@
-import { FileCheck2, ShieldCheck, Smartphone, UserRound, Wallet } from 'lucide-react';
+import { Building2, ShieldCheck, Smartphone, UserRoundCog, Wallet } from 'lucide-react';
 
 export const landingAudienceCards = [
   {
-    title: 'For individuals',
+    title: 'For platform owners',
     description:
-      'Open a personal account for identity support, exam services, and everyday airtime or data purchases.',
-    href: '/register',
-    cta: 'Create an account',
-    icon: UserRound,
+      'Sign in to the ZenDocx control layer to create tenants, provision tenant admins, and oversee the shared platform.',
+    href: '/platform/login',
+    cta: 'Open owner login',
+    icon: UserRoundCog,
   },
   {
-    title: 'For CBT centers',
+    title: 'For tenant users',
     description:
-      'Apply for approval, pick up fulfillment work, and manage earnings from a dedicated operations workspace.',
-    href: '/register/cbt',
-    cta: 'Apply as a CBT center',
-    icon: FileCheck2,
+      'Individuals, CBT centers, and tenant staff should use the branded tenant portal URL shared by their organization.',
+    href: null,
+    cta: 'Use your organization portal URL',
+    icon: Building2,
   },
 ] as const;
 
