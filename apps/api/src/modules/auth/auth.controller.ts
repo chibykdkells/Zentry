@@ -19,8 +19,8 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { Audit } from '../../common/decorators/audit.decorator';
 import { TenantContext } from '../../common/decorators/tenant-context.decorator';
 import { RequiresTenant } from '../../common/decorators/requires-tenant.decorator';
-import type { JwtUser } from '@zentry/types';
-import { UserRole } from '@zentry/types';
+import type { JwtUser } from '@zendocx/types';
+import { UserRole } from '@zendocx/types';
 import {
   RegisterIndividualDto,
   RegisterCbtDto,
@@ -86,11 +86,48 @@ export class AuthController {
     }
   }
 
+  private getRefreshCookieDomain(): string | undefined {
+    const explicitDomain = this.configService.get<string>('COOKIE_DOMAIN')?.trim();
+    if (explicitDomain) {
+      return explicitDomain.startsWith('.')
+        ? explicitDomain
+        : `.${explicitDomain}`;
+    }
+
+    const configuredUrl =
+      this.configService.get<string>('FRONTEND_URL')?.trim() ||
+      this.configService.get<string>('API_URL')?.trim() ||
+      '';
+
+    if (!configuredUrl) {
+      return undefined;
+    }
+
+    try {
+      const hostname = new URL(configuredUrl).hostname.toLowerCase();
+      const segments = hostname.split('.').filter(Boolean);
+
+      if (
+        hostname === 'localhost' ||
+        hostname === '127.0.0.1' ||
+        /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname) ||
+        segments.length < 2
+      ) {
+        return undefined;
+      }
+
+      return `.${segments.slice(-2).join('.')}`;
+    } catch {
+      return undefined;
+    }
+  }
+
   private setRefreshTokenCookie(
     response: Response,
     refreshToken: string,
   ): void {
     response.cookie('refresh_token', refreshToken, {
+      domain: this.getRefreshCookieDomain(),
       httpOnly: true,
       secure: this.configService.get('NODE_ENV') === 'production',
       sameSite: 'strict',
@@ -103,6 +140,7 @@ export class AuthController {
 
   private clearRefreshTokenCookie(response: Response): void {
     response.clearCookie('refresh_token', {
+      domain: this.getRefreshCookieDomain(),
       httpOnly: true,
       secure: this.configService.get('NODE_ENV') === 'production',
       sameSite: 'strict',
