@@ -1,4 +1,4 @@
-app = "zentry-api-prod"
+app = "zendocx-api-prod"
 primary_region = "lhr"
 
 # Required runtime secrets should be set through Fly secrets, not committed here.
