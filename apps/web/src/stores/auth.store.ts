@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { UserRole } from '@zendocx/types';
+import { TenantAdminPermission, UserRole } from '@zendocx/types';
 
 export interface AuthUser {
   id: string;
@@ -12,6 +12,7 @@ export interface AuthUser {
   role: UserRole;
   tenantId: string | null;
   isEmailVerified: boolean;
+  adminPermissions?: TenantAdminPermission[];
 }
 
 interface AuthStore {

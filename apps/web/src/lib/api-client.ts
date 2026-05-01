@@ -33,18 +33,6 @@ apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
     config.headers['x-tenant-slug'] = tenantSlug;
   }
 
-  if (tenantSlug) {
-    const currentParams = new URLSearchParams(
-      config.params as Record<string, string> | undefined,
-    );
-
-    if (!currentParams.has('tenant') && !currentParams.has('slug')) {
-      currentParams.set('tenant', tenantSlug);
-    }
-
-    config.params = Object.fromEntries(currentParams.entries());
-  }
-
   return config;
 });
 

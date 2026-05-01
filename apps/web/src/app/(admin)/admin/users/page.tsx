@@ -131,7 +131,7 @@ export default function AdminUsersPage() {
     : [];
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const buildTenantLoginLink = (slug: string) =>
-    `${origin}/login?tenant=${encodeURIComponent(slug)}`;
+    `${origin}/?tenant=${encodeURIComponent(slug)}`;
 
   const copyLink = async (path: string) => {
     const value = `${window.location.origin}${path}`;
@@ -220,7 +220,7 @@ export default function AdminUsersPage() {
                   setTenantMessage(
                     {
                       tone: 'success',
-                      message: `Business created. Login link: ${buildTenantLoginLink(createdTenant.slug)}. Login email: ${createdAdmin.email}. Temporary password: ${createdAdmin.tempPassword}`,
+                      message: `Business created. Portal link: ${buildTenantLoginLink(createdTenant.slug)}. Login email: ${createdAdmin.email}. Temporary password: ${createdAdmin.tempPassword}`,
                     },
                   );
                   setTenantDraft({ name: '', slug: '' });
@@ -650,7 +650,7 @@ export default function AdminUsersPage() {
                               value={access.email}
                             />
                             <TenantMiniMetric
-                              label="Login link"
+                              label="Portal link"
                               value={buildTenantLoginLink(selectedTenant.slug)}
                             />
                             <TenantMiniMetric
@@ -714,7 +714,7 @@ export default function AdminUsersPage() {
                                 })
                                 .then((updatedAdmin) => {
                                   setTenantAdminMessage(
-                                    `Business admin password reset. Login link: ${buildTenantLoginLink(selectedTenant.slug)}. Login email: ${updatedAdmin.email}. Temporary password: ${updatedAdmin.tempPassword}`,
+                                    `Business admin password reset. Portal link: ${buildTenantLoginLink(selectedTenant.slug)}. Login email: ${updatedAdmin.email}. Temporary password: ${updatedAdmin.tempPassword}`,
                                   );
                                 })
                                 .catch((error) => {
@@ -847,7 +847,7 @@ export default function AdminUsersPage() {
                       })
                       .then((createdAdmin) => {
                         setTenantAdminMessage(
-                          `Business admin created. Login link: ${buildTenantLoginLink(selectedTenant.slug)}. Login email: ${createdAdmin.email}. Temporary password: ${createdAdmin.tempPassword}`,
+                          `Business admin created. Portal link: ${buildTenantLoginLink(selectedTenant.slug)}. Login email: ${createdAdmin.email}. Temporary password: ${createdAdmin.tempPassword}`,
                         );
                         setSelectedTenantAdminDraft({
                           firstName: '',

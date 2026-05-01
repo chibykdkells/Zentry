@@ -1,7 +1,9 @@
-import { headers } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { TenantPortalHome } from '@/components/tenant/tenant-portal-home';
 
 const RESERVED_SUBDOMAINS = new Set(['www', 'api', 'platform', 'admin']);
+const RETURNING_TENANTS_COOKIE = 'zendocx-returning-tenants';
 
 function resolveTenantSlugFromHost(host: string): string | null {
   const hostname = host.split(':')[0].trim().toLowerCase();
@@ -29,14 +31,24 @@ export default async function Home({
     ? rawTenantSlug[0] ?? null
     : rawTenantSlug ?? null;
   const headerStore = await headers();
+  const cookieStore = await cookies();
   const hostTenantSlug = resolveTenantSlugFromHost(
     headerStore.get('host') ?? '',
   );
   const tenantSlug = explicitTenantSlug ?? hostTenantSlug;
 
-  if (tenantSlug) {
+  if (!tenantSlug) {
+    redirect('/access-required');
+  }
+
+  const returningTenants = (cookieStore.get(RETURNING_TENANTS_COOKIE)?.value ?? '')
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (returningTenants.includes(tenantSlug.toLowerCase())) {
     redirect(`/login?tenant=${encodeURIComponent(tenantSlug)}`);
   }
 
-  redirect('/access-required');
+  return <TenantPortalHome tenantSlug={tenantSlug} />;
 }

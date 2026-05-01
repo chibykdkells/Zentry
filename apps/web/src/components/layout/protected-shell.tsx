@@ -7,6 +7,7 @@ import { TopBar } from '@/components/layout/top-bar';
 import { useAuthStore } from '@/stores/auth.store';
 import { getNavigationForRole } from '@/lib/navigation';
 import { appendTenantContextToPath } from '@/lib/tenant-runtime';
+import { hasTenantAdminPermission } from '@/lib/tenant-admin-permissions';
 import { useTenantStore } from '@/stores/tenant.store';
 import { UserRole } from '@zendocx/types';
 
@@ -56,6 +57,37 @@ export function ProtectedShell({ title, children }: ProtectedShellProps) {
   const tenantSlug = mounted ? tenant?.slug ?? null : null;
 
   const { primary, secondary } = getNavigationForRole(role);
+  const visiblePrimary =
+    role === UserRole.TENANT_ADMIN
+      ? primary.filter(({ href }) => {
+          if (href === '/tenant/dashboard') return true;
+          if (href === '/tenant/users') {
+            return hasTenantAdminPermission(user, 'MANAGE_USERS');
+          }
+          if (href === '/wallet') {
+            return hasTenantAdminPermission(user, 'MANAGE_WALLET');
+          }
+          if (href === '/tenant/cbt-management') {
+            return hasTenantAdminPermission(user, 'MANAGE_CBT_CENTERS');
+          }
+          if (href === '/tenant/services') {
+            return hasTenantAdminPermission(user, 'MANAGE_SERVICES');
+          }
+          if (href === '/tenant/providers') {
+            return hasTenantAdminPermission(
+              user,
+              'MANAGE_SERVICE_CONNECTIONS',
+            );
+          }
+          if (href === '/tenant/settings') {
+            return (
+              hasTenantAdminPermission(user, 'MANAGE_BUSINESS_SETTINGS') ||
+              hasTenantAdminPermission(user, 'MANAGE_BUSINESS_ADMINS')
+            );
+          }
+          return true;
+        })
+      : primary;
   const sectionLabel =
     role === UserRole.CBT_CENTER || role === UserRole.CBT_STAFF
       ? 'Fulfiller'
@@ -73,7 +105,7 @@ export function ProtectedShell({ title, children }: ProtectedShellProps) {
         <Sidebar
           brandLabel={getSidebarTitle(role, mounted ? tenant?.name : null)}
           sectionLabel={sectionLabel}
-          items={primary.map(({ label, href }) => ({
+          items={visiblePrimary.map(({ label, href }) => ({
             label,
             href: appendTenantContextToPath(href, tenantSlug),
           }))}

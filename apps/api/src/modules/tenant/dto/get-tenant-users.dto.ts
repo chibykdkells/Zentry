@@ -23,4 +23,12 @@ export class GetTenantUsersDto {
   @IsOptional()
   @IsEnum(UserRole)
   role?: UserRole;
+
+  @IsOptional()
+  @IsString()
+  tenant?: string;
+
+  @IsOptional()
+  @IsString()
+  slug?: string;
 }

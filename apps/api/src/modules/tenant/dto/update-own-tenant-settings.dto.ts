@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { TENANT_HOMEPAGE_TEMPLATES } from '@zendocx/types';
 
 export const UpdateOwnTenantSettingsSchema = z.object({
   name: z.string().trim().min(2).max(100).optional(),
@@ -21,6 +22,25 @@ export const UpdateOwnTenantSettingsSchema = z.object({
     .optional(),
   fontStyle: z.enum(['modern', 'classic', 'clean']).optional(),
   customDomain: z.string().trim().min(4).nullable().optional(),
+  homepageTemplate: z.enum(TENANT_HOMEPAGE_TEMPLATES).optional(),
+  homepageHeading: z.string().trim().min(8).max(120).nullable().optional(),
+  homepageSubheading: z
+    .string()
+    .trim()
+    .min(12)
+    .max(220)
+    .nullable()
+    .optional(),
+  homepageAbout: z.string().trim().min(24).max(900).nullable().optional(),
+  homepageManualSteps: z
+    .array(
+      z.object({
+        title: z.string().trim().min(2).max(80),
+        description: z.string().trim().min(6).max(220),
+      }),
+    )
+    .max(4)
+    .optional(),
 });
 
 export type UpdateOwnTenantSettingsDto = z.infer<

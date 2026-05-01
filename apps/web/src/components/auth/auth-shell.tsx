@@ -42,7 +42,7 @@ export function AuthShell({
   const authHomeHref = isPlatformVariant
     ? '/platform'
     : tenantSlug
-      ? appendTenantContextToPath('/login', tenantSlug)
+      ? appendTenantContextToPath('/', tenantSlug)
       : '/access-required';
 
   const accessHighlights = [

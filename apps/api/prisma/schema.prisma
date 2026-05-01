@@ -134,6 +134,11 @@ model Tenant {
   textColor            String    @default("#10203C")
   buttonColor          String    @default("#0D1B3E")
   fontStyle            String    @default("modern")
+  homepageTemplate     String    @default("spotlight")
+  homepageHeading      String?
+  homepageSubheading   String?
+  homepageAbout        String?
+  homepageManualSteps  Json      @default("[]")
   tenantMarginRate     Int       @default(0)
   usesCustomServiceSelection Boolean @default(false)
   isActive             Boolean   @default(true)
@@ -165,6 +170,7 @@ model User {
   passwordHash     String
   walletPin        String?
   role             UserRole
+  adminPermissions Json      @default("[]")
   isEmailVerified  Boolean   @default(false)
   isPhoneVerified  Boolean   @default(false)
   isActive         Boolean   @default(true)

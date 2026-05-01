@@ -11,7 +11,7 @@ import { LoginSchema, LoginInput } from '@zendocx/validators';
 import { useAuthStore } from '@/stores/auth.store';
 import apiClient from '@/lib/api-client';
 import { disconnectSocket } from '@/lib/socket-client';
-import { UserRole } from '@zendocx/types';
+import { TenantAdminPermission, UserRole } from '@zendocx/types';
 import { AuthShell } from '@/components/auth/auth-shell';
 import { FeedbackBanner } from '@/components/shared/feedback-banner';
 import { getSafePostLoginRoute } from '@/lib/auth-routes';
@@ -19,6 +19,7 @@ import { getHumanLoginErrorMessage } from '@/lib/api-error';
 import {
   appendTenantContextToPath,
   clearPersistedTenantSlug,
+  markReturningTenantPortal,
   persistActiveTenantSlug,
   resolveTenantSlugForRequest,
   shouldAllowPlatformLoginFallback,
@@ -37,6 +38,7 @@ type LoginSuccessPayload = {
     role: UserRole;
     tenantId: string | null;
     isEmailVerified: boolean;
+    adminPermissions?: TenantAdminPermission[];
   };
 };
 
@@ -214,6 +216,7 @@ export function LoginForm({ mode = 'auto' }: { mode?: LoginMode }) {
         clearPersistedTenantSlug();
       } else if (tenantSlug) {
         persistActiveTenantSlug(tenantSlug);
+        markReturningTenantPortal(tenantSlug);
       }
       setAuth(user, accessToken);
 
@@ -243,6 +246,17 @@ export function LoginForm({ mode = 'auto' }: { mode?: LoginMode }) {
     </p>
   ) : (
     <div className="space-y-3 text-left">
+      {inferredTenantSlug ? (
+        <p>
+          Prefer to review this business first?{' '}
+          <Link
+            href={appendTenantContextToPath('/', inferredTenantSlug)}
+            className="font-semibold text-[#0D1B3E] hover:text-[#132754]"
+          >
+            Visit home
+          </Link>
+        </p>
+      ) : null}
       <p>
         New here?{' '}
         <Link

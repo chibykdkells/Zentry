@@ -12,13 +12,22 @@ import { ProviderCredentialsService } from '../../providers/provider-credentials
 import { StorageService } from '../../providers/storage/storage.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
-import { TenantPublic, UserRole } from '@zendocx/types';
+import {
+  TenantAdminPermission,
+  TENANT_ADMIN_PERMISSIONS,
+  TENANT_HOMEPAGE_TEMPLATES,
+  TenantHomepageStep,
+  TenantPublic,
+  UserRole,
+} from '@zendocx/types';
 import { TenantResolverService } from './tenant-resolver.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { CreateTenantAdminDto } from './dto/create-tenant-admin.dto';
+import { CreateOwnTenantAdminDto } from './dto/create-own-tenant-admin.dto';
 import { GetTenantUsersDto } from './dto/get-tenant-users.dto';
 import { UpdateOwnTenantSettingsDto } from './dto/update-own-tenant-settings.dto';
+import { UpdateOwnTenantAdminDto } from './dto/update-own-tenant-admin.dto';
 
 type TenantLogoFile = {
   originalname: string;
@@ -81,6 +90,118 @@ export class TenantService {
     };
   }
 
+  private getDefaultHomepageManualSteps(): TenantHomepageStep[] {
+    return [
+      {
+        title: 'Choose a service',
+        description:
+          'Pick the exact document or verification service you need before you sign in or create an account.',
+      },
+      {
+        title: 'Submit the required details',
+        description:
+          'Complete the request form, upload any required documents, and confirm the request from the business portal.',
+      },
+      {
+        title: 'Track the manual processing',
+        description:
+          'Follow status updates from the business dashboard until the request is completed and the result is ready.',
+      },
+    ];
+  }
+
+  private sanitizeHomepageManualSteps(value: Prisma.JsonValue | null | undefined) {
+    if (!Array.isArray(value)) {
+      return this.getDefaultHomepageManualSteps();
+    }
+
+    const normalized = value
+      .map((item) => {
+        if (!item || typeof item !== 'object') {
+          return null;
+        }
+
+        const record = item as Record<string, unknown>;
+        const title = String(record.title ?? '').trim();
+        const description = String(record.description ?? '').trim();
+
+        if (!title || !description) {
+          return null;
+        }
+
+        return { title, description };
+      })
+      .filter((item): item is TenantHomepageStep => Boolean(item))
+      .slice(0, 4);
+
+    return normalized.length ? normalized : this.getDefaultHomepageManualSteps();
+  }
+
+  private normalizeTenantAdminPermissions(
+    value: Prisma.JsonValue | readonly string[] | null | undefined,
+  ): TenantAdminPermission[] {
+    const input = Array.isArray(value) ? value : [];
+    const allowed = new Set<string>(TENANT_ADMIN_PERMISSIONS);
+
+    return Array.from(
+      new Set(
+        input
+          .map((item) => String(item).trim())
+          .filter((item): item is TenantAdminPermission => allowed.has(item)),
+      ),
+    );
+  }
+
+  private getEffectiveTenantAdminPermissions(
+    value: Prisma.JsonValue | readonly string[] | null | undefined,
+  ): TenantAdminPermission[] {
+    const explicitPermissions = this.normalizeTenantAdminPermissions(value);
+    return explicitPermissions.length
+      ? explicitPermissions
+      : [...TENANT_ADMIN_PERMISSIONS];
+  }
+
+  private async getTenantAdminAccessContext(userId: string) {
+    const membership = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        role: true,
+        tenantId: true,
+        adminPermissions: true,
+      },
+    });
+
+    if (!membership) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (membership.role !== UserRole.TENANT_ADMIN || !membership.tenantId) {
+      throw new ForbiddenException('Tenant admin access is required');
+    }
+
+    return {
+      tenantId: membership.tenantId,
+      permissions: this.getEffectiveTenantAdminPermissions(
+        membership.adminPermissions,
+      ),
+    };
+  }
+
+  private async assertTenantAdminPermission(
+    userId: string,
+    permission: TenantAdminPermission,
+  ) {
+    const context = await this.getTenantAdminAccessContext(userId);
+
+    if (!context.permissions.includes(permission)) {
+      throw new ForbiddenException(
+        'This business admin account does not have permission for that action.',
+      );
+    }
+
+    return context;
+  }
+
   async createTenant(
     dto: CreateTenantDto,
     createdById: string,
@@ -111,6 +232,14 @@ export class TenantService {
         textColor: '#10203C',
         buttonColor: dto.primaryColor ?? '#0D1B3E',
         fontStyle: 'modern',
+        homepageTemplate: TENANT_HOMEPAGE_TEMPLATES[0],
+        homepageHeading: `Access ${dto.name} from one business portal`,
+        homepageSubheading:
+          'Start with the public business homepage, review available services, then sign in or create your account when you are ready.',
+        homepageAbout:
+          `${dto.name} uses ZenDocx to manage service requests, customer onboarding, and manual document workflows from one tenant-owned workspace.`,
+        homepageManualSteps:
+          this.getDefaultHomepageManualSteps() as unknown as Prisma.InputJsonValue,
         tenantMarginRate: dto.tenantMarginRate ?? 0,
         customDomain: dto.customDomain ?? null,
         createdById,
@@ -308,13 +437,17 @@ export class TenantService {
     return updated;
   }
 
-  async createTenantAdmin(
+  private async createTenantAdminAccount(
     tenantId: string,
-    dto: CreateTenantAdminDto,
+    dto: {
+      firstName: string;
+      lastName: string;
+      email: string;
+      phone: string;
+      permissions?: readonly string[];
+    },
     createdById: string,
   ) {
-    const tenant = await this.getTenantById(tenantId);
-
     const [existingEmail, existingPhone] = await Promise.all([
       this.prisma.user.findFirst({
         where: {
@@ -329,26 +462,32 @@ export class TenantService {
         },
       }),
     ]);
-    if (existingEmail)
+    if (existingEmail) {
       throw new ConflictException('Email is already registered');
-    if (existingPhone)
+    }
+    if (existingPhone) {
       throw new ConflictException('Phone number is already registered');
+    }
 
     const tempPassword = this.generateTemporaryPassword();
     const rounds = Number(this.config.get('BCRYPT_ROUNDS', '12'));
     const passwordHash = await bcrypt.hash(tempPassword, rounds);
+    const permissions = this.getEffectiveTenantAdminPermissions(
+      dto.permissions ?? [],
+    );
 
     const user = await this.prisma.$transaction(async (tx) => {
       const created = await tx.user.create({
         data: {
-          firstName: dto.firstName,
-          lastName: dto.lastName,
+          firstName: dto.firstName.trim(),
+          lastName: dto.lastName.trim(),
           email: dto.email.toLowerCase(),
           phone: dto.phone.trim(),
           passwordHash,
           role: UserRole.TENANT_ADMIN,
           tenantId,
-          isEmailVerified: true, // pre-verified — admin-provisioned account
+          adminPermissions: permissions as unknown as Prisma.InputJsonValue,
+          isEmailVerified: true,
         },
         select: {
           id: true,
@@ -358,6 +497,12 @@ export class TenantService {
           phone: true,
           role: true,
           tenantId: true,
+          isActive: true,
+          isEmailVerified: true,
+          isPhoneVerified: true,
+          createdAt: true,
+          lastLoginAt: true,
+          adminPermissions: true,
         },
       });
 
@@ -385,6 +530,7 @@ export class TenantService {
             role: UserRole.TENANT_ADMIN,
             email: created.email,
             tenantId,
+            permissions,
           },
         },
       });
@@ -393,10 +539,31 @@ export class TenantService {
     });
 
     return {
+      user: {
+        ...user,
+        adminPermissions: this.getEffectiveTenantAdminPermissions(
+          user.adminPermissions,
+        ),
+        createdAt: user.createdAt.toISOString(),
+        lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
+      },
+      tempPassword,
+    };
+  }
+
+  async createTenantAdmin(
+    tenantId: string,
+    dto: CreateTenantAdminDto,
+    createdById: string,
+  ) {
+    const tenant = await this.getTenantById(tenantId);
+    const created = await this.createTenantAdminAccount(tenantId, dto, createdById);
+
+    return {
       message: `Tenant admin created for "${tenant.name}". Share the temporary password securely and remove the saved access when handoff is complete.`,
       data: {
-        ...user,
-        tempPassword,
+        ...created.user,
+        tempPassword: created.tempPassword,
       },
     };
   }
@@ -550,20 +717,210 @@ export class TenantService {
     };
   }
 
-  async getTenantOverviewForAdmin(userId: string) {
-    const membership = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { role: true, tenantId: true },
+  async createTenantAdminForAdmin(
+    userId: string,
+    dto: CreateOwnTenantAdminDto,
+  ) {
+    const membership = await this.assertTenantAdminPermission(
+      userId,
+      'MANAGE_BUSINESS_ADMINS',
+    );
+    const tenant = await this.getTenantById(membership.tenantId);
+    const created = await this.createTenantAdminAccount(
+      membership.tenantId,
+      dto,
+      userId,
+    );
+
+    return {
+      message: `Business admin created for "${tenant.name}". Share the temporary password securely and encourage an immediate password change.`,
+      data: {
+        ...created.user,
+        tempPassword: created.tempPassword,
+      },
+    };
+  }
+
+  async updateTenantAdminForAdmin(
+    userId: string,
+    targetUserId: string,
+    dto: UpdateOwnTenantAdminDto,
+  ) {
+    const membership = await this.assertTenantAdminPermission(
+      userId,
+      'MANAGE_BUSINESS_ADMINS',
+    );
+
+    const targetUser = await this.prisma.user.findFirst({
+      where: {
+        id: targetUserId,
+        tenantId: membership.tenantId,
+        role: UserRole.TENANT_ADMIN,
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        phone: true,
+        isActive: true,
+        createdAt: true,
+        lastLoginAt: true,
+        adminPermissions: true,
+        isEmailVerified: true,
+        isPhoneVerified: true,
+      },
     });
 
-    if (!membership) {
-      throw new NotFoundException('User not found');
+    if (!targetUser) {
+      throw new NotFoundException('Business admin not found.');
     }
 
-    if (membership.role !== 'TENANT_ADMIN' || !membership.tenantId) {
-      throw new ForbiddenException('Tenant admin access is required');
+    if (targetUser.id === userId && dto.isActive === false) {
+      throw new ForbiddenException('You cannot disable your own admin access.');
     }
 
+    const nextPermissions =
+      dto.permissions !== undefined
+        ? this.getEffectiveTenantAdminPermissions(dto.permissions)
+        : this.getEffectiveTenantAdminPermissions(targetUser.adminPermissions);
+    const nextIsActive = dto.isActive ?? targetUser.isActive;
+
+    const updated = await this.prisma.user.update({
+      where: { id: targetUser.id },
+      data: {
+        adminPermissions:
+          nextPermissions as unknown as Prisma.InputJsonValue,
+        isActive: nextIsActive,
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        phone: true,
+        role: true,
+        isActive: true,
+        isEmailVerified: true,
+        isPhoneVerified: true,
+        createdAt: true,
+        lastLoginAt: true,
+        adminPermissions: true,
+      },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId,
+        tenantId: membership.tenantId,
+        action: 'TENANT_ADMIN_UPDATED',
+        entity: 'User',
+        entityId: targetUser.id,
+        oldValues: {
+          isActive: targetUser.isActive,
+          permissions: this.getEffectiveTenantAdminPermissions(
+            targetUser.adminPermissions,
+          ),
+        },
+        newValues: {
+          isActive: nextIsActive,
+          permissions: nextPermissions,
+        },
+      },
+    });
+
+    return {
+      message: `${updated.firstName} ${updated.lastName} has been updated.`,
+      data: {
+        ...updated,
+        adminPermissions: this.getEffectiveTenantAdminPermissions(
+          updated.adminPermissions,
+        ),
+        createdAt: updated.createdAt.toISOString(),
+        lastLoginAt: updated.lastLoginAt?.toISOString() ?? null,
+      },
+    };
+  }
+
+  async deleteTenantAdminForAdmin(userId: string, targetUserId: string) {
+    const membership = await this.assertTenantAdminPermission(
+      userId,
+      'MANAGE_BUSINESS_ADMINS',
+    );
+
+    const targetUser = await this.prisma.user.findFirst({
+      where: {
+        id: targetUserId,
+        tenantId: membership.tenantId,
+        role: UserRole.TENANT_ADMIN,
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+      },
+    });
+
+    if (!targetUser) {
+      throw new NotFoundException('Business admin not found.');
+    }
+
+    if (targetUser.id === userId) {
+      throw new ForbiddenException('You cannot delete your own admin account.');
+    }
+
+    const adminCount = await this.prisma.user.count({
+      where: {
+        tenantId: membership.tenantId,
+        role: UserRole.TENANT_ADMIN,
+      },
+    });
+
+    if (adminCount <= 1) {
+      throw new BadRequestException(
+        'This business must keep at least one business admin account.',
+      );
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.tenantAdminAccess.updateMany({
+        where: {
+          tenantId: membership.tenantId,
+          userId: targetUser.id,
+          isActive: true,
+        },
+        data: {
+          isActive: false,
+          dismissedAt: new Date(),
+        },
+      }),
+      this.prisma.user.delete({
+        where: { id: targetUser.id },
+      }),
+      this.prisma.auditLog.create({
+        data: {
+          userId,
+          tenantId: membership.tenantId,
+          action: 'TENANT_ADMIN_DELETED',
+          entity: 'User',
+          entityId: targetUser.id,
+          oldValues: {
+            email: targetUser.email,
+            role: UserRole.TENANT_ADMIN,
+          },
+        },
+      }),
+    ]);
+
+    return {
+      message: `${targetUser.firstName} ${targetUser.lastName} has been removed from business admin access.`,
+      data: { id: targetUser.id },
+    };
+  }
+
+  async getTenantOverviewForAdmin(userId: string) {
+    const membership = await this.getTenantAdminAccessContext(userId);
     const tenantId = membership.tenantId;
 
     const now = new Date();
@@ -782,17 +1139,24 @@ export class TenantService {
   }
 
   async getTenantUsersForAdmin(userId: string, query: GetTenantUsersDto) {
-    const membership = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { role: true, tenantId: true },
-    });
+    const membership = await this.getTenantAdminAccessContext(userId);
 
-    if (!membership) {
-      throw new NotFoundException('User not found');
+    if (
+      query.role === UserRole.INDIVIDUAL &&
+      !membership.permissions.includes('MANAGE_USERS')
+    ) {
+      throw new ForbiddenException(
+        'This business admin account cannot manage customer users.',
+      );
     }
 
-    if (membership.role !== 'TENANT_ADMIN' || !membership.tenantId) {
-      throw new ForbiddenException('Tenant admin access is required');
+    if (
+      query.role === UserRole.TENANT_ADMIN &&
+      !membership.permissions.includes('MANAGE_BUSINESS_ADMINS')
+    ) {
+      throw new ForbiddenException(
+        'This business admin account cannot manage business admins.',
+      );
     }
 
     const page = query.page ?? 1;
@@ -841,6 +1205,7 @@ export class TenantService {
           email: true,
           phone: true,
           role: true,
+          adminPermissions: true,
           isEmailVerified: true,
           isPhoneVerified: true,
           isActive: true,
@@ -856,6 +1221,10 @@ export class TenantService {
       data: {
         users: users.map((user) => ({
           ...user,
+          adminPermissions:
+            user.role === UserRole.TENANT_ADMIN
+              ? this.getEffectiveTenantAdminPermissions(user.adminPermissions)
+              : undefined,
           createdAt: user.createdAt.toISOString(),
           lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
         })),
@@ -919,6 +1288,7 @@ export class TenantService {
           email: true,
           phone: true,
           role: true,
+          adminPermissions: true,
           isEmailVerified: true,
           isPhoneVerified: true,
           isActive: true,
@@ -934,6 +1304,10 @@ export class TenantService {
       data: {
         users: users.map((user) => ({
           ...user,
+          adminPermissions:
+            user.role === UserRole.TENANT_ADMIN
+              ? this.getEffectiveTenantAdminPermissions(user.adminPermissions)
+              : undefined,
           createdAt: user.createdAt.toISOString(),
           lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
         })),
@@ -1075,18 +1449,10 @@ export class TenantService {
     userId: string,
     dto: UpdateOwnTenantSettingsDto,
   ) {
-    const membership = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { role: true, tenantId: true },
-    });
-
-    if (!membership) {
-      throw new NotFoundException('User not found');
-    }
-
-    if (membership.role !== 'TENANT_ADMIN' || !membership.tenantId) {
-      throw new ForbiddenException('Tenant admin access is required');
-    }
+    const membership = await this.assertTenantAdminPermission(
+      userId,
+      'MANAGE_BUSINESS_SETTINGS',
+    );
 
     const tenant = await this.getTenantById(membership.tenantId);
 
@@ -1115,6 +1481,23 @@ export class TenantService {
         textColor: dto.textColor ?? tenant.textColor,
         buttonColor: dto.buttonColor ?? tenant.buttonColor,
         fontStyle: dto.fontStyle ?? tenant.fontStyle,
+        homepageTemplate: dto.homepageTemplate ?? tenant.homepageTemplate,
+        homepageHeading:
+          dto.homepageHeading === undefined
+            ? tenant.homepageHeading
+            : (dto.homepageHeading ?? null),
+        homepageSubheading:
+          dto.homepageSubheading === undefined
+            ? tenant.homepageSubheading
+            : (dto.homepageSubheading ?? null),
+        homepageAbout:
+          dto.homepageAbout === undefined
+            ? tenant.homepageAbout
+            : (dto.homepageAbout ?? null),
+        homepageManualSteps:
+          dto.homepageManualSteps === undefined
+            ? (tenant.homepageManualSteps as Prisma.InputJsonValue)
+            : (dto.homepageManualSteps as unknown as Prisma.InputJsonValue),
         customDomain:
           dto.customDomain === undefined
             ? tenant.customDomain
@@ -1155,18 +1538,10 @@ export class TenantService {
 
     this.validateLogoUpload(file);
 
-    const membership = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { role: true, tenantId: true },
-    });
-
-    if (!membership) {
-      throw new NotFoundException('User not found');
-    }
-
-    if (membership.role !== 'TENANT_ADMIN' || !membership.tenantId) {
-      throw new ForbiddenException('Tenant admin access is required');
-    }
+    const membership = await this.assertTenantAdminPermission(
+      userId,
+      'MANAGE_BUSINESS_SETTINGS',
+    );
 
     const tenant = await this.getTenantById(membership.tenantId);
     const upload = await this.storageService.uploadFile({
@@ -1198,6 +1573,25 @@ export class TenantService {
       buttonColor: tenant.buttonColor,
       fontStyle: tenant.fontStyle,
       customDomain: tenant.customDomain,
+      homepageTemplate: (
+        TENANT_HOMEPAGE_TEMPLATES.includes(
+          tenant.homepageTemplate as (typeof TENANT_HOMEPAGE_TEMPLATES)[number],
+        )
+          ? tenant.homepageTemplate
+          : TENANT_HOMEPAGE_TEMPLATES[0]
+      ) as TenantPublic['homepageTemplate'],
+      homepageHeading:
+        tenant.homepageHeading ??
+        `Access ${tenant.name} from one business portal`,
+      homepageSubheading:
+        tenant.homepageSubheading ??
+        'Review the available services, understand the process, and sign in when you are ready to continue.',
+      homepageAbout:
+        tenant.homepageAbout ??
+        `${tenant.name} uses ZenDocx to manage customer requests, document processing, and service operations from one tenant-owned workspace.`,
+      homepageManualSteps: this.sanitizeHomepageManualSteps(
+        tenant.homepageManualSteps,
+      ),
     };
   }
 

@@ -1,7 +1,10 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { UserRole } from '@zendocx/types';
+import {
+  TenantAdminPermission,
+  UserRole,
+} from '@zendocx/types';
 import apiClient from '@/lib/api-client';
 import { getApiErrorMessage } from '@/lib/api-error';
 import { useTenantStore } from '@/stores/tenant.store';
@@ -20,6 +23,14 @@ export interface TenantAdminOverview {
     buttonColor: string;
     fontStyle: string;
     customDomain: string | null;
+    homepageTemplate: 'spotlight' | 'service-grid' | 'guided-flow';
+    homepageHeading: string | null;
+    homepageSubheading: string | null;
+    homepageAbout: string | null;
+    homepageManualSteps: Array<{
+      title: string;
+      description: string;
+    }>;
   };
   metrics: {
     totalUsers: number;
@@ -85,6 +96,8 @@ export interface TenantAdminUserListItem {
   isActive: boolean;
   createdAt: string;
   lastLoginAt: string | null;
+  adminPermissions?: TenantAdminPermission[];
+  tempPassword?: string;
 }
 
 export interface TenantAdminUsersResponse {
@@ -107,6 +120,8 @@ export interface TenantAdminUserMutationResponse {
   isActive: boolean;
   createdAt: string;
   lastLoginAt: string | null;
+  adminPermissions?: TenantAdminPermission[];
+  tempPassword?: string;
 }
 
 export interface TenantAdminUsersFilters {
@@ -125,6 +140,14 @@ export interface UpdateTenantSettingsInput {
   buttonColor?: string;
   fontStyle?: 'modern' | 'classic' | 'clean';
   customDomain?: string | null;
+  homepageTemplate?: 'spotlight' | 'service-grid' | 'guided-flow';
+  homepageHeading?: string | null;
+  homepageSubheading?: string | null;
+  homepageAbout?: string | null;
+  homepageManualSteps?: Array<{
+    title: string;
+    description: string;
+  }>;
 }
 
 export const getTenantUsersQueryKey = (filters: TenantAdminUsersFilters) =>
@@ -260,6 +283,82 @@ export function useDeleteTenantUser() {
     mutationFn: async (userId: string) => {
       const response = await apiClient.delete<{ data: { id: string } }>(
         `/tenants/me/users/${userId}`,
+      );
+      return response.data.data;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ['tenant-admin', 'users'],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: TENANT_ADMIN_OVERVIEW_QUERY_KEY,
+      });
+    },
+  });
+}
+
+export function useCreateTenantAdmin() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: {
+      firstName: string;
+      lastName: string;
+      email: string;
+      phone: string;
+      permissions: TenantAdminPermission[];
+    }) => {
+      const response = await apiClient.post<{
+        data: TenantAdminUserMutationResponse;
+      }>('/tenants/me/admin-users', payload);
+      return response.data.data;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ['tenant-admin', 'users'],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: TENANT_ADMIN_OVERVIEW_QUERY_KEY,
+      });
+    },
+  });
+}
+
+export function useUpdateTenantAdmin() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: {
+      userId: string;
+      permissions?: TenantAdminPermission[];
+      isActive?: boolean;
+    }) => {
+      const response = await apiClient.patch<{
+        data: TenantAdminUserMutationResponse;
+      }>(`/tenants/me/admin-users/${payload.userId}`, {
+        permissions: payload.permissions,
+        isActive: payload.isActive,
+      });
+      return response.data.data;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ['tenant-admin', 'users'],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: TENANT_ADMIN_OVERVIEW_QUERY_KEY,
+      });
+    },
+  });
+}
+
+export function useDeleteTenantAdmin() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (userId: string) => {
+      const response = await apiClient.delete<{ data: { id: string } }>(
+        `/tenants/me/admin-users/${userId}`,
       );
       return response.data.data;
     },

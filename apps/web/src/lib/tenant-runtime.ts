@@ -1,5 +1,7 @@
 const TENANT_SLUG_COOKIE = 'zendocx-tenant-slug';
 const TENANT_SLUG_STORAGE_KEY = 'zendocx-tenant-slug';
+const RETURNING_TENANTS_COOKIE = 'zendocx-returning-tenants';
+const RETURNING_TENANTS_STORAGE_KEY = 'zendocx-returning-tenants';
 
 export function isPrivateDevelopmentHost(hostname: string): boolean {
   return (
@@ -90,12 +92,65 @@ function persistTenantSlug(slug: string | null): void {
   document.cookie = `${TENANT_SLUG_COOKIE}=; Path=/; SameSite=Lax; Max-Age=0`;
 }
 
+function readReturningTenantSlugs() {
+  if (typeof window === 'undefined') {
+    return new Set<string>();
+  }
+
+  const fromCookie = document.cookie
+    .split(';')
+    .map((item) => item.trim())
+    .find((item) => item.startsWith(`${RETURNING_TENANTS_COOKIE}=`))
+    ?.split('=')
+    .slice(1)
+    .join('=');
+
+  const parsedCookie = (fromCookie ? decodeURIComponent(fromCookie) : '')
+    .split(',')
+    .map((item) => normalizeTenantSlug(item))
+    .filter((item): item is string => Boolean(item));
+
+  try {
+    const storageValue =
+      window.localStorage.getItem(RETURNING_TENANTS_STORAGE_KEY) ?? '';
+    const parsedStorage = storageValue
+      .split(',')
+      .map((item) => normalizeTenantSlug(item))
+      .filter((item): item is string => Boolean(item));
+
+    return new Set([...parsedCookie, ...parsedStorage]);
+  } catch {
+    return new Set(parsedCookie);
+  }
+}
+
 export function persistActiveTenantSlug(slug: string | null): void {
   persistTenantSlug(slug);
 }
 
 export function clearPersistedTenantSlug(): void {
   persistTenantSlug(null);
+}
+
+export function markReturningTenantPortal(slug: string | null): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const normalized = normalizeTenantSlug(slug);
+  if (!normalized) {
+    return;
+  }
+
+  const next = Array.from(readReturningTenantSlugs().add(normalized)).join(',');
+
+  try {
+    window.localStorage.setItem(RETURNING_TENANTS_STORAGE_KEY, next);
+  } catch {
+    // Ignore constrained storage environments.
+  }
+
+  document.cookie = `${RETURNING_TENANTS_COOKIE}=${encodeURIComponent(next)}; Path=/; SameSite=Lax; Max-Age=${60 * 60 * 24 * 180}`;
 }
 
 export function resolveTenantSlugForRequest(): string | null {

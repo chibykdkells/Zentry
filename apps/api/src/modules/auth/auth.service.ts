@@ -13,7 +13,13 @@ import * as bcrypt from 'bcryptjs';
 import { createHash, randomInt, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
-import { UserRole, OtpType, JwtUser } from '@zendocx/types';
+import {
+  JwtUser,
+  OtpType,
+  TENANT_ADMIN_PERMISSIONS,
+  TenantAdminPermission,
+  UserRole,
+} from '@zendocx/types';
 import { generateTransactionRef } from '@zendocx/utils';
 import { RegisterIndividualDto, RegisterCbtDto } from './dto';
 
@@ -27,6 +33,22 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
   ) {}
+
+  private getEffectiveTenantAdminPermissions(
+    value: Prisma.JsonValue | readonly string[] | null | undefined,
+  ): TenantAdminPermission[] {
+    const input = Array.isArray(value) ? value : [];
+    const allowed = new Set<string>(TENANT_ADMIN_PERMISSIONS);
+    const normalized = Array.from(
+      new Set(
+        input
+          .map((item) => String(item).trim())
+          .filter((item): item is TenantAdminPermission => allowed.has(item)),
+      ),
+    );
+
+    return normalized.length ? normalized : [...TENANT_ADMIN_PERMISSIONS];
+  }
 
   // ── Registration ──────────────────────────────────────────────
 
@@ -310,6 +332,10 @@ export class AuthService {
           role: user.role,
           tenantId: user.tenantId ?? null,
           isEmailVerified: user.isEmailVerified,
+          adminPermissions:
+            user.role === UserRole.TENANT_ADMIN
+              ? this.getEffectiveTenantAdminPermissions(user.adminPermissions)
+              : undefined,
         },
       },
     };

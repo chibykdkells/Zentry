@@ -14,6 +14,14 @@ export interface TenantConfig {
   buttonColor: string;
   fontStyle: string;
   customDomain: string | null;
+  homepageTemplate: 'spotlight' | 'service-grid' | 'guided-flow';
+  homepageHeading: string | null;
+  homepageSubheading: string | null;
+  homepageAbout: string | null;
+  homepageManualSteps: Array<{
+    title: string;
+    description: string;
+  }>;
 }
 
 interface TenantStore {

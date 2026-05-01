@@ -25,8 +25,10 @@ import { TenantService } from './tenant.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { CreateTenantAdminDto } from './dto/create-tenant-admin.dto';
+import { CreateOwnTenantAdminDto } from './dto/create-own-tenant-admin.dto';
 import { GetTenantUsersDto } from './dto/get-tenant-users.dto';
 import { UpdateOwnTenantSettingsDto } from './dto/update-own-tenant-settings.dto';
+import { UpdateOwnTenantAdminDto } from './dto/update-own-tenant-admin.dto';
 import { UpdateTenantUserRoleDto } from './dto/update-tenant-user-role.dto';
 
 @Controller('tenants')
@@ -104,6 +106,38 @@ export class TenantController {
     @Query() query: GetTenantUsersDto,
   ) {
     return this.tenantService.getTenantUsersForAdmin(user.sub, query);
+  }
+
+  @Post('me/admin-users')
+  @Roles(UserRole.TENANT_ADMIN)
+  async createMyTenantAdmin(
+    @CurrentUser() user: JwtUser,
+    @Body() body: CreateOwnTenantAdminDto,
+  ) {
+    return this.tenantService.createTenantAdminForAdmin(user.sub, body);
+  }
+
+  @Patch('me/admin-users/:userId')
+  @Roles(UserRole.TENANT_ADMIN)
+  async updateMyTenantAdmin(
+    @CurrentUser() user: JwtUser,
+    @Param('userId') targetUserId: string,
+    @Body() body: UpdateOwnTenantAdminDto,
+  ) {
+    return this.tenantService.updateTenantAdminForAdmin(
+      user.sub,
+      targetUserId,
+      body,
+    );
+  }
+
+  @Delete('me/admin-users/:userId')
+  @Roles(UserRole.TENANT_ADMIN)
+  async deleteMyTenantAdmin(
+    @CurrentUser() user: JwtUser,
+    @Param('userId') targetUserId: string,
+  ) {
+    return this.tenantService.deleteTenantAdminForAdmin(user.sub, targetUserId);
   }
 
   @Patch('me/users/:userId/role')

@@ -9,6 +9,7 @@ import {
 import { getRoleFromJwt } from '@/lib/auth-token';
 
 const RESERVED_SUBDOMAINS = new Set(['www', 'api', 'platform', 'admin']);
+const RETURNING_TENANTS_COOKIE = 'zendocx-returning-tenants';
 
 function resolveTenantSlugFromHost(host: string): string {
   const hostname = host.split(':')[0].trim().toLowerCase();
@@ -41,6 +42,12 @@ export function proxy(request: NextRequest) {
     '';
   const refreshToken = request.cookies.get('refresh_token')?.value;
   const role = getRoleFromJwt(refreshToken);
+  const returningTenants =
+    request.cookies
+      .get(RETURNING_TENANTS_COOKIE)
+      ?.value.split(',')
+      .map((item) => item.trim().toLowerCase())
+      .filter(Boolean) ?? [];
   const persistTenantCookie = (response: NextResponse) => {
     if (!explicitTenantSlug) {
       return response;
@@ -69,13 +76,35 @@ export function proxy(request: NextRequest) {
   };
 
   if (pathname === '/') {
-    const entryUrl = new URL(
-      entryTenantSlug
-        ? `/login?tenant=${encodeURIComponent(entryTenantSlug)}`
-        : '/access-required',
-      request.url,
-    );
-    return persistTenantCookie(NextResponse.redirect(entryUrl));
+    if (!entryTenantSlug) {
+      return persistTenantCookie(
+        NextResponse.redirect(new URL('/access-required', request.url)),
+      );
+    }
+
+    if (role) {
+      return persistTenantCookie(
+        NextResponse.redirect(
+          new URL(
+            appendTenantToPath(getDefaultRouteForRole(role)),
+            request.url,
+          ),
+        ),
+      );
+    }
+
+    if (returningTenants.includes(entryTenantSlug.toLowerCase())) {
+      return persistTenantCookie(
+        NextResponse.redirect(
+          new URL(
+            `/login?tenant=${encodeURIComponent(entryTenantSlug)}`,
+            request.url,
+          ),
+        ),
+      );
+    }
+
+    return persistTenantCookie(NextResponse.next());
   }
 
   if (
