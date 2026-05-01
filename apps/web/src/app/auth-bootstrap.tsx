@@ -10,11 +10,12 @@ export function AuthBootstrap() {
   const user = useAuthStore((state) => state.user);
   const pathname = usePathname();
   const accessToken = useAuthStore((state) => state.accessToken);
+  const hasHydrated = useAuthStore((state) => state.hasHydrated);
   const clearAuth = useAuthStore((state) => state.clearAuth);
   const setAccessToken = useAuthStore((state) => state.setAccessToken);
 
   useEffect(() => {
-    if (!user || accessToken || isAuthRoute(pathname)) {
+    if (!hasHydrated || !user || accessToken || isAuthRoute(pathname)) {
       return;
     }
 
@@ -56,7 +57,7 @@ export function AuthBootstrap() {
     return () => {
       isCancelled = true;
     };
-  }, [accessToken, clearAuth, pathname, setAccessToken, user]);
+  }, [accessToken, clearAuth, hasHydrated, pathname, setAccessToken, user]);
 
   return null;
 }

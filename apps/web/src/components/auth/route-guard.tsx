@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/auth.store';
 import { getDefaultRouteForRole } from '@/lib/auth-routes';
 import {
@@ -31,12 +31,14 @@ interface RouteGuardProps {
 export function RouteGuard({ children, requiredRoles }: RouteGuardProps) {
   const user = useAuthStore((state) => state.user);
   const accessToken = useAuthStore((state) => state.accessToken);
+  const hasHydrated = useAuthStore((state) => state.hasHydrated);
   const router = useRouter();
+  const pathname = usePathname();
 
-  // user in store but no token → AuthBootstrap is still running a /refresh call.
-  // Zustand v5 + synchronous localStorage hydrates the store synchronously before
-  // the first React render, so user is always accurate on the first client paint.
-  const isBootstrapping = !!user && !accessToken;
+  // The guard needs to wait for persisted auth metadata to hydrate before deciding
+  // whether a tenant user is truly unauthenticated. Otherwise a hard page load can
+  // briefly look like a signed-out state and bounce the user back to login.
+  const isBootstrapping = !hasHydrated || (!!user && !accessToken);
   const isAuthenticated = !!user && !!accessToken;
   const tenantSlug =
     typeof window !== 'undefined' ? resolveTenantSlugForRequest() : null;
@@ -50,7 +52,17 @@ export function RouteGuard({ children, requiredRoles }: RouteGuardProps) {
     if (isBootstrapping) return;
 
     if (!isAuthenticated) {
-      router.replace(appendTenantContextToPath('/login', tenantSlug));
+      if (pathname.startsWith('/admin')) {
+        router.replace('/platform');
+        return;
+      }
+
+      if (tenantSlug) {
+        router.replace(appendTenantContextToPath('/login', tenantSlug));
+        return;
+      }
+
+      router.replace('/access-required?reason=tenant-link');
       return;
     }
 
@@ -59,7 +71,15 @@ export function RouteGuard({ children, requiredRoles }: RouteGuardProps) {
         appendTenantContextToPath(getDefaultRouteForRole(user.role), tenantSlug),
       );
     }
-  }, [hasWrongRole, isAuthenticated, isBootstrapping, router, tenantSlug, user]);
+  }, [
+    hasWrongRole,
+    isAuthenticated,
+    isBootstrapping,
+    pathname,
+    router,
+    tenantSlug,
+    user,
+  ]);
 
   if (isBootstrapping || !isAuthenticated || hasWrongRole) {
     return (

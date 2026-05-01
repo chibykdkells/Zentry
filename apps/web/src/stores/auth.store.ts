@@ -18,8 +18,10 @@ interface AuthStore {
   user: AuthUser | null;
   accessToken: string | null;
   isAuthenticated: boolean;
+  hasHydrated: boolean;
   setAuth: (user: AuthUser, accessToken: string) => void;
   setAccessToken: (accessToken: string | null) => void;
+  setHasHydrated: (value: boolean) => void;
   clearAuth: () => void;
   updateUser: (updates: Partial<AuthUser>) => void;
 }
@@ -30,12 +32,14 @@ export const useAuthStore = create<AuthStore>()(
       user: null,
       accessToken: null,
       isAuthenticated: false,
+      hasHydrated: false,
 
       setAuth: (user, accessToken) => {
         set({ user, accessToken, isAuthenticated: true });
       },
 
       setAccessToken: (accessToken) => set({ accessToken }),
+      setHasHydrated: (value) => set({ hasHydrated: value }),
 
       clearAuth: () => {
         set({ user: null, accessToken: null, isAuthenticated: false });
@@ -50,6 +54,9 @@ export const useAuthStore = create<AuthStore>()(
       name: 'zendocx-auth',
       // Persist user metadata only. Access tokens stay in memory.
       partialize: (state) => ({ user: state.user, isAuthenticated: state.isAuthenticated }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
     },
   ),
 );

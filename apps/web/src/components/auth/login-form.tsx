@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { startTransition, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
@@ -223,14 +223,10 @@ export function LoginForm({ mode = 'auto' }: { mode?: LoginMode }) {
         tenantSlug,
       );
 
-      if (typeof window !== 'undefined') {
-        reset();
-        window.location.replace(targetRoute);
-        return;
-      }
-
       reset();
-      router.push(targetRoute);
+      startTransition(() => {
+        router.replace(targetRoute);
+      });
     } catch (err: unknown) {
       const message = getHumanLoginErrorMessage(err);
       setFormError(message);

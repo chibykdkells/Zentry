@@ -75,19 +75,29 @@ function processQueue(error: unknown, token: string | null) {
 
 function buildLoginRedirectUrl() {
   if (typeof window === 'undefined') {
-    return '/login';
+    return '/access-required?reason=tenant-link';
   }
 
-  const loginUrl = new URL('/login', window.location.origin);
   const currentPath = `${window.location.pathname}${window.location.search}`;
   const tenantSlug = resolveTenantSlugForRequest();
+  const loginUrl = new URL(
+    window.location.pathname.startsWith('/admin')
+      ? '/platform'
+      : tenantSlug
+        ? '/login'
+        : '/access-required',
+    window.location.origin,
+  );
 
   loginUrl.searchParams.set('reason', 'session-expired');
-  if (tenantSlug) {
+  if (tenantSlug && loginUrl.pathname === '/login') {
     loginUrl.searchParams.set('tenant', tenantSlug);
   }
 
-  if (currentPath !== '/login') {
+  if (
+    loginUrl.pathname !== '/access-required' &&
+    currentPath !== loginUrl.pathname
+  ) {
     loginUrl.searchParams.set('next', currentPath);
   }
 
