@@ -16,6 +16,78 @@
 
 ---
 
+## Session 2026-05-01 — Production Deployment: API live on Fly.io, frontend live on Vercel
+
+**Phase:** Phase 10 — Admin Analytics, Security Audit & Launch
+**AI Assistant:** Claude Sonnet 4.6
+
+### What Was Done
+
+Resolved a series of Docker build and startup failures to get the API fully deployed on Fly.io. Also added a server-side upload janitor service (carried over from prior session).
+
+**Docker build fixes (iterative):**
+1. **entrypoint.sh COPY failure** — `entrypoint.sh` was not in the Docker build context. Removed the COPY and inlined the startup commands directly into `CMD ["sh", "-c", "prisma migrate deploy && node apps/api/dist/main"]`.
+2. **`railway.toml` stale `startCommand`** — removed `startCommand = "/entrypoint.sh"` since the file no longer exists in the image.
+3. **`nest build` silent fallback to tsc** — `webpack` and `webpack-cli` were not installed, so NestJS CLI silently fell back to the tsc compiler which outputs to `dist/apps/api/src/main.js` (not `dist/main.js`) and cannot resolve `@zentry/*` workspace packages at runtime (their `main` points to `.ts` source). Fixed by adding `webpack` + `webpack-cli` to devDependencies and setting `"webpack": true` in `nest-cli.json`.
+4. **`NODE_ENV=production` before `pnpm install`** — pnpm skips all devDependencies when `NODE_ENV=production` is set, meaning `@nestjs/cli`, `webpack`, `typescript`, and `ts-loader` were all absent. Moved `ENV NODE_ENV=production` to after the `nest build` step.
+5. **webpack bundling native modules** — webpack tried to bundle `bcrypt` (native C++ addon) and `@mapbox/node-pre-gyp` (contains HTML files + optional packages webpack can't resolve). Added `webpack.config.js` with `nodeExternals()` so all `node_modules` are left as runtime `require()` calls. Registered the config path in `nest-cli.json` via `webpackConfigPath`. Added `webpack-node-externals` to devDependencies.
+6. **Wrong Fly.io app name** — `fly.toml` had `app = "zentry-api-prod"` which is the correct app name (briefly changed to `zendocx-api-prod` and reverted after user confirmation).
+
+**Upload janitor service (from prior session work):**
+- `UploadedOrderFile` table added to schema with `STAGED → ATTACHED → DELETED` state machine
+- Hourly cron janitor in `orders-upload-janitor.service.ts` scans expired STAGED uploads, deletes from Cloudinary, marks DELETED
+- `ScheduleModule.forRoot()` registered in `app.module.ts`
+- Migration: `20260501193000_add_uploaded_order_file_tracking`
+
+**Deployment verification:**
+- `api.zendocx.net/health` returns `200 OK` — API is fully live with custom domain and TLS
+- `www.zendocx.net` returns `200` via Vercel — frontend is live
+- All 43 secrets deployed on `zentry-api-prod` Fly app
+- `app.zendocx.net` subdomain has no DNS record yet (only `www` and root are pointed at Vercel)
+
+### Files Created / Modified
+
+- `apps/api/Dockerfile` — removed entrypoint.sh COPY, moved `NODE_ENV=production` after build, inlined CMD
+- `apps/api/nest-cli.json` — added `"webpack": true` and `"webpackConfigPath": "webpack.config.js"`
+- `apps/api/webpack.config.js` — NEW: `nodeExternals()` config to exclude node_modules from webpack bundle
+- `apps/api/package.json` — added `webpack`, `webpack-cli`, `webpack-node-externals`, `@types/webpack-node-externals` to devDependencies
+- `apps/api/prisma/schema.prisma` — added `UploadedOrderFile` model
+- `apps/api/prisma/migrations/20260501193000_add_uploaded_order_file_tracking/migration.sql` — NEW
+- `apps/api/src/modules/orders/orders-upload-janitor.service.ts` — NEW
+- `apps/api/src/modules/orders/orders.module.ts` — registered janitor service
+- `apps/api/src/app.module.ts` — added `ScheduleModule.forRoot()`
+- `fly.toml` — app name confirmed as `zentry-api-prod`
+- `pnpm-lock.yaml` — updated for new deps
+
+### Decisions Made
+
+- **`nodeExternals()` over bundling native modules**: Webpack cannot bundle native C++ addons. Using `nodeExternals()` keeps all `node_modules` as runtime requires, which is the standard NestJS production pattern when `bcrypt` or similar native modules are present.
+- **Single-stage Dockerfile**: Retained single-stage build (not multi-stage) because with hoisted node_modules and `nodeExternals()`, the node_modules must be present at runtime anyway — a multi-stage build adds complexity without size savings.
+- **`NODE_ENV=production` set after build**: pnpm respects `NODE_ENV=production` and skips devDependencies. Build tools must be available during compilation, so the env var is only set at the `EXPOSE`/`CMD` layer.
+
+### Phase Checklist Updates
+
+Phase 10:
+- [x] Fly.io deployment: API live at api.zendocx.net
+- [x] Vercel deployment: frontend live at www.zendocx.net
+- [x] All secrets set on Fly.io (43 secrets deployed)
+- [x] Cloudflare DNS: api.zendocx.net → Fly, www/root → Vercel
+- [ ] `app.zendocx.net` CNAME record in Cloudflare (minor — add `app` → `cname.vercel-dns.com`)
+- [ ] VAPID keys — not confirmed set (no VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY in secrets list)
+- [ ] Sentry DSN configured
+- [ ] UptimeRobot health monitoring
+- [ ] Signed Cloudinary URLs for result files (security gap — currently permanent public URLs)
+- [ ] Load testing (500 concurrent users)
+
+### Blockers / Notes for Next Session
+
+- **`app.zendocx.net` DNS**: Add CNAME record in Cloudflare: `app` → `cname.vercel-dns.com`. Low effort.
+- **VAPID keys missing from secrets**: `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` were not in `fly secrets list` output. Push notifications will be silently disabled without them. Generate with `npx web-push generate-vapid-keys` and set via `fly secrets set`.
+- **Signed Cloudinary URLs**: `resultFileUrl` on completed orders is a permanent public URL. Should be time-limited signed URLs before public launch.
+- **Upload janitor bug**: In `orders-upload-janitor.service.ts`, storage is deleted before the DB row is marked DELETED. If the DB update fails after storage deletion, the row stays STAGED and gets retried every hour forever. Fix: treat "not found" storage errors as success, or flip the order (mark DB first, then delete storage).
+
+---
+
 ## Session 2026-04-30 — Stack Correction: Fly.io replaces Railway, domain migrated to zendocx.net, Paystack set as primary payment provider
 
 **Phase:** Phase 10 — Admin Analytics, Security Audit & Launch

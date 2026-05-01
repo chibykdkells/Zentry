@@ -690,10 +690,16 @@ optimized. Production deployed.
 - [ ] UptimeRobot (or equivalent) health monitoring
 - [ ] Production PostgreSQL with daily backups
 - [ ] Production Redis with persistence configured
-- [ ] Vercel deployment (frontend)
-- [ ] Fly.io deployment (backend — `fly.toml` committed, dashboard wiring + secrets pending)
-- [ ] Cloudflare DNS + WAF configured
-- [ ] All .env secrets moved to platform secret manager
+- [x] Vercel deployment (frontend — live at www.zendocx.net)
+- [x] Fly.io deployment (backend — live at api.zendocx.net, 43 secrets deployed)
+- [x] Cloudflare DNS + WAF configured (api → Fly, www/root → Vercel)
+- [x] All .env secrets moved to platform secret manager (fly secrets)
+- [ ] app.zendocx.net CNAME record in Cloudflare (add app → cname.vercel-dns.com)
+- [ ] VAPID keys set (VAPID_PUBLIC_KEY + VAPID_PRIVATE_KEY missing from Fly secrets)
+- [ ] Sentry error monitoring configured
+- [ ] UptimeRobot (or equivalent) health monitoring
+- [ ] Signed Cloudinary URLs for result files (security gap)
+- [ ] Load testing: simulate 500 concurrent users
 - [ ] Launch checklist signed off
 
 ---
