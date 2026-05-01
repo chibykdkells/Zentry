@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Response } from 'express';
+import * as Sentry from '@sentry/nestjs';
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
@@ -38,6 +39,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     } else {
       // Log the full error internally but never expose it
       this.logger.error('Unhandled exception', exception);
+      Sentry.captureException(exception);
     }
 
     response.status(status).json({

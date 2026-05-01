@@ -2,6 +2,7 @@ import os from 'os';
 import path from 'path';
 import { createRequire } from 'module';
 import type { NextConfig } from 'next';
+import { withSentryConfig } from '@sentry/nextjs';
 
 const require = createRequire(import.meta.url);
 const isDevelopment = process.env.NODE_ENV === 'development';
@@ -200,4 +201,13 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withPWA(nextConfig);
+const sentryConfig = {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  silent: true,
+  disableServerWebpackPlugin: !process.env.SENTRY_AUTH_TOKEN,
+  disableClientWebpackPlugin: !process.env.SENTRY_AUTH_TOKEN,
+};
+
+export default withSentryConfig(withPWA(nextConfig), sentryConfig);
