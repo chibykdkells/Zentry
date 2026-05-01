@@ -24,4 +24,8 @@ export class StorageService {
   deleteFile(publicId: string): Promise<void> {
     return this.provider.deleteFile(publicId);
   }
+
+  getSignedUrl(publicId: string, expiresInSeconds: number): string {
+    return this.provider.getSignedUrl(publicId, expiresInSeconds);
+  }
 }

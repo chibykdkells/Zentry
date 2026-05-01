@@ -291,6 +291,8 @@ export interface IStorageProvider {
   readonly providerName: string;
   uploadFile(input: UploadFileInput): Promise<UploadFileResult>;
   deleteFile(publicId: string): Promise<void>;
+  /** Generate a time-limited signed delivery URL for a private file. */
+  getSignedUrl(publicId: string, expiresInSeconds: number): string;
 }
 
 export const STORAGE_PROVIDER = 'STORAGE_PROVIDER';

@@ -65,6 +65,24 @@ type RequiredDocumentDefinition = {
   description?: string;
 };
 
+type OrderDocumentAttachment = {
+  name: string;
+  label: string | null;
+  url: string;
+  filename: string | null;
+  publicId: string | null;
+};
+
+type DisputeEvidenceAttachment = {
+  url: string;
+  filename: string | null;
+  publicId: string | null;
+};
+
+type UploadedOrderFileContextValue =
+  | 'REQUESTER_DOCUMENT'
+  | 'DISPUTE_EVIDENCE';
+
 type OrderRequesterWithWallet = {
   id: string;
   firstName: string;
@@ -100,6 +118,8 @@ export type UploadedDocumentFile = {
   buffer: Buffer;
   size: number;
 };
+
+const ORDER_UPLOAD_STAGING_TTL_MS = 2 * 60 * 60 * 1000;
 
 const orderListSelect = Prisma.validator<Prisma.OrderSelect>()({
   id: true,
@@ -790,10 +810,15 @@ export class OrdersService {
       throw new NotFoundException('Result file not found');
     }
 
+    const signedUrl = this.storageService.getSignedUrl(
+      order.resultFileUrl,
+      this.resultFileAccessTtlSeconds,
+    );
+
     return {
       message: 'Result file access granted',
       data: {
-        url: order.resultFileUrl,
+        url: signedUrl,
       },
     };
   }
@@ -876,9 +901,18 @@ export class OrdersService {
     dto: CreateDisputeDto,
     tenantId: string | null,
   ) {
+    const uploadedEvidencePublicIds = this.extractAttachmentPublicIds(
+      dto.evidenceFiles,
+    );
+    let disputePersisted = false;
+
+    try {
     const now = new Date();
     const reason = dto.reason.trim();
-    const evidenceUrls = this.normalizeRequesterDocUrls(dto.evidenceUrls);
+    const evidenceFiles = this.normalizeDisputeEvidenceFiles(
+      dto.evidenceFiles,
+      dto.evidenceUrls,
+    );
 
     const order = await this.prisma.order.findFirst({
       where: {
@@ -941,10 +975,20 @@ export class OrdersService {
           raisedById: userId,
           tenantId,
           reason,
-          evidenceUrls,
+          evidenceUrls: evidenceFiles as Prisma.InputJsonValue,
           status: DisputeStatus.OPEN,
         },
       });
+
+      if (uploadedEvidencePublicIds.length > 0) {
+        await this.markUploadedOrderFilesAttached(
+          tx,
+          userId,
+          uploadedEvidencePublicIds,
+          order.id,
+          'DISPUTE_EVIDENCE',
+        );
+      }
 
       await tx.order.update({
         where: { id: order.id },
@@ -991,7 +1035,8 @@ export class OrdersService {
             orderNumber: order.orderNumber,
             status: OrderStatus.DISPUTED,
             disputeStatus: DisputeStatus.OPEN,
-            evidenceUrls,
+            evidenceUrls: evidenceFiles.map((file) => file.url),
+            evidenceFileCount: evidenceFiles.length,
           },
         },
       });
@@ -1007,6 +1052,7 @@ export class OrdersService {
 
       return refreshedOrder;
     });
+    disputePersisted = true;
 
     await this.ordersReleaseQueueService
       .removeScheduledReleaseForOrder(order.id)
@@ -1030,6 +1076,13 @@ export class OrdersService {
       message: 'Dispute created successfully.',
       data: this.serializeOrderDetail(updatedOrder),
     };
+    } catch (error) {
+      if (!disputePersisted && uploadedEvidencePublicIds.length > 0) {
+        await this.cleanupUploadedOrderFiles(userId, uploadedEvidencePublicIds);
+      }
+
+      throw error;
+    }
   }
 
   async getAdminOrders(query: GetAdminOrdersQueryDto, tenantId: string | null) {
@@ -2295,6 +2348,9 @@ export class OrdersService {
   async getCbtDashboard(userId: string, tenantId: string | null) {
     const cbtUser = await this.ensureApprovedCbtUser(userId, tenantId);
     const tenantFilter = tenantId ? { tenantId } : {};
+    const supportedCategoryWhere = this.buildSupportedCbtCategoryWhere(
+      this.getSupportedCbtServiceCategorySlugs(cbtUser),
+    );
 
     const [
       availableCount,
@@ -2309,6 +2365,7 @@ export class OrdersService {
           fulfillmentType: 'MANUAL',
           assignedCbtId: null,
           status: OrderStatus.PENDING,
+          ...supportedCategoryWhere,
           ...tenantFilter,
         },
       }),
@@ -2329,6 +2386,7 @@ export class OrdersService {
           fulfillmentType: 'MANUAL',
           assignedCbtId: null,
           status: OrderStatus.PENDING,
+          ...supportedCategoryWhere,
           ...tenantFilter,
         },
         orderBy: { createdAt: 'desc' },
@@ -2377,20 +2435,25 @@ export class OrdersService {
     query: GetCbtJobPoolQueryDto,
     tenantId: string | null,
   ) {
-    await this.ensureApprovedCbtUser(userId, tenantId);
+    const cbtUser = await this.ensureApprovedCbtUser(userId, tenantId);
 
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const search = query.search?.trim() || undefined;
+    const supportedCategorySlugs =
+      this.getSupportedCbtServiceCategorySlugs(cbtUser);
+    const supportedCategoryWhere = this.buildSupportedCbtCategoryWhere(
+      query.categorySlug
+        ? supportedCategorySlugs.filter((slug) => slug === query.categorySlug)
+        : supportedCategorySlugs,
+    );
 
     const where: Prisma.OrderWhereInput = {
       fulfillmentType: 'MANUAL',
       assignedCbtId: null,
       status: OrderStatus.PENDING,
+      ...supportedCategoryWhere,
       ...(tenantId ? { tenantId } : {}),
-      ...(query.categorySlug
-        ? { service: { category: { slug: query.categorySlug } } }
-        : {}),
       ...(search
         ? {
             OR: [
@@ -2516,7 +2579,10 @@ export class OrdersService {
     orderId: string,
     tenantId: string | null,
   ) {
-    await this.ensureApprovedCbtUser(userId, tenantId);
+    const cbtUser = await this.ensureApprovedCbtUser(userId, tenantId);
+    const supportedCategoryWhere = this.buildSupportedCbtCategoryWhere(
+      this.getSupportedCbtServiceCategorySlugs(cbtUser),
+    );
 
     const order = await this.prisma.order.findFirst({
       where: {
@@ -2524,7 +2590,11 @@ export class OrdersService {
         fulfillmentType: 'MANUAL',
         ...(tenantId ? { tenantId } : {}),
         OR: [
-          { assignedCbtId: null, status: OrderStatus.PENDING },
+          {
+            assignedCbtId: null,
+            status: OrderStatus.PENDING,
+            ...supportedCategoryWhere,
+          },
           { assignedCbtId: userId },
         ],
       },
@@ -2544,6 +2614,41 @@ export class OrdersService {
   async claimCbtJob(userId: string, orderId: string, tenantId: string | null) {
     const cbtUser = await this.ensureApprovedCbtUser(userId, tenantId);
     const claimedAt = new Date();
+    const supportedCategorySlugs =
+      this.getSupportedCbtServiceCategorySlugs(cbtUser);
+
+    const candidateOrder = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        tenantId: true,
+        service: {
+          select: {
+            category: {
+              select: {
+                slug: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!candidateOrder) {
+      throw new NotFoundException('Job not found');
+    }
+
+    if ((candidateOrder.tenantId ?? null) !== (tenantId ?? null)) {
+      throw new NotFoundException('Job not found');
+    }
+
+    if (
+      !supportedCategorySlugs.includes(candidateOrder.service.category.slug)
+    ) {
+      throw new ForbiddenException(
+        'This job is outside the service categories assigned to your CBT center.',
+      );
+    }
 
     const order = await this.prisma.$transaction(async (tx) => {
       const claimResult = await tx.order.updateMany({
@@ -2848,7 +2953,7 @@ export class OrdersService {
           },
           data: {
             status: OrderStatus.COMPLETED,
-            resultFileUrl: upload.url,
+            resultFileUrl: upload.publicId,
             resultUploadedAt: uploadedAt,
             completedAt: uploadedAt,
             disputeWindowExpiresAt,
@@ -2950,7 +3055,7 @@ export class OrdersService {
             newValues: {
               orderNumber: completedOrder.orderNumber,
               status: OrderStatus.COMPLETED,
-              resultFileUrl: upload.url,
+              resultFileUrl: upload.publicId,
               disputeWindowExpiresAt: disputeWindowExpiresAt.toISOString(),
             },
           },
@@ -3025,6 +3130,12 @@ export class OrdersService {
     dto: CreateOrderDto,
     tenantId: string | null,
   ) {
+    const uploadedRequesterDocumentPublicIds = this.extractAttachmentPublicIds(
+      dto.requesterDocuments,
+    );
+    let orderPersisted = false;
+
+    try {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -3089,14 +3200,16 @@ export class OrdersService {
     const normalizedSubmittedData = this.normalizeSubmittedData(
       dto.submittedData,
     );
-    const normalizedRequesterDocUrls = this.normalizeRequesterDocUrls(
+    const normalizedRequesterDocuments = this.normalizeRequesterDocuments(
+      dto.requesterDocuments,
       dto.requesterDocUrls,
+      requiredDocuments,
     );
 
     this.validateRequiredFields(requiredFields, normalizedSubmittedData);
     this.validateRequiredDocuments(
       requiredDocuments,
-      normalizedRequesterDocUrls,
+      normalizedRequesterDocuments,
     );
 
     if (
@@ -3137,7 +3250,8 @@ export class OrdersService {
           deliveryMode: service.deliveryMode,
           fulfillmentType: service.fulfillmentType,
           submittedData: normalizedSubmittedData,
-          requesterDocUrls: normalizedRequesterDocUrls,
+          requesterDocUrls:
+            normalizedRequesterDocuments as Prisma.InputJsonValue,
           totalAmount: service.totalPrice,
           platformFee: service.platformFee,
           cbtCommission: service.cbtCommission,
@@ -3164,6 +3278,16 @@ export class OrdersService {
           },
         },
       });
+
+      if (uploadedRequesterDocumentPublicIds.length > 0) {
+        await this.markUploadedOrderFilesAttached(
+          tx,
+          userId,
+          uploadedRequesterDocumentPublicIds,
+          createdOrder.id,
+          'REQUESTER_DOCUMENT',
+        );
+      }
 
       await tx.wallet.update({
         where: { id: user.wallet!.id },
@@ -3222,6 +3346,7 @@ export class OrdersService {
 
       return createdOrder;
     });
+    orderPersisted = true;
 
     // Real-time: notify requester wallet changed + broadcast new job to CBT pool
     this.notificationsService.broadcastWalletUpdated(userId);
@@ -3243,12 +3368,12 @@ export class OrdersService {
       firstName: user.firstName,
       serviceName: service.name,
       orderNumber: order.orderNumber,
-    });
+    }).catch(() => undefined);
     await this.sendOrderPlacedSms({
       phone: user.phone,
       serviceName: service.name,
       orderNumber: order.orderNumber,
-    });
+    }).catch(() => undefined);
 
     return {
       message: 'Order created successfully and payment moved into escrow.',
@@ -3271,6 +3396,16 @@ export class OrdersService {
         },
       },
     };
+    } catch (error) {
+      if (!orderPersisted && uploadedRequesterDocumentPublicIds.length > 0) {
+        await this.cleanupUploadedOrderFiles(
+          userId,
+          uploadedRequesterDocumentPublicIds,
+        );
+      }
+
+      throw error;
+    }
   }
 
   private async createAutomatedOrder(
@@ -3755,14 +3890,86 @@ export class OrdersService {
       ),
     );
 
+    try {
+      await this.prisma.uploadedOrderFile.createMany({
+        data: uploads.map((upload, index) => ({
+          userId,
+          publicId: upload.publicId,
+          url: upload.url,
+          filename: files[index]?.originalname ?? null,
+          expiresAt: new Date(Date.now() + ORDER_UPLOAD_STAGING_TTL_MS),
+        })),
+      });
+    } catch (error) {
+      await Promise.all(
+        uploads.map((upload) =>
+          this.storageService.deleteFile(upload.publicId).catch(() => undefined),
+        ),
+      );
+
+      throw error;
+    }
+
     return {
-      message: 'Documents uploaded successfully.',
+      message: 'Files uploaded successfully.',
       data: {
         items: uploads.map((upload, index) => ({
           url: upload.url,
           publicId: upload.publicId,
           filename: files[index]?.originalname ?? null,
         })),
+      },
+    };
+  }
+
+  async cleanupUploadedOrderFiles(userId: string, publicIds: string[]) {
+    const stagedUploads = await this.prisma.uploadedOrderFile.findMany({
+      where: {
+        userId,
+        publicId: {
+          in: this.normalizeDocumentUrlList(publicIds),
+        },
+        state: 'STAGED',
+      },
+      select: {
+        id: true,
+        publicId: true,
+      },
+    });
+
+    if (stagedUploads.length === 0) {
+      return {
+        message: 'No eligible uploaded files needed cleanup.',
+        data: {
+          removedCount: 0,
+          skippedCount: publicIds.length,
+        },
+      };
+    }
+
+    await Promise.all(
+      stagedUploads.map((upload) =>
+        this.storageService.deleteFile(upload.publicId).catch(() => undefined),
+      ),
+    );
+
+    await this.prisma.uploadedOrderFile.updateMany({
+      where: {
+        id: {
+          in: stagedUploads.map((upload) => upload.id),
+        },
+      },
+      data: {
+        state: 'DELETED',
+        deletedAt: new Date(),
+      },
+    });
+
+    return {
+      message: 'Uploaded files cleaned up successfully.',
+      data: {
+        removedCount: stagedUploads.length,
+        skippedCount: Math.max(0, publicIds.length - stagedUploads.length),
       },
     };
   }
@@ -3793,8 +4000,8 @@ export class OrdersService {
     }
   }
 
-  private normalizeRequesterDocUrls(requesterDocUrls?: string[]) {
-    return (requesterDocUrls ?? [])
+  private normalizeDocumentUrlList(urls?: string[]) {
+    return (urls ?? [])
       .map((value) => value.trim())
       .filter(
         (value, index, array) =>
@@ -3802,20 +4009,291 @@ export class OrdersService {
       );
   }
 
+  private normalizeOptionalAttachmentText(value: unknown) {
+    return typeof value === 'string' && value.trim().length > 0
+      ? value.trim()
+      : null;
+  }
+
+  private extractAttachmentPublicIds(value: unknown): string[] {
+    if (!value || typeof value !== 'object') {
+      return [];
+    }
+
+    const items = Array.isArray(value) ? value : Object.values(value);
+
+    return items.reduce<string[]>((accumulator, item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        return accumulator;
+      }
+
+      const publicId = this.normalizeOptionalAttachmentText(
+        (item as Record<string, unknown>).publicId,
+      );
+
+      if (publicId && !accumulator.includes(publicId)) {
+        accumulator.push(publicId);
+      }
+
+      return accumulator;
+    }, []);
+  }
+
+  private async markUploadedOrderFilesAttached(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    publicIds: string[],
+    orderId: string,
+    context: UploadedOrderFileContextValue,
+  ) {
+    const normalizedPublicIds = this.normalizeDocumentUrlList(publicIds);
+
+    if (normalizedPublicIds.length === 0) {
+      return;
+    }
+
+    await tx.uploadedOrderFile.updateMany({
+      where: {
+        userId,
+        publicId: {
+          in: normalizedPublicIds,
+        },
+        state: 'STAGED',
+      },
+      data: {
+        state: 'ATTACHED',
+        orderId,
+        context,
+        attachedAt: new Date(),
+      },
+    });
+  }
+
+  private normalizeRequesterDocuments(
+    requesterDocuments: Record<string, unknown> | undefined,
+    requesterDocUrls: string[] | undefined,
+    requiredDocuments: RequiredDocumentDefinition[],
+  ) {
+    const requiredDocumentsByName = new Map(
+      requiredDocuments.map((document) => [document.name, document]),
+    );
+
+    if (
+      requesterDocuments &&
+      typeof requesterDocuments === 'object' &&
+      !Array.isArray(requesterDocuments)
+    ) {
+      const unknownDocumentNames = Object.keys(requesterDocuments).filter(
+        (name) => !requiredDocumentsByName.has(name),
+      );
+
+      if (unknownDocumentNames.length > 0) {
+        throw new BadRequestException(
+          `These uploaded documents are not configured for this service: ${unknownDocumentNames.join(', ')}`,
+        );
+      }
+
+      return Object.entries(requesterDocuments).reduce<OrderDocumentAttachment[]>(
+        (accumulator, [name, rawValue]) => {
+          const definition = requiredDocumentsByName.get(name);
+          const normalized =
+            this.normalizeStoredRequesterDocument(rawValue, definition, name) ??
+            null;
+
+          if (normalized) {
+            accumulator.push(normalized);
+          }
+
+          return accumulator;
+        },
+        [],
+      );
+    }
+
+    return this.normalizeDocumentUrlList(requesterDocUrls).map((url, index) => {
+      const definition = requiredDocuments[index];
+      const name = definition?.name ?? `document-${index + 1}`;
+
+      return {
+        name,
+        label: definition?.label ?? name,
+        url,
+        filename: null,
+        publicId: null,
+      };
+    });
+  }
+
+  private normalizeDisputeEvidenceFiles(
+    evidenceFiles: Record<string, unknown>[] | undefined,
+    evidenceUrls: string[] | undefined,
+  ) {
+    if (Array.isArray(evidenceFiles) && evidenceFiles.length > 0) {
+      return evidenceFiles.reduce<DisputeEvidenceAttachment[]>(
+        (accumulator, rawValue) => {
+          const normalized = this.normalizeStoredDisputeEvidenceFile(rawValue);
+
+          if (normalized) {
+            accumulator.push(normalized);
+          }
+
+          return accumulator;
+        },
+        [],
+      );
+    }
+
+    return this.normalizeDocumentUrlList(evidenceUrls).map((url) => ({
+      url,
+      filename: null,
+      publicId: null,
+    }));
+  }
+
+  private normalizeStoredRequesterDocument(
+    rawValue: unknown,
+    definition?: RequiredDocumentDefinition,
+    fallbackName?: string,
+    fallbackIndex?: number,
+  ) {
+    const fallbackDocumentName =
+      fallbackName ?? definition?.name ?? `document-${(fallbackIndex ?? 0) + 1}`;
+
+    if (typeof rawValue === 'string') {
+      const url = this.normalizeOptionalAttachmentText(rawValue);
+
+      if (!url) {
+        return null;
+      }
+
+      return {
+        name: fallbackDocumentName,
+        label: definition?.label ?? fallbackDocumentName,
+        url,
+        filename: null,
+        publicId: null,
+      } satisfies OrderDocumentAttachment;
+    }
+
+    if (!rawValue || typeof rawValue !== 'object' || Array.isArray(rawValue)) {
+      return null;
+    }
+
+    const record = rawValue as Record<string, unknown>;
+    const url = this.normalizeOptionalAttachmentText(record.url);
+
+    if (!url) {
+      return null;
+    }
+
+    const name =
+      this.normalizeOptionalAttachmentText(record.name) ?? fallbackDocumentName;
+
+    return {
+      name,
+      label:
+        this.normalizeOptionalAttachmentText(record.label) ??
+        definition?.label ??
+        name,
+      url,
+      filename: this.normalizeOptionalAttachmentText(record.filename),
+      publicId: this.normalizeOptionalAttachmentText(record.publicId),
+    } satisfies OrderDocumentAttachment;
+  }
+
+  private normalizeStoredDisputeEvidenceFile(rawValue: unknown) {
+    if (typeof rawValue === 'string') {
+      const url = this.normalizeOptionalAttachmentText(rawValue);
+
+      if (!url) {
+        return null;
+      }
+
+      return {
+        url,
+        filename: null,
+        publicId: null,
+      } satisfies DisputeEvidenceAttachment;
+    }
+
+    if (!rawValue || typeof rawValue !== 'object' || Array.isArray(rawValue)) {
+      return null;
+    }
+
+    const record = rawValue as Record<string, unknown>;
+    const url = this.normalizeOptionalAttachmentText(record.url);
+
+    if (!url) {
+      return null;
+    }
+
+    return {
+      url,
+      filename: this.normalizeOptionalAttachmentText(record.filename),
+      publicId: this.normalizeOptionalAttachmentText(record.publicId),
+    } satisfies DisputeEvidenceAttachment;
+  }
+
+  private toRequesterDocuments(
+    rawValue: Prisma.JsonValue,
+    requiredDocuments: RequiredDocumentDefinition[] = [],
+  ) {
+    if (!Array.isArray(rawValue)) {
+      return [];
+    }
+
+    return rawValue.reduce<OrderDocumentAttachment[]>((accumulator, item, index) => {
+      const definition = requiredDocuments[index];
+      const normalized =
+        this.normalizeStoredRequesterDocument(
+          item,
+          definition,
+          definition?.name,
+          index,
+        ) ?? null;
+
+      if (normalized) {
+        accumulator.push(normalized);
+      }
+
+      return accumulator;
+    }, []);
+  }
+
+  private toDisputeEvidenceFiles(rawValue: Prisma.JsonValue) {
+    if (!Array.isArray(rawValue)) {
+      return [];
+    }
+
+    return rawValue.reduce<DisputeEvidenceAttachment[]>(
+      (accumulator, item) => {
+        const normalized = this.normalizeStoredDisputeEvidenceFile(item);
+
+        if (normalized) {
+          accumulator.push(normalized);
+        }
+
+        return accumulator;
+      },
+      [],
+    );
+  }
+
   private validateRequiredDocuments(
     requiredDocuments: RequiredDocumentDefinition[],
-    requesterDocUrls: string[],
+    requesterDocuments: OrderDocumentAttachment[],
   ) {
-    const requiredCount = requiredDocuments.filter(
-      (document) => document.required !== false,
-    ).length;
+    const uploadedNames = new Set(
+      requesterDocuments
+        .map((document) => document.name)
+        .filter((name) => name.trim().length > 0),
+    );
+    const missingLabels = requiredDocuments
+      .filter((document) => document.required !== false)
+      .filter((document) => !uploadedNames.has(document.name))
+      .map((document) => document.label ?? document.name);
 
-    if (requiredCount > requesterDocUrls.length) {
-      const missingLabels = requiredDocuments
-        .filter((document) => document.required !== false)
-        .slice(requesterDocUrls.length)
-        .map((document) => document.label ?? document.name);
-
+    if (missingLabels.length > 0) {
       throw new BadRequestException(
         `Please upload these required documents: ${missingLabels.join(', ')}`,
       );
@@ -4152,6 +4630,8 @@ export class OrdersService {
   }
 
   private serializeOrderSummary(order: OrderListRecord) {
+    const requesterDocuments = this.toRequesterDocuments(order.requesterDocUrls);
+
     return {
       id: order.id,
       orderNumber: order.orderNumber,
@@ -4162,7 +4642,8 @@ export class OrdersService {
       platformFee: order.platformFee.toString(),
       cbtCommission: order.cbtCommission.toString(),
       submittedData: this.toStringRecord(order.submittedData),
-      requesterDocUrls: this.toStringArray(order.requesterDocUrls),
+      requesterDocuments,
+      requesterDocUrls: requesterDocuments.map((document) => document.url),
       resultFileUrl: this.buildResultFileAccessUrl(order.id, order.resultFileUrl),
       resultUploadedAt: order.resultUploadedAt,
       escrowReleasedAt: order.escrowReleasedAt,
@@ -4182,6 +4663,17 @@ export class OrdersService {
   }
 
   private serializeOrderDetail(order: OrderDetailRecord) {
+    const serviceRequiredDocuments = this.toObjectArray(
+      order.service.requiredDocuments,
+    ) as RequiredDocumentDefinition[];
+    const requesterDocuments = this.toRequesterDocuments(
+      order.requesterDocUrls,
+      serviceRequiredDocuments,
+    );
+    const evidenceFiles = order.dispute
+      ? this.toDisputeEvidenceFiles(order.dispute.evidenceUrls)
+      : [];
+
     return {
       id: order.id,
       orderNumber: order.orderNumber,
@@ -4189,7 +4681,8 @@ export class OrdersService {
       deliveryMode: order.deliveryMode,
       fulfillmentType: order.fulfillmentType,
       submittedData: this.toStringRecord(order.submittedData),
-      requesterDocUrls: this.toStringArray(order.requesterDocUrls),
+      requesterDocuments,
+      requesterDocUrls: requesterDocuments.map((document) => document.url),
       resultFileUrl: this.buildResultFileAccessUrl(order.id, order.resultFileUrl),
       resultUploadedAt: order.resultUploadedAt,
       totalAmount: order.totalAmount.toString(),
@@ -4214,7 +4707,7 @@ export class OrdersService {
         deliveryMode: order.service.deliveryMode,
         fulfillmentType: order.service.fulfillmentType,
         requiredFields: this.toObjectArray(order.service.requiredFields),
-        requiredDocuments: this.toObjectArray(order.service.requiredDocuments),
+        requiredDocuments: serviceRequiredDocuments,
         category: order.service.category,
       },
       requester: {
@@ -4245,7 +4738,8 @@ export class OrdersService {
       dispute: order.dispute
         ? {
             ...order.dispute,
-            evidenceUrls: this.toStringArray(order.dispute.evidenceUrls),
+            evidenceFiles,
+            evidenceUrls: evidenceFiles.map((file) => file.url),
           }
         : null,
       disputeGroundwork: order.dispute
@@ -4255,11 +4749,14 @@ export class OrdersService {
   }
 
   private serializeDisputeSummary(dispute: MyDisputeRecord) {
+    const evidenceFiles = this.toDisputeEvidenceFiles(dispute.evidenceUrls);
+
     return {
       id: dispute.id,
       status: dispute.status,
       reason: dispute.reason,
-      evidenceUrls: this.toStringArray(dispute.evidenceUrls),
+      evidenceFiles,
+      evidenceUrls: evidenceFiles.map((file) => file.url),
       resolutionNote: dispute.resolutionNote,
       createdAt: dispute.createdAt,
       updatedAt: dispute.updatedAt,
@@ -4290,11 +4787,14 @@ export class OrdersService {
   }
 
   private serializeAdminDisputeSummary(dispute: AdminDisputeRecord) {
+    const evidenceFiles = this.toDisputeEvidenceFiles(dispute.evidenceUrls);
+
     return {
       id: dispute.id,
       status: dispute.status,
       reason: dispute.reason,
-      evidenceUrls: this.toStringArray(dispute.evidenceUrls),
+      evidenceFiles,
+      evidenceUrls: evidenceFiles.map((file) => file.url),
       resolutionNote: dispute.resolutionNote,
       createdAt: dispute.createdAt,
       updatedAt: dispute.updatedAt,
@@ -4414,6 +4914,8 @@ export class OrdersService {
   }
 
   private serializeCbtOrderSummary(order: CbtOrderListRecord) {
+    const requesterDocuments = this.toRequesterDocuments(order.requesterDocUrls);
+
     return {
       id: order.id,
       orderNumber: order.orderNumber,
@@ -4423,7 +4925,7 @@ export class OrdersService {
       totalAmount: order.totalAmount.toString(),
       platformFee: order.platformFee.toString(),
       cbtCommission: order.cbtCommission.toString(),
-      requesterDocCount: this.toStringArray(order.requesterDocUrls).length,
+      requesterDocCount: requesterDocuments.length,
       createdAt: order.createdAt,
       updatedAt: order.updatedAt,
       assignedAt: order.assignedAt,
@@ -4453,6 +4955,14 @@ export class OrdersService {
     order: OrderDetailRecord,
     now = new Date(),
   ) {
+    const serviceRequiredDocuments = this.toObjectArray(
+      order.service.requiredDocuments,
+    ) as RequiredDocumentDefinition[];
+    const requesterDocuments = this.toRequesterDocuments(
+      order.requesterDocUrls,
+      serviceRequiredDocuments,
+    );
+
     return {
       id: order.id,
       orderNumber: order.orderNumber,
@@ -4463,7 +4973,8 @@ export class OrdersService {
       platformFee: order.platformFee.toString(),
       cbtCommission: order.cbtCommission.toString(),
       submittedData: this.toStringRecord(order.submittedData),
-      requesterDocUrls: this.toStringArray(order.requesterDocUrls),
+      requesterDocuments,
+      requesterDocUrls: requesterDocuments.map((document) => document.url),
       resultFileUrl: this.buildResultFileAccessUrl(order.id, order.resultFileUrl),
       resultUploadedAt: order.resultUploadedAt,
       escrowReleasedAt: order.escrowReleasedAt,
@@ -4546,7 +5057,21 @@ export class OrdersService {
         id: true,
         role: true,
         cbtProfile: {
-          select: { centerName: true, approvalStatus: true },
+          select: {
+            centerName: true,
+            approvalStatus: true,
+            serviceCategoryAssignments: {
+              select: {
+                serviceCategory: {
+                  select: {
+                    id: true,
+                    name: true,
+                    slug: true,
+                  },
+                },
+              },
+            },
+          },
         },
         cbtStaffProfile: {
           select: {
@@ -4554,7 +5079,21 @@ export class OrdersService {
             cbt: {
               select: {
                 cbtProfile: {
-                  select: { centerName: true, approvalStatus: true },
+                  select: {
+                    centerName: true,
+                    approvalStatus: true,
+                    serviceCategoryAssignments: {
+                      select: {
+                        serviceCategory: {
+                          select: {
+                            id: true,
+                            name: true,
+                            slug: true,
+                          },
+                        },
+                      },
+                    },
+                  },
                 },
               },
             },
@@ -4590,6 +5129,36 @@ export class OrdersService {
     }
 
     return user;
+  }
+
+  private getSupportedCbtServiceCategorySlugs(user: {
+    cbtProfile?: {
+      serviceCategoryAssignments?: Array<{
+        serviceCategory: {
+          slug: string;
+        };
+      }>;
+    } | null;
+  }) {
+    return Array.from(
+      new Set(
+        (user.cbtProfile?.serviceCategoryAssignments ?? [])
+          .map((assignment) => assignment.serviceCategory.slug.trim())
+          .filter(Boolean),
+      ),
+    );
+  }
+
+  private buildSupportedCbtCategoryWhere(categorySlugs: string[]) {
+    return {
+      service: {
+        category: {
+          slug: {
+            in: categorySlugs,
+          },
+        },
+      },
+    } satisfies Prisma.OrderWhereInput;
   }
 
   private toStringRecord(value: Prisma.JsonValue): Record<string, string> {
