@@ -1,6 +1,10 @@
 import Link from 'next/link';
 import { UserRole } from '@zendocx/types';
 import { RegistrationForm } from '@/components/auth/registration-form';
+import {
+  appendTenantContextToPath,
+  resolveTenantSlugForRequest,
+} from '@/lib/tenant-runtime';
 
 export default function RegisterCbtPage() {
   return (
@@ -11,7 +15,13 @@ export default function RegisterCbtPage() {
       footer={
         <>
           Need a regular account instead?{' '}
-          <Link href="/register" className="font-semibold text-[#0D1B3E] hover:text-[#132754]">
+          <Link
+            href={appendTenantContextToPath(
+              '/register',
+              resolveTenantSlugForRequest(),
+            )}
+            className="font-semibold text-[#0D1B3E] hover:text-[#132754]"
+          >
             Create an individual account
           </Link>
         </>

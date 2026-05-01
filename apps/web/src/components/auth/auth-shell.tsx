@@ -69,16 +69,16 @@ export function AuthShell({
       ]
     : [
         {
-          title: 'Regular user access',
+          title: 'Tenant user access',
           description:
-            'Create or use a normal account for services, orders, and wallet activity.',
+            'Create or use an account that belongs to this business portal for services, orders, and wallet activity.',
           href: '/register',
           icon: UserRound,
         },
         {
           title: 'CBT center access',
           description:
-            'Create a fulfillment account and complete the center approval flow.',
+            'Create a CBT account for this business portal and complete the center approval flow.',
           href: '/register/cbt',
           icon: FileCheck2,
         },
@@ -125,7 +125,7 @@ export function AuthShell({
               <p className="max-w-lg text-base leading-8 text-slate-300">
                 {isPlatformVariant
                   ? 'Platform owners use this shared sign-in point to reach the admin dashboard. Tenant users should stay on their organization portal.'
-                  : 'Sign in to continue, or choose the account path that matches how you use the portal.'}
+                  : 'Sign in to continue inside this business portal, or choose the account path that matches how you use this tenant workspace.'}
               </p>
             </div>
 
@@ -227,7 +227,7 @@ export function AuthShell({
                 href={authHomeHref}
                 className="inline-flex items-center gap-2 rounded-full border border-brand-line bg-brand-surface px-3 py-2 text-xs font-semibold text-brand-ink transition hover:bg-white"
               >
-                Back home
+                {isPlatformVariant ? 'Platform access' : 'Back to portal'}
                 <ArrowRight size={14} />
               </Link>
             </div>

@@ -1213,14 +1213,15 @@ export function TenantBusinessIntegrationsWorkspace() {
       </div>
 
       {configModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0D1B3E]/55 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-2xl rounded-[2rem] border border-slate-200 bg-white shadow-2xl">
-            <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-[#0D1B3E]/55 p-3 backdrop-blur-sm sm:p-4">
+          <div className="flex min-h-full items-start justify-center sm:items-center">
+            <div className="my-2 flex max-h-[calc(100vh-1rem)] w-full max-w-2xl flex-col overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-2xl sm:my-4 sm:max-h-[calc(100vh-2rem)]">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-4 py-4 sm:px-6 sm:py-5">
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-400">
                   API configuration
                 </p>
-                <h3 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
+                <h3 className="mt-2 text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">
                   {selectedServiceName
                     ? `API connection for ${selectedServiceName}`
                     : 'Business API connection'}
@@ -1240,7 +1241,7 @@ export function TenantBusinessIntegrationsWorkspace() {
               </button>
             </div>
 
-            <div className="space-y-5 px-6 py-6">
+            <div className="space-y-5 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
               <div className="grid gap-4 md:grid-cols-2">
                 <label className="space-y-2">
                   <span className="text-sm font-semibold text-slate-800">
@@ -1335,52 +1336,55 @@ export function TenantBusinessIntegrationsWorkspace() {
               </div>
             </div>
 
-            <div className="flex flex-col gap-3 border-t border-slate-100 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                {isTenantOverride ? (
+            <div className="border-t border-slate-100 bg-white px-4 py-4 sm:px-6 sm:py-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  {isTenantOverride ? (
+                    <button
+                      type="button"
+                      onClick={restorePlatformDefault}
+                      disabled={updateConfig.isPending}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-700 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                    >
+                      <Unplug size={16} />
+                      Use Zendocx default instead
+                    </button>
+                  ) : (
+                    <p className="text-sm text-slate-500">
+                      Leave this blank if the Zendocx default connection is enough for this business.
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                   <button
                     type="button"
-                    onClick={restorePlatformDefault}
-                    disabled={updateConfig.isPending}
-                    className="inline-flex items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-700 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    onClick={closeConfigModal}
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 sm:w-auto"
                   >
-                    <Unplug size={16} />
-                    Use Zendocx default instead
+                    Cancel
                   </button>
-                ) : (
-                  <p className="text-sm text-slate-500">
-                    Leave this blank if the Zendocx default connection is enough for this business.
-                  </p>
-                )}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      saveDraft({
+                        configValue: configJson,
+                        closeAfterSave: true,
+                      })
+                    }
+                    disabled={updateConfig.isPending}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#0D1B3E] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#132754] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                  >
+                    {updateConfig.isPending ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      <Settings2 size={16} />
+                    )}
+                    Save API connection
+                  </button>
+                </div>
               </div>
-
-              <div className="flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={closeConfigModal}
-                  className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    saveDraft({
-                      configValue: configJson,
-                      closeAfterSave: true,
-                    })
-                  }
-                  disabled={updateConfig.isPending}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-[#0D1B3E] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#132754] disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {updateConfig.isPending ? (
-                    <Loader2 size={16} className="animate-spin" />
-                  ) : (
-                    <Settings2 size={16} />
-                  )}
-                  Save API connection
-                </button>
-              </div>
+            </div>
             </div>
           </div>
         </div>
