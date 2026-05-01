@@ -31,9 +31,12 @@ export function proxy(request: NextRequest) {
   const hostTenantSlug = resolveTenantSlugFromHost(
     request.headers.get('host') ?? '',
   );
+  const storedTenantSlug =
+    request.cookies.get('zendocx-tenant-slug')?.value || '';
+  const entryTenantSlug = explicitTenantSlug || hostTenantSlug || '';
   const tenantSlug =
     explicitTenantSlug ||
-    request.cookies.get('zendocx-tenant-slug')?.value ||
+    storedTenantSlug ||
     hostTenantSlug ||
     '';
   const refreshToken = request.cookies.get('refresh_token')?.value;
@@ -67,9 +70,9 @@ export function proxy(request: NextRequest) {
 
   if (pathname === '/') {
     const entryUrl = new URL(
-      tenantSlug
-        ? `/login?tenant=${encodeURIComponent(tenantSlug)}`
-        : '/platform',
+      entryTenantSlug
+        ? `/login?tenant=${encodeURIComponent(entryTenantSlug)}`
+        : '/access-required',
       request.url,
     );
     return persistTenantCookie(NextResponse.redirect(entryUrl));
@@ -77,31 +80,31 @@ export function proxy(request: NextRequest) {
 
   if (
     pathname === '/login' &&
-    !tenantSlug
+    !entryTenantSlug
   ) {
     return persistTenantCookie(
-      NextResponse.redirect(new URL('/platform', request.url)),
+      NextResponse.redirect(new URL('/access-required?reason=tenant-link', request.url)),
     );
   }
 
   if (
     pathname.startsWith('/register') &&
-    !tenantSlug
+    !entryTenantSlug
   ) {
     return persistTenantCookie(
-      NextResponse.redirect(new URL('/platform', request.url)),
+      NextResponse.redirect(new URL('/access-required?reason=tenant-link', request.url)),
     );
   }
 
   if (
-    tenantSlug &&
+    entryTenantSlug &&
     (pathname === '/platform' ||
       pathname === '/platform/login' ||
       pathname === '/admin')
   ) {
     return persistTenantCookie(
       NextResponse.redirect(
-        new URL(`/login?tenant=${encodeURIComponent(tenantSlug)}`, request.url),
+        new URL('/access-required?reason=platform-link', request.url),
       ),
     );
   }
@@ -110,16 +113,16 @@ export function proxy(request: NextRequest) {
     const redirectTarget = `${pathname}${search}`;
 
     if (pathname.startsWith('/admin')) {
-      const platformUrl = new URL('/platform', request.url);
-      if (redirectTarget !== '/admin') {
-        platformUrl.searchParams.set('next', redirectTarget);
-      }
-      return persistTenantCookie(NextResponse.redirect(platformUrl));
+      const accessRequiredUrl = new URL('/access-required', request.url);
+      accessRequiredUrl.searchParams.set('reason', 'platform-link');
+      return persistTenantCookie(NextResponse.redirect(accessRequiredUrl));
     }
 
     if (!tenantSlug) {
       return persistTenantCookie(
-        NextResponse.redirect(new URL('/platform', request.url)),
+        NextResponse.redirect(
+          new URL('/access-required?reason=tenant-link', request.url),
+        ),
       );
     }
 

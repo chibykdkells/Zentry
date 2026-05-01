@@ -38,5 +38,5 @@ export default async function Home({
     redirect(`/login?tenant=${encodeURIComponent(tenantSlug)}`);
   }
 
-  redirect('/platform');
+  redirect('/access-required');
 }

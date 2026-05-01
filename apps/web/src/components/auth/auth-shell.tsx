@@ -39,9 +39,11 @@ export function AuthShell({
   const brandInitial = brandName.charAt(0).toUpperCase();
   const isPlatformVariant = variant === 'platform';
   const tenantSlug = resolvedTenant?.slug ?? null;
-  const authHomeHref = tenantSlug
-    ? appendTenantContextToPath('/login', tenantSlug)
-    : '/';
+  const authHomeHref = isPlatformVariant
+    ? '/platform'
+    : tenantSlug
+      ? appendTenantContextToPath('/login', tenantSlug)
+      : '/access-required';
 
   const accessHighlights = [
     'Role-aware routing',
@@ -61,8 +63,7 @@ export function AuthShell({
         {
           title: 'Tenant user access',
           description:
-            'End users, CBT centers, and tenant teams should sign in through the branded portal URL shared by their organization.',
-          href: '/',
+            'End users, CBT centers, and tenant teams should only sign in through the exact portal URL shared by their organization.',
           icon: Building2,
         },
       ]
@@ -131,13 +132,8 @@ export function AuthShell({
             <div className="mt-10 grid gap-3">
               {entryCards.map((item) => {
                 const Icon = item.icon;
-
-                return (
-                  <Link
-                    key={item.href}
-                    href={appendTenantContextToPath(item.href, tenantSlug)}
-                    className="group flex items-start gap-3 rounded-[1.6rem] border border-white/10 bg-white/6 px-4 py-4 transition hover:border-white/20 hover:bg-white/10"
-                  >
+                const cardBody = (
+                  <>
                     <div className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/10">
                       <Icon size={18} className="text-brand-accent" />
                     </div>
@@ -147,10 +143,33 @@ export function AuthShell({
                         {item.description}
                       </p>
                     </div>
-                    <ArrowRight
-                      size={16}
-                      className="mt-1 shrink-0 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-white"
-                    />
+                    {item.href ? (
+                      <ArrowRight
+                        size={16}
+                        className="mt-1 shrink-0 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-white"
+                      />
+                    ) : null}
+                  </>
+                );
+
+                if (!item.href) {
+                  return (
+                    <div
+                      key={item.title}
+                      className="flex items-start gap-3 rounded-[1.6rem] border border-white/10 bg-white/6 px-4 py-4"
+                    >
+                      {cardBody}
+                    </div>
+                  );
+                }
+
+                return (
+                  <Link
+                    key={item.href}
+                    href={appendTenantContextToPath(item.href, tenantSlug)}
+                    className="group flex items-start gap-3 rounded-[1.6rem] border border-white/10 bg-white/6 px-4 py-4 transition hover:border-white/20 hover:bg-white/10"
+                  >
+                    {cardBody}
                   </Link>
                 );
               })}
