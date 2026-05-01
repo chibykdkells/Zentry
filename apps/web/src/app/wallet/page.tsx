@@ -249,31 +249,9 @@ export default function WalletPage() {
               ? 'Business wallet'
               : isPlatformOwner
                 ? 'Platform wallet'
-                : 'Wallet workspace'
+              : 'Wallet workspace'
           }
           description={walletHeroDescription}
-          actions={
-            <>
-              {canTryOnlineFunding ? (
-                <button
-                  type="button"
-                  onClick={() => setFundingOpen(true)}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-brand-button px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand-button-strong"
-                >
-                  <WalletIcon size={16} />
-                  Fund wallet
-                </button>
-              ) : null}
-              {canRequestWithdrawal ? (
-                <a
-                  href="#withdrawals"
-                  className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-white"
-                >
-                  Withdraw money
-                </a>
-              ) : null}
-            </>
-          }
         />
 
         {confirmingSandboxFunding ? (
@@ -290,6 +268,18 @@ export default function WalletPage() {
             className="min-h-[18rem]"
             onFundClick={canTryOnlineFunding ? () => setFundingOpen(true) : undefined}
             actionLabel="Fund wallet"
+            secondaryAction={
+              canRequestWithdrawal
+                ? {
+                    label: 'Withdraw money',
+                    icon: 'withdraw',
+                    onClick: () => {
+                      const section = document.getElementById('withdrawals');
+                      section?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    },
+                  }
+                : undefined
+            }
           />
           <AccountPanel
             title="What you can do now"

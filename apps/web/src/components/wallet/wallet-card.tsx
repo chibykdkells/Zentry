@@ -1,15 +1,22 @@
 'use client';
 
 import { useState } from 'react';
-import { Eye, EyeOff, CreditCard } from 'lucide-react';
+import { CreditCard, Eye, EyeOff, Landmark } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatNaira } from '@/lib/format';
+
+interface WalletCardAction {
+  label: string;
+  onClick?: () => void;
+  icon?: 'fund' | 'withdraw';
+}
 
 interface WalletCardProps {
   availableBalance: string; // kobo as string from API
   escrowBalance?: string;
   onFundClick?: () => void;
   actionLabel?: string;
+  secondaryAction?: WalletCardAction;
   className?: string;
 }
 
@@ -18,10 +25,12 @@ export function WalletCard({
   escrowBalance,
   onFundClick,
   actionLabel = 'Add money',
+  secondaryAction,
   className,
 }: WalletCardProps) {
   const [hidden, setHidden] = useState(false);
   const canFund = typeof onFundClick === 'function';
+  const canUseSecondary = typeof secondaryAction?.onClick === 'function';
 
   return (
     <div
@@ -62,21 +71,44 @@ export function WalletCard({
           )}
         </div>
 
-        <button
-          type="button"
-          onClick={onFundClick}
-          disabled={!canFund}
-          className={cn(
-            'flex min-h-11 items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold',
-            canFund
-              ? 'bg-brand-accent hover:bg-brand-accent/90 text-white transition-colors'
-              : 'bg-white/10 text-slate-300 cursor-not-allowed',
-            'active:scale-95 duration-150',
-          )}
-        >
-          <CreditCard size={16} />
-          {actionLabel}
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={onFundClick}
+            disabled={!canFund}
+            className={cn(
+              'flex min-h-11 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold',
+              canFund
+                ? 'bg-brand-accent text-white transition-colors hover:bg-brand-accent/90'
+                : 'cursor-not-allowed bg-white/10 text-slate-300',
+              'active:scale-95 duration-150',
+            )}
+          >
+            <CreditCard size={16} />
+            {actionLabel}
+          </button>
+
+          {secondaryAction ? (
+            <button
+              type="button"
+              onClick={secondaryAction.onClick}
+              disabled={!canUseSecondary}
+              className={cn(
+                'flex min-h-11 items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-colors',
+                canUseSecondary
+                  ? 'border-white/20 bg-white/8 text-white hover:bg-white/14'
+                  : 'cursor-not-allowed border-white/10 bg-white/5 text-slate-400',
+              )}
+            >
+              {secondaryAction.icon === 'withdraw' ? (
+                <Landmark size={16} />
+              ) : (
+                <CreditCard size={16} />
+              )}
+              {secondaryAction.label}
+            </button>
+          ) : null}
+        </div>
       </div>
     </div>
   );
