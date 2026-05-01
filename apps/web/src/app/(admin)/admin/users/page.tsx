@@ -8,7 +8,6 @@ import { UserRole } from '@zendocx/types';
 import { AccountPanel } from '@/components/shared/account-panel';
 import { EmptyState } from '@/components/shared/empty-state';
 import { FeedbackBanner } from '@/components/shared/feedback-banner';
-import { InfoHint } from '@/components/shared/info-hint';
 import { PageHero } from '@/components/shared/page-hero';
 import { SkeletonBlock } from '@/components/shared/skeleton-loader';
 import {
@@ -143,9 +142,9 @@ export default function AdminUsersPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-8">
       <PageHero
-        eyebrow="Business and user control"
-        title="See every business on the platform and the people inside each one"
-        description="This workspace gives the platform admin a live view of businesses, tenant users, and signup routes instead of a generic placeholder."
+        eyebrow="Business Access"
+        title="Create businesses, share links, and manage the people inside them"
+        description="Use this page to open a new business, give its admin access, and check who belongs to each business without switching between multiple tools."
         actions={
           <Link
             href="/admin/dashboard"
@@ -179,8 +178,8 @@ export default function AdminUsersPage() {
 
       <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
         <AccountPanel
-          title="Create a business portal"
-          description="Create a tenant, then copy a ready-made signup link for individuals or CBT centers."
+          title="Create a business"
+          description="Set up the business and its first admin in one step, then share the right signup links."
           actions={
             <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
               <PlusCircle size={14} />
@@ -221,7 +220,7 @@ export default function AdminUsersPage() {
                   setTenantMessage(
                     {
                       tone: 'success',
-                      message: `Business portal created. Login link: ${buildTenantLoginLink(createdTenant.slug)}. Login email: ${createdAdmin.email}. Temporary password: ${createdAdmin.tempPassword}`,
+                      message: `Business created. Login link: ${buildTenantLoginLink(createdTenant.slug)}. Login email: ${createdAdmin.email}. Temporary password: ${createdAdmin.tempPassword}`,
                     },
                   );
                   setTenantDraft({ name: '', slug: '' });
@@ -236,7 +235,7 @@ export default function AdminUsersPage() {
                     setSelectedTenantId(createdTenant.id);
                     setTenantMessage({
                       tone: 'info',
-                      message: `Business portal created, but the business admin account was not completed. Open the business detail below and provision the business admin there. ${getApiErrorMessage(error, 'The admin account could not be created right now.')}`,
+                      message: `Business created, but the admin account was not completed. Open the business details below and add the admin there. ${getApiErrorMessage(error, 'The admin account could not be created right now.')}`,
                     });
                     return;
                   }
@@ -262,7 +261,7 @@ export default function AdminUsersPage() {
             {createTenant.error ? (
               <FeedbackBanner
                 tone="error"
-                message={String(createTenant.error instanceof Error ? createTenant.error.message : 'Could not create the business portal right now.')}
+                message={String(createTenant.error instanceof Error ? createTenant.error.message : 'Could not create the business right now.')}
               />
             ) : null}
 
@@ -305,7 +304,7 @@ export default function AdminUsersPage() {
 
             <div className="space-y-1 pt-1">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                Business admin access
+                First business admin
               </p>
             </div>
 
@@ -379,7 +378,7 @@ export default function AdminUsersPage() {
             <FeedbackBanner
               tone="info"
               title="What this creates"
-              message="A business portal needs a business admin account. This flow now creates both the tenant shell and the first tenant admin so the business can sign in immediately."
+              message="This creates the business itself and the first business admin, so the business can sign in right away."
             />
 
             <button
@@ -399,43 +398,40 @@ export default function AdminUsersPage() {
               <PlusCircle size={16} />
               {createTenant.isPending || createTenantAdmin.isPending
                 ? 'Creating...'
-                : 'Create business portal'}
+                : 'Create business'}
             </button>
           </form>
         </AccountPanel>
 
         <AccountPanel
-          title="Platform admin guide"
-          description="Use human language so support and rollout decisions are easier to make quickly."
+          title="What you manage here"
+          description="These are the three most common jobs on this page."
         >
           <div className="space-y-4">
             {[
               {
                 title: 'Businesses',
                 description:
-                  'A business is a tenant portal. It contains its own users, jobs, wallet activity, and provider settings.',
+                  'Each business has its own users, wallet activity, service setup, and login links.',
               },
               {
-                title: 'Live users',
+                title: 'People and access',
                 description:
-                  'This means people who currently have an open active session connected through the live socket layer, not just people who have signed in before.',
+                  'Use the business detail panel to copy links, create or reset admin access, and confirm who belongs to that business.',
               },
               {
-                title: 'Held funds',
+                title: 'Balances and support checks',
                 description:
-                  'Held funds are customer payments still waiting for completion, dispute clearance, or release. They are useful during support review.',
+                  'Use the business list to spot available balances, money still on hold, and where support may need to step in.',
               },
             ].map((item) => (
               <div
                 key={item.title}
                 className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4"
               >
-                <div className="flex items-center gap-2">
-                  <h2 className="text-sm font-semibold text-slate-900">
-                    {item.title}
-                  </h2>
-                  <InfoHint text={item.description} />
-                </div>
+                <h2 className="text-sm font-semibold text-slate-900">
+                  {item.title}
+                </h2>
                 <p className="mt-2 text-sm leading-6 text-slate-500">
                   {item.description}
                 </p>
@@ -447,8 +443,8 @@ export default function AdminUsersPage() {
 
       <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
         <AccountPanel
-          title="Businesses on the platform"
-          description="Click a business to see its user mix, wallet exposure, and ready-to-share signup links."
+          title="Businesses"
+          description="Pick a business to see its people, access links, and money snapshot."
           contentClassName="space-y-4"
         >
           <label className="block">
@@ -551,11 +547,11 @@ export default function AdminUsersPage() {
                           value={String(tenant.metrics.totalTransactions)}
                         />
                         <TenantMiniMetric
-                          label="Held funds"
+                          label="On hold"
                           value={formatNaira(tenant.metrics.heldFunds)}
                         />
                         <TenantMiniMetric
-                          label="Available"
+                          label="Ready now"
                           value={formatNaira(tenant.metrics.availableBalance)}
                         />
                       </div>
@@ -567,7 +563,7 @@ export default function AdminUsersPage() {
           ) : (
             <EmptyState
               title="No businesses found"
-              message="Create a business portal first, then the people and activity inside it will become visible here."
+              message="Create a business first, then its people and activity will appear here."
               icon={Building2}
             />
           )}
@@ -575,12 +571,12 @@ export default function AdminUsersPage() {
 
         <AccountPanel
           title={
-            selectedTenant ? `${selectedTenant.name} at a glance` : 'Business detail'
+            selectedTenant ? `${selectedTenant.name} overview` : 'Business overview'
           }
           description={
             selectedTenant
-              ? 'See the business breakdown and the people inside this tenant.'
-              : 'Choose a business from the list to inspect its users and signup routes.'
+              ? 'See this business’s links, admin access, and people in one place.'
+              : 'Choose a business from the list to inspect its people and access links.'
           }
           contentClassName="space-y-4"
         >
@@ -588,19 +584,19 @@ export default function AdminUsersPage() {
             <>
               <div className="grid gap-3 md:grid-cols-2">
                 <TenantDetailCard
-                  label="Individual signup link"
+                  label="User signup link"
                   value={`${origin}${selectedTenant.signupLinks.individual}`}
                   actionLabel="Copy"
                   onAction={() => void copyLink(selectedTenant.signupLinks.individual)}
                 />
                 <TenantDetailCard
-                  label="CBT signup link"
+                  label="CBT center signup link"
                   value={`${origin}${selectedTenant.signupLinks.cbt}`}
                   actionLabel="Copy"
                   onAction={() => void copyLink(selectedTenant.signupLinks.cbt)}
                 />
                 <TenantDetailCard
-                  label="Business admin login"
+                  label="Admin login link"
                   value={buildTenantLoginLink(selectedTenant.slug)}
                   actionLabel="Copy"
                   onAction={() =>
@@ -610,7 +606,7 @@ export default function AdminUsersPage() {
                   }
                 />
                 <TenantDetailCard
-                  label="Business admins"
+                  label="Admin accounts"
                   value={
                     selectedTenant.metrics.tenantAdmins === 1
                       ? '1 business admin account'
@@ -620,14 +616,11 @@ export default function AdminUsersPage() {
               </div>
 
               <div className="rounded-[1.5rem] border border-slate-100 bg-slate-50/70 p-4">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-sm font-semibold text-slate-900">
-                    Saved business admin access
-                  </h2>
-                  <InfoHint text="These access cards stay visible for platform admin until you remove them. You can also reset the password to generate a fresh temporary password for the same business admin." />
-                </div>
+                <h2 className="text-sm font-semibold text-slate-900">
+                  Saved admin sign-in details
+                </h2>
                 <p className="mt-2 text-sm leading-6 text-slate-500">
-                  Keep these details only as long as support needs them. Remove them after handoff, or reset the password if the business admin needs a fresh temporary access.
+                  Keep these details only while support needs them. Remove them after handoff, or reset the password if the admin needs a fresh temporary sign-in.
                 </p>
 
                 {selectedTenant.tenantAdminAccesses.length ? (
@@ -750,7 +743,7 @@ export default function AdminUsersPage() {
                                   accessId: access.id,
                                 })
                                 .then(() => {
-                                  toast.success('Saved business admin access removed.');
+                                  toast.success('Saved admin sign-in details removed.');
                                 })
                                 .catch((error) => {
                                   toast.error(
@@ -766,7 +759,7 @@ export default function AdminUsersPage() {
                           >
                             {dismissTenantAdminAccess.isPending
                               ? 'Removing...'
-                              : 'Remove saved access'}
+                              : 'Remove saved details'}
                           </button>
                         </div>
                       </div>
@@ -774,20 +767,17 @@ export default function AdminUsersPage() {
                   </div>
                 ) : (
                   <p className="mt-4 text-sm text-slate-500">
-                    No saved business admin access is visible for this business right now.
+                    No saved admin sign-in details are visible for this business right now.
                   </p>
                 )}
               </div>
 
               <div className="rounded-[1.5rem] border border-slate-100 bg-slate-50/70 p-4">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-sm font-semibold text-slate-900">
-                    Provision business admin
-                  </h2>
-                  <InfoHint text="Use this when a business portal already exists but still needs a business admin login, or when you want to add another business admin account." />
-                </div>
+                <h2 className="text-sm font-semibold text-slate-900">
+                  Add another business admin
+                </h2>
                 <p className="mt-2 text-sm leading-6 text-slate-500">
-                  This creates a tenant-admin account and returns a temporary password that should be shared securely.
+                  This creates another admin account for the business and returns a temporary password that should be shared securely.
                 </p>
 
                 {tenantAdminMessage ? (
@@ -887,18 +877,15 @@ export default function AdminUsersPage() {
                 >
                   <PlusCircle size={16} />
                   {createTenantAdmin.isPending
-                    ? 'Creating business admin...'
-                    : 'Create business admin'}
+                    ? 'Adding business admin...'
+                    : 'Add business admin'}
                 </button>
               </div>
 
               <div className="rounded-[1.5rem] border border-slate-100 bg-slate-50/70 p-4">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-sm font-semibold text-slate-900">
-                    People inside this business
-                  </h2>
-                  <InfoHint text="Use this view when support needs to confirm whether an account belongs to the correct business portal and role." />
-                </div>
+                <h2 className="text-sm font-semibold text-slate-900">
+                  People in this business
+                </h2>
                 <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_180px_auto]">
                   <input
                     value={userSearchInput}
@@ -929,7 +916,7 @@ export default function AdminUsersPage() {
 
               {tenantUsersError ? (
                 <EmptyState
-                  title="Tenant users unavailable"
+                  title="People list unavailable"
                   message={tenantUsersError}
                   icon={Users}
                   action={
@@ -1071,7 +1058,7 @@ export default function AdminUsersPage() {
                 </div>
               ) : (
                 <EmptyState
-                  title="No matching users found"
+                  title="No people matched"
                   message="Adjust the search or role filter to see more people in this business."
                   icon={Users}
                 />
@@ -1080,7 +1067,7 @@ export default function AdminUsersPage() {
           ) : (
             <EmptyState
               title="Choose a business"
-              message="Pick a business from the list to inspect its people, balances, and share links."
+              message="Pick a business from the list to inspect its people, admin access, and share links."
               icon={Building2}
             />
           )}

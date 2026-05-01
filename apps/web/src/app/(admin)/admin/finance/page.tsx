@@ -7,7 +7,6 @@ import { TransactionStatus, TransactionType, UserRole } from '@zendocx/types';
 import { AdminWithdrawalReview } from '@/components/admin/admin-withdrawal-review';
 import { AccountPanel } from '@/components/shared/account-panel';
 import { EmptyState } from '@/components/shared/empty-state';
-import { InfoHint } from '@/components/shared/info-hint';
 import { PageHero } from '@/components/shared/page-hero';
 import { ScrollCardBody } from '@/components/shared/scroll-card-body';
 import { useAdminWalletTransactions } from '@/hooks/use-admin-wallet-transactions';
@@ -18,7 +17,6 @@ import {
 } from '@/hooks/use-admin-wallets';
 import { usePlatformAdminTenants } from '@/hooks/use-platform-admin-tenants';
 import { WithdrawalRequestForm } from '@/components/wallet/withdrawal-request-form';
-import { adminFinanceSections } from '@/lib/admin-content';
 import { formatDate, formatNaira, formatTimeUntil } from '@/lib/format';
 
 const ALL_ROLE_FILTER = 'ALL';
@@ -160,9 +158,9 @@ export default function AdminFinancePage() {
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 md:flex md:h-full md:flex-col md:overflow-hidden md:p-8">
       <PageHero
-        eyebrow="Admin Finance"
-        title="Track platform money, tenant exposure, and withdrawal activity"
-        description="See platform earnings alongside customer balances, held funds, and withdrawal requests that still need review."
+        eyebrow="Finance Control"
+        title="See what money is ready, locked, or waiting for payout"
+        description="Use this page to separate Zendocx earnings from customer money, check which businesses still hold funds, and review payout activity without translating internal finance terms."
         actions={
           <Link
             href="/admin/dashboard"
@@ -203,11 +201,30 @@ export default function AdminFinancePage() {
 
       <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
         <AccountPanel
-          title="Finance guide"
-          description="Keep the money language simple so support review and payout decisions are easier to understand."
+          title="What to watch first"
+          description="These three checks answer most support and payout questions quickly."
         >
           <div className="space-y-4">
-            {adminFinanceSections.map((item) => (
+            {[
+              {
+                title: 'Money ready now',
+                description:
+                  'This is money that can be used or moved right away. It excludes funds that are still locked or under review.',
+                icon: Wallet,
+              },
+              {
+                title: 'Money still on hold',
+                description:
+                  'This is customer money waiting on service completion, dispute clearance, or release. It is not lost, but it is not free to use yet.',
+                icon: ShieldCheck,
+              },
+              {
+                title: 'Payouts to review',
+                description:
+                  'Use the withdrawal and CBT payout sections below to see what can leave the platform now and what is still blocked.',
+                icon: LineChart,
+              },
+            ].map((item) => (
               <div
                 key={item.title}
                 className="flex gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 p-4"
@@ -229,8 +246,8 @@ export default function AdminFinancePage() {
         </AccountPanel>
 
         <AccountPanel
-          title="Platform wallet totals"
-          description="These totals separate true platform earnings from the wider wallet balances and held customer funds moving across the platform."
+          title="Money summary"
+          description="This separates customer balances, held money, Zendocx earnings, and payout history in one view."
         >
           {error || !overview ? (
             <div className="rounded-[1.5rem] border border-slate-100 bg-slate-50">
@@ -259,43 +276,43 @@ export default function AdminFinancePage() {
           ) : (
             <div className="space-y-3">
               <FinanceRow
-                label="Total wallets"
+                label="Wallets on platform"
                 value={overview.totalWallets.toString()}
               />
               <FinanceRow
-                label="Wallets with balances or earnings"
+                label="Wallets holding money"
                 value={overview.fundedWallets.toString()}
               />
               <FinanceRow
-                label="Pending funding references"
+                label="Funding attempts still pending"
                 value={overview.pendingFundingCount.toString()}
               />
               <FinanceRow
-                label="Available across all wallets"
+                label="Money ready now"
                 value={formatNaira(overview.totalAvailableBalance)}
               />
               <FinanceRow
-                label="Total held funds"
+                label="Money still on hold"
                 value={formatNaira(overview.totalEscrowBalance)}
               />
               <FinanceRow
-                label="Total withdrawn"
+                label="Money already paid out"
                 value={formatNaira(overview.totalWithdrawn)}
               />
               <FinanceRow
-                label="Platform earnings"
+                label="Zendocx earnings"
                 value={formatNaira(overview.platformCommissionVolume)}
               />
               <FinanceRow
-                label="CBT payout volume"
+                label="CBT earnings released"
                 value={formatNaira(overview.cbtCommissionVolume)}
               />
               <FinanceRow
-                label="Withdrawal volume"
+                label="Withdrawal requests total"
                 value={formatNaira(overview.withdrawalVolume)}
               />
               <FinanceRow
-                label="Refund volume"
+                label="Refunds returned"
                 value={formatNaira(overview.refundVolume)}
               />
             </div>
@@ -305,12 +322,11 @@ export default function AdminFinancePage() {
 
       <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
         <AccountPanel
-          title="Held funds by business"
-          description="Use this support view when you need to confirm which business portals currently have customer money still on hold."
+          title="Businesses with money on hold"
+          description="Use this when support needs to confirm where customer money is still waiting to clear."
         >
-          <div className="flex items-center gap-2 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3 text-sm text-slate-500">
-            <InfoHint text="Held funds are payments that are still waiting for service completion, dispute clearance, or release." />
-            This is the business-by-business support view of funds still on hold.
+          <div className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3 text-sm text-slate-500">
+            Each amount here belongs to a business that is still holding customer money because a service or dispute flow is not finished yet.
           </div>
           {(overview?.heldFundsByTenant?.length ?? 0) ? (
             <div className="mt-4 space-y-3">
@@ -341,16 +357,16 @@ export default function AdminFinancePage() {
         </AccountPanel>
 
         <AccountPanel
-          title="Platform owner withdrawal request"
-          description="If the platform owner needs to move platform earnings out, this request will reserve the amount and add it to the ledger for review."
+          title="Move Zendocx earnings out"
+          description="Use this when the platform owner needs to withdraw money that already belongs to Zendocx."
         >
           <WithdrawalRequestForm />
         </AccountPanel>
       </div>
 
       <AccountPanel
-        title="CBT earnings visibility"
-        description="Separate what has already been released from what is still waiting on the dispute window or blocked by disputes."
+        title="CBT payout readiness"
+        description="See what has already cleared, what is almost ready, and what is still blocked."
       >
         {cbtEarningsError ? (
           <div className="rounded-[1.5rem] border border-slate-100 bg-slate-50">
@@ -385,25 +401,25 @@ export default function AdminFinancePage() {
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
               <FinanceRow
-                label="Released CBT commission volume"
+                label="CBT earnings already released"
                 value={formatNaira(
                   cbtEarningsOverview.summary.releasedCommissionVolume,
                 )}
               />
               <FinanceRow
-                label="Total CBT withdrawable balance"
+                label="CBT money ready to withdraw"
                 value={formatNaira(
                   cbtEarningsOverview.summary.totalCbtWithdrawableBalance,
                 )}
               />
               <FinanceRow
-                label="Awaiting release"
+                label="Still waiting"
                 value={`${formatNaira(
                   cbtEarningsOverview.summary.awaitingReleaseAmount,
                 )} · ${cbtEarningsOverview.summary.awaitingReleaseCount} job(s)`}
               />
               <FinanceRow
-                label="Ready for release"
+                label="Ready to release"
                 value={`${formatNaira(
                   cbtEarningsOverview.summary.readyReleaseAmount,
                 )} · ${cbtEarningsOverview.summary.readyReleaseCount} job(s)`}
@@ -415,19 +431,19 @@ export default function AdminFinancePage() {
                 )} · ${cbtEarningsOverview.summary.blockedReleaseCount} job(s)`}
               />
               <FinanceRow
-                label="Released commission entries"
+                label="Release entries"
                 value={cbtEarningsOverview.summary.releasedCommissionCount.toString()}
               />
             </div>
 
             <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
               <FinanceQueueBlock
-                title="Ready release queue"
+                title="Ready to release"
                 items={cbtEarningsOverview.queue.ready}
                 emptyMessage="No completed CBT work is waiting to be released right now."
               />
               <FinanceQueueBlock
-                title="Blocked release queue"
+                title="Blocked by dispute"
                 items={cbtEarningsOverview.queue.blocked}
                 emptyMessage="No disputed CBT payouts are blocking release right now."
               />
@@ -438,8 +454,8 @@ export default function AdminFinancePage() {
 
       <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
         <AccountPanel
-          title="Top CBT balances"
-          description="See which operators currently hold the largest released balances and lifetime earnings."
+          title="CBT balances"
+          description="See which CBT operators currently hold the largest ready balance and lifetime earnings."
         >
           {cbtEarningsLoading || !cbtEarningsOverview ? (
             <div className="space-y-3">
@@ -495,8 +511,8 @@ export default function AdminFinancePage() {
         </AccountPanel>
 
         <AccountPanel
-          title="Recent released CBT commissions"
-          description="Track the latest released commission entries together with the operator and service involved."
+          title="Latest CBT payouts released"
+          description="Track the most recent CBT release entries together with the operator and service involved."
         >
           {cbtEarningsLoading || !cbtEarningsOverview ? (
             <div className="space-y-3">
@@ -548,8 +564,8 @@ export default function AdminFinancePage() {
       </div>
 
       <AccountPanel
-        title="User wallets"
-        description="Search and filter wallet records across the platform so finance review can quickly spot where balance is sitting and which roles are generating activity."
+        title="Wallets by person"
+        description="Search and filter wallet records across the platform to see where money is sitting and who is using it."
         contentClassName="space-y-4"
       >
         <div className="grid gap-3 lg:grid-cols-[1.1fr_0.7fr_0.7fr_auto]">
@@ -769,8 +785,8 @@ export default function AdminFinancePage() {
       </AccountPanel>
 
       <AccountPanel
-        title="Platform wallet activity"
-        description="This transaction feed brings funding, held-fund movement, commissions, refunds, and withdrawals into one admin review surface."
+        title="All wallet movement"
+        description="This feed brings funding, held money, commissions, refunds, and withdrawals into one review list."
         contentClassName="space-y-4"
       >
         <div className="grid gap-3 lg:grid-cols-3">
@@ -878,8 +894,8 @@ export default function AdminFinancePage() {
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
           <p className="text-sm text-slate-500">
             {transactionMeta
-              ? `${transactionMeta.total} finance transaction${transactionMeta.total === 1 ? '' : 's'} matched`
-              : 'Loading finance activity...'}
+              ? `${transactionMeta.total} wallet record${transactionMeta.total === 1 ? '' : 's'} matched`
+              : 'Loading wallet activity...'}
           </p>
           <button
             type="button"
@@ -931,8 +947,8 @@ export default function AdminFinancePage() {
           </div>
         ) : transactions.length === 0 ? (
           <EmptyState
-            title="No platform transactions matched"
-            message="Try broadening the filters to see more wallet movement."
+            title="No wallet movement matched"
+            message="Try broadening the filters to see more activity."
             icon={Wallet}
           />
         ) : (
