@@ -68,6 +68,7 @@ export default function HomePage() {
         onFundClick={() =>
           window.location.assign(appendTenantContextToPath('/wallet', tenantSlug))
         }
+        actionLabel="Open wallet"
       />
 
       <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4 md:gap-3">

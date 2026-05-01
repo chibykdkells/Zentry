@@ -1,10 +1,12 @@
 'use client';
 
 import Link from 'next/link';
+import type { ElementType, ReactNode } from 'react';
 import {
   ArrowRight,
   Briefcase,
   Clock3,
+  Settings2,
   ShieldAlert,
   UserRoundCheck,
   Users,
@@ -16,10 +18,16 @@ import { PageHero } from '@/components/shared/page-hero';
 import { SkeletonBlock } from '@/components/shared/skeleton-loader';
 import { StatCard } from '@/components/shared/stat-card';
 import { useTenantOverview } from '@/hooks/use-tenant-admin';
+import {
+  useTenantProviderReadiness,
+  useTenantServiceManagementCatalog,
+} from '@/hooks/use-tenant-services';
 import { formatDate, formatNaira, formatTimeUntil } from '@/lib/format';
 
 export default function TenantDashboardPage() {
   const { overview, loading, error, reload } = useTenantOverview();
+  const { services, loading: servicesLoading } = useTenantServiceManagementCatalog({});
+  const { readiness, loading: readinessLoading } = useTenantProviderReadiness();
 
   if (loading) {
     return (
@@ -53,6 +61,34 @@ export default function TenantDashboardPage() {
       </div>
     );
   }
+
+  const visibleServices = servicesLoading
+    ? '...'
+    : String(services.filter((service) => service.isSelected).length);
+  const automatedServices = servicesLoading
+    ? '...'
+    : String(
+        services.filter((service) => service.deliveryMode === 'API_AUTOMATED').length,
+      );
+  const providerMode = readinessLoading
+    ? 'Checking'
+    : readiness?.vtu.mode === 'live'
+      ? 'Live API'
+      : 'Mock mode';
+  const providerScope = readinessLoading
+    ? 'Connection'
+    : readiness?.scope.effectiveType === 'TENANT'
+      ? 'Business override'
+      : 'Platform default';
+  const providerHealth = readinessLoading
+    ? 'Checking...'
+    : readiness?.vtu.probe.status === 'healthy'
+      ? 'Healthy'
+      : readiness?.vtu.probe.status === 'unreachable'
+        ? 'Unreachable'
+        : readiness?.vtu.probe.status === 'error'
+          ? 'Needs attention'
+          : 'Not checked yet';
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-8">
@@ -92,34 +128,94 @@ export default function TenantDashboardPage() {
       />
 
       <section className="grid gap-4 lg:grid-cols-3">
-        {[
-          {
-            title: 'People in this business',
-            text: `${overview.metrics.individualUsers} customers and ${overview.metrics.cbtUsers} CBT centers are currently inside this tenant.`,
-            tone: 'from-slate-50 to-white',
-          },
-          {
-            title: 'Work in motion',
-            text: `${overview.metrics.activeOrders} active requests are still moving, with ${overview.metrics.disputedOrders} already in dispute.`,
-            tone: 'from-amber-50/70 to-white',
-          },
-          {
-            title: 'Payout pressure',
-            text: `${overview.metrics.readyReleaseCount} ready for payout, ${overview.metrics.awaitingReleaseCount} still waiting, ${overview.metrics.blockedReleaseCount} blocked.`,
-            tone: 'from-emerald-50/70 to-white',
-          },
-        ].map((item) => (
-          <article
-            key={item.title}
-            className={`rounded-[1.5rem] border border-slate-200 bg-gradient-to-br ${item.tone} p-5 shadow-sm`}
-          >
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-              Quick read
-            </p>
-            <h2 className="mt-3 text-base font-semibold text-slate-900">{item.title}</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-500">{item.text}</p>
-          </article>
-        ))}
+        <FocusCard
+          icon={Wallet}
+          eyebrow="Money"
+          title="Wallet and payout state"
+          description="Keep the business balance, held funds, and payout queue visible without leaving the dashboard."
+          tone="from-slate-50 to-white"
+          highlights={[
+            {
+              label: 'Available now',
+              value: formatNaira(overview.metrics.availableBalance),
+            },
+            {
+              label: 'Held funds',
+              value: formatNaira(overview.metrics.heldFunds),
+            },
+            {
+              label: 'Ready for payout',
+              value: String(overview.metrics.readyReleaseCount),
+            },
+          ]}
+          href="/wallet"
+          cta="Open wallet"
+        />
+        <FocusCard
+          icon={Users}
+          eyebrow="People"
+          title="Users and operators"
+          description="See how many customers and CBT centers are inside this business, then jump straight into user management."
+          tone="from-amber-50/70 to-white"
+          highlights={[
+            {
+              label: 'Customers',
+              value: String(overview.metrics.individualUsers),
+            },
+            {
+              label: 'CBT centers',
+              value: String(overview.metrics.cbtUsers),
+            },
+            {
+              label: 'Newest sign-ins',
+              value: String(overview.recentUsers.length),
+            },
+          ]}
+          href="/tenant/users"
+          cta="Manage users"
+        />
+        <FocusCard
+          icon={Settings2}
+          eyebrow="Service setup"
+          title="Catalog and API routing"
+          description="This tenant uses the platform service catalog by default, with the option to hide services or switch automated calls to its own API."
+          tone="from-emerald-50/70 to-white"
+          highlights={[
+            {
+              label: 'Visible services',
+              value: visibleServices,
+            },
+            {
+              label: 'Automated services',
+              value: automatedServices,
+            },
+            {
+              label: 'Connection',
+              value: `${providerScope} • ${providerMode}`,
+            },
+          ]}
+          footer={
+            <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-600">
+              Provider health: <span className="font-semibold text-slate-900">{providerHealth}</span>
+            </div>
+          }
+          actions={
+            <>
+              <Link
+                href="/tenant/services"
+                className="inline-flex items-center justify-center rounded-2xl bg-brand-button px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand-button-strong"
+              >
+                Business services
+              </Link>
+              <Link
+                href="/tenant/providers"
+                className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                API integrations
+              </Link>
+            </>
+          }
+        />
       </section>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -336,6 +432,71 @@ export default function TenantDashboardPage() {
         </AccountPanel>
       </div>
     </div>
+  );
+}
+
+function FocusCard({
+  icon: Icon,
+  eyebrow,
+  title,
+  description,
+  tone,
+  highlights,
+  href,
+  cta,
+  footer,
+  actions,
+}: {
+  icon: ElementType;
+  eyebrow: string;
+  title: string;
+  description: string;
+  tone: string;
+  highlights: Array<{ label: string; value: string }>;
+  href?: string;
+  cta?: string;
+  footer?: ReactNode;
+  actions?: ReactNode;
+}) {
+  return (
+    <article
+      className={`rounded-[1.5rem] border border-slate-200 bg-gradient-to-br ${tone} p-5 shadow-sm`}
+    >
+      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-slate-700 shadow-sm">
+        <Icon size={18} />
+      </div>
+      <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+        {eyebrow}
+      </p>
+      <h2 className="mt-2 text-base font-semibold text-slate-900">{title}</h2>
+      <p className="mt-2 text-sm leading-6 text-slate-500">{description}</p>
+
+      <div className="mt-4 space-y-2.5">
+        {highlights.map((item) => (
+          <div
+            key={item.label}
+            className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white/80 px-4 py-3"
+          >
+            <span className="text-sm text-slate-500">{item.label}</span>
+            <span className="text-sm font-semibold text-slate-900">{item.value}</span>
+          </div>
+        ))}
+      </div>
+
+      {footer ? <div className="mt-4">{footer}</div> : null}
+
+      {actions ? (
+        <div className="mt-4 flex flex-wrap gap-3">{actions}</div>
+      ) : href && cta ? (
+        <Link
+          href={href}
+          className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
+        >
+          {cta}
+          <ArrowRight size={16} />
+        </Link>
+      ) : null}
+    </article>
   );
 }
 
