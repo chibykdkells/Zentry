@@ -71,24 +71,23 @@ export function WalletCard({
           )}
         </div>
 
-        <div className="flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={onFundClick}
-            disabled={!canFund}
-            className={cn(
-              'flex min-h-11 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold',
-              canFund
-                ? 'bg-brand-accent text-white transition-colors hover:bg-brand-accent/90'
-                : 'cursor-not-allowed bg-white/10 text-slate-300',
-              'active:scale-95 duration-150',
-            )}
-          >
-            <CreditCard size={16} />
-            {actionLabel}
-          </button>
+        {canFund || secondaryAction ? (
+          <div className="flex flex-wrap gap-3">
+            {canFund ? (
+              <button
+                type="button"
+                onClick={onFundClick}
+                className={cn(
+                  'flex min-h-11 items-center gap-2 rounded-xl bg-brand-accent px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-accent/90',
+                  'active:scale-95 duration-150',
+                )}
+              >
+                <CreditCard size={16} />
+                {actionLabel}
+              </button>
+            ) : null}
 
-          {secondaryAction ? (
+            {secondaryAction ? (
             <button
               type="button"
               onClick={secondaryAction.onClick}
@@ -107,8 +106,9 @@ export function WalletCard({
               )}
               {secondaryAction.label}
             </button>
-          ) : null}
-        </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </div>
   );
