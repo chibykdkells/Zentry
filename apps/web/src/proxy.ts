@@ -8,10 +8,34 @@ import {
 } from '@/lib/auth-routes';
 import { getRoleFromJwt } from '@/lib/auth-token';
 
+const RESERVED_SUBDOMAINS = new Set(['www', 'api', 'platform', 'admin']);
+
+function resolveTenantSlugFromHost(host: string): string {
+  const hostname = host.split(':')[0].trim().toLowerCase();
+
+  if (!hostname.endsWith('.zendocx.net')) {
+    return '';
+  }
+
+  const slug = hostname.replace(/\.zendocx\.net$/, '');
+  if (!slug || RESERVED_SUBDOMAINS.has(slug)) {
+    return '';
+  }
+
+  return slug;
+}
+
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   const explicitTenantSlug = request.nextUrl.searchParams.get('tenant') ?? '';
-  const tenantSlug = explicitTenantSlug || request.cookies.get('zendocx-tenant-slug')?.value || '';
+  const hostTenantSlug = resolveTenantSlugFromHost(
+    request.headers.get('host') ?? '',
+  );
+  const tenantSlug =
+    explicitTenantSlug ||
+    request.cookies.get('zendocx-tenant-slug')?.value ||
+    hostTenantSlug ||
+    '';
   const refreshToken = request.cookies.get('refresh_token')?.value;
   const role = getRoleFromJwt(refreshToken);
   const persistTenantCookie = (response: NextResponse) => {
@@ -41,14 +65,66 @@ export function proxy(request: NextRequest) {
     return `${url.pathname}${url.search}${url.hash}`;
   };
 
+  if (pathname === '/') {
+    const entryUrl = new URL(
+      tenantSlug
+        ? `/login?tenant=${encodeURIComponent(tenantSlug)}`
+        : '/platform',
+      request.url,
+    );
+    return persistTenantCookie(NextResponse.redirect(entryUrl));
+  }
+
+  if (
+    pathname === '/login' &&
+    !tenantSlug
+  ) {
+    return persistTenantCookie(
+      NextResponse.redirect(new URL('/platform', request.url)),
+    );
+  }
+
+  if (
+    pathname.startsWith('/register') &&
+    !tenantSlug
+  ) {
+    return persistTenantCookie(
+      NextResponse.redirect(new URL('/platform', request.url)),
+    );
+  }
+
+  if (
+    tenantSlug &&
+    (pathname === '/platform' ||
+      pathname === '/platform/login' ||
+      pathname === '/admin')
+  ) {
+    return persistTenantCookie(
+      NextResponse.redirect(
+        new URL(`/login?tenant=${encodeURIComponent(tenantSlug)}`, request.url),
+      ),
+    );
+  }
+
   if (isProtectedRoute(pathname) && !role) {
-    const loginUrl = new URL('/login', request.url);
     const redirectTarget = `${pathname}${search}`;
 
-    if (tenantSlug) {
-      loginUrl.searchParams.set('tenant', tenantSlug);
+    if (pathname.startsWith('/admin')) {
+      const platformUrl = new URL('/platform', request.url);
+      if (redirectTarget !== '/admin') {
+        platformUrl.searchParams.set('next', redirectTarget);
+      }
+      return persistTenantCookie(NextResponse.redirect(platformUrl));
     }
 
+    if (!tenantSlug) {
+      return persistTenantCookie(
+        NextResponse.redirect(new URL('/platform', request.url)),
+      );
+    }
+
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('tenant', tenantSlug);
     if (redirectTarget !== '/login') {
       loginUrl.searchParams.set('next', redirectTarget);
     }
@@ -76,6 +152,7 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
+    '/',
     '/login',
     '/admin',
     '/platform',
