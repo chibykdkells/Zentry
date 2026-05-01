@@ -11,11 +11,13 @@ import {
 import {
   useCreateTenantAdmin,
   useDeleteTenantAdmin,
+  useTenantDomainVerification,
   useTenantOverview,
   useTenantUsers,
   useUpdateTenantAdmin,
   useUpdateTenantSettings,
   useUploadTenantLogo,
+  useVerifyTenantCustomDomain,
 } from '@/hooks/use-tenant-admin';
 import { AccountPanel } from '@/components/shared/account-panel';
 import { FeedbackBanner } from '@/components/shared/feedback-banner';
@@ -74,12 +76,53 @@ const homepageTemplateOptions = [
 ];
 
 const emptyStep = { title: '', description: '' };
+const domainStatusCopy: Record<
+  | 'VERIFIED'
+  | 'READY_TO_VERIFY'
+  | 'DNS_RECORD_NOT_FOUND'
+  | 'DNS_RECORD_MISMATCH'
+  | 'DNS_LOOKUP_ERROR'
+  | 'SERVICE_NOT_CONFIGURED',
+  { tone: 'success' | 'warning' | 'error' | 'info'; title: string; message: string }
+> = {
+  VERIFIED: {
+    tone: 'success',
+    title: 'Domain verified',
+    message: 'The TXT record matches and this custom domain is ready to route safely.',
+  },
+  READY_TO_VERIFY: {
+    tone: 'warning',
+    title: 'Ready for verification',
+    message: 'The expected TXT record is visible in DNS. You can run verification now to mark the domain as trusted.',
+  },
+  DNS_RECORD_NOT_FOUND: {
+    tone: 'warning',
+    title: 'TXT record not found yet',
+    message: 'ZenDocx could not see the expected TXT record yet. This usually means the DNS record is missing or still propagating.',
+  },
+  DNS_RECORD_MISMATCH: {
+    tone: 'error',
+    title: 'TXT record found, but value is wrong',
+    message: 'A TXT record exists at the verification host, but the value does not match the token ZenDocx expects.',
+  },
+  DNS_LOOKUP_ERROR: {
+    tone: 'error',
+    title: 'DNS lookup failed',
+    message: 'ZenDocx could not complete the lookup right now. This may be a temporary DNS or resolver issue.',
+  },
+  SERVICE_NOT_CONFIGURED: {
+    tone: 'warning',
+    title: 'Platform verification service needs setup',
+    message: 'The platform is still using a fallback verification secret. A platform operator should configure DOMAIN_VERIFICATION_SECRET before relying on custom domains in production.',
+  },
+};
 
 export default function TenantSettingsPage() {
   const currentUser = useAuthStore((state) => state.user);
   const { overview, loading, error, reload } = useTenantOverview();
   const updateTenantSettings = useUpdateTenantSettings();
   const uploadTenantLogo = useUploadTenantLogo();
+  const verifyTenantCustomDomain = useVerifyTenantCustomDomain();
   const createTenantAdmin = useCreateTenantAdmin();
   const updateTenantAdmin = useUpdateTenantAdmin();
   const deleteTenantAdmin = useDeleteTenantAdmin();
@@ -133,6 +176,45 @@ export default function TenantSettingsPage() {
     currentUser,
     'MANAGE_BUSINESS_ADMINS',
   );
+  const tenant = overview?.tenant ?? null;
+  const name = draft.name ?? tenant?.name ?? '';
+  const logoUrl = draft.logoUrl ?? tenant?.logoUrl ?? '';
+  const customDomain = draft.customDomain ?? tenant?.customDomain ?? '';
+  const savedCustomDomain = tenant?.customDomain ?? '';
+  const primaryColor = draft.primaryColor ?? tenant?.primaryColor ?? '#0D1B3E';
+  const accentColor = draft.accentColor ?? tenant?.accentColor ?? '#F5A623';
+  const textColor = draft.textColor ?? tenant?.textColor ?? '#10203C';
+  const buttonColor = draft.buttonColor ?? tenant?.buttonColor ?? '#0D1B3E';
+  const fontStyle = (draft.fontStyle ??
+    tenant?.fontStyle ??
+    'modern') as 'modern' | 'classic' | 'clean';
+  const homepageTemplate = (draft.homepageTemplate ??
+    tenant?.homepageTemplate ??
+    'spotlight') as 'spotlight' | 'service-grid' | 'guided-flow';
+  const homepageHeading = draft.homepageHeading ?? tenant?.homepageHeading ?? '';
+  const homepageSubheading =
+    draft.homepageSubheading ?? tenant?.homepageSubheading ?? '';
+  const homepageAbout = draft.homepageAbout ?? tenant?.homepageAbout ?? '';
+  const selectedFont =
+    fontStyleOptions.find((option) => option.value === fontStyle) ??
+    fontStyleOptions[0];
+  const homepageTemplateMeta =
+    homepageTemplateOptions.find((option) => option.value === homepageTemplate) ??
+    homepageTemplateOptions[0];
+  const safeManualSteps = useMemo(() => {
+    const homepageManualSteps =
+      draft.homepageManualSteps ?? tenant?.homepageManualSteps ?? [];
+    const steps = homepageManualSteps.length
+      ? homepageManualSteps
+      : [emptyStep, emptyStep, emptyStep];
+    return Array.from({ length: 3 }, (_, index) => steps[index] ?? emptyStep);
+  }, [draft.homepageManualSteps, tenant?.homepageManualSteps]);
+  const {
+    verification,
+    loading: verificationLoading,
+    error: verificationError,
+    reload: reloadVerification,
+  } = useTenantDomainVerification(Boolean(savedCustomDomain));
 
   if (loading) {
     return (
@@ -163,37 +245,14 @@ export default function TenantSettingsPage() {
     );
   }
 
-  const name = draft.name ?? overview.tenant.name;
-  const logoUrl = draft.logoUrl ?? overview.tenant.logoUrl ?? '';
-  const customDomain = draft.customDomain ?? overview.tenant.customDomain ?? '';
-  const primaryColor = draft.primaryColor ?? overview.tenant.primaryColor;
-  const accentColor = draft.accentColor ?? overview.tenant.accentColor;
-  const textColor = draft.textColor ?? overview.tenant.textColor;
-  const buttonColor = draft.buttonColor ?? overview.tenant.buttonColor;
-  const fontStyle = (draft.fontStyle ??
-    overview.tenant.fontStyle) as 'modern' | 'classic' | 'clean';
-  const homepageTemplate = (draft.homepageTemplate ??
-    overview.tenant.homepageTemplate) as 'spotlight' | 'service-grid' | 'guided-flow';
-  const homepageHeading =
-    draft.homepageHeading ?? overview.tenant.homepageHeading ?? '';
-  const homepageSubheading =
-    draft.homepageSubheading ?? overview.tenant.homepageSubheading ?? '';
-  const homepageAbout =
-    draft.homepageAbout ?? overview.tenant.homepageAbout ?? '';
-  const homepageManualSteps =
-    draft.homepageManualSteps ?? overview.tenant.homepageManualSteps;
-  const selectedFont =
-    fontStyleOptions.find((option) => option.value === fontStyle) ??
-    fontStyleOptions[0];
-  const homepageTemplateMeta =
-    homepageTemplateOptions.find((option) => option.value === homepageTemplate) ??
-    homepageTemplateOptions[0];
-  const safeManualSteps = useMemo(() => {
-    const steps = homepageManualSteps.length
-      ? homepageManualSteps
-      : [emptyStep, emptyStep, emptyStep];
-    return Array.from({ length: 3 }, (_, index) => steps[index] ?? emptyStep);
-  }, [homepageManualSteps]);
+  const copyToClipboard = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`${label} copied.`);
+    } catch {
+      toast.error(`Could not copy the ${label.toLowerCase()} right now.`);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-8">
@@ -478,6 +537,230 @@ export default function TenantSettingsPage() {
                 Changing the domain keeps the saved value but resets verification until the domain is confirmed again.
               </p>
             </label>
+
+            <div className="space-y-4 rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-5">
+              <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">
+                    Custom domain verification
+                  </p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Prove ownership with a DNS TXT record before this domain can go live on ZenDocx.
+                  </p>
+                </div>
+                {overview.tenant.customDomainVerified ? (
+                  <span className="inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                    Verified
+                  </span>
+                ) : savedCustomDomain ? (
+                  <span className="inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+                    Verification pending
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center rounded-full bg-slate-200 px-3 py-1 text-xs font-semibold text-slate-600">
+                    No custom domain saved
+                  </span>
+                )}
+              </div>
+
+              {!savedCustomDomain ? (
+                <FeedbackBanner
+                  tone="info"
+                  message="Save a custom domain first. Once it is saved, this workspace will show the exact DNS TXT record needed for verification."
+                />
+              ) : verificationError ? (
+                <FeedbackBanner
+                  tone="error"
+                  title="Verification details unavailable"
+                  message={verificationError}
+                />
+              ) : verificationLoading || !verification ? (
+                <p className="text-sm text-slate-500">Loading verification instructions...</p>
+              ) : (
+                <div className="space-y-4">
+                  <FeedbackBanner
+                    tone={domainStatusCopy[verification.verificationStatus].tone}
+                    title={domainStatusCopy[verification.verificationStatus].title}
+                    message={
+                      verification.verificationStatus === 'VERIFIED'
+                        ? `The custom domain ${verification.customDomain} is verified and can now be routed safely.`
+                        : domainStatusCopy[verification.verificationStatus].message
+                    }
+                  />
+
+                  <FeedbackBanner
+                    tone={
+                      verification.verificationService.dedicatedSecretConfigured
+                        ? 'info'
+                        : 'warning'
+                    }
+                    title="Platform operator note"
+                    message={verification.verificationService.message}
+                  />
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <label className="space-y-2">
+                      <span className="text-sm font-semibold text-slate-700">TXT record host</span>
+                      <div className="flex gap-2">
+                        <input
+                          readOnly
+                          value={verification.recordHost}
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void copyToClipboard(verification.recordHost, 'TXT host')}
+                          className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                    </label>
+
+                    <label className="space-y-2">
+                      <span className="text-sm font-semibold text-slate-700">TXT record value</span>
+                      <div className="flex gap-2">
+                        <input
+                          readOnly
+                          value={verification.recordValue}
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void copyToClipboard(verification.recordValue, 'TXT value')}
+                          className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                    </label>
+                  </div>
+
+                  <div className="rounded-[1.25rem] border border-slate-200 bg-white p-4">
+                    <p className="text-sm font-semibold text-slate-900">How to verify</p>
+                    <ol className="mt-3 space-y-2 text-sm leading-6 text-slate-600">
+                      <li>1. Open your DNS provider for {verification.customDomain}.</li>
+                      <li>2. Create a TXT record with the host and value shown above.</li>
+                      <li>3. Wait for DNS propagation, then click verify from this page.</li>
+                    </ol>
+                  </div>
+
+                  <div className="grid gap-4 xl:grid-cols-2">
+                    <div className="rounded-[1.25rem] border border-slate-200 bg-white p-4">
+                      <p className="text-sm font-semibold text-slate-900">Live DNS diagnostics</p>
+                      <div className="mt-3 space-y-2 text-sm leading-6 text-slate-600">
+                        <p>
+                          <span className="font-semibold text-slate-800">Last checked:</span>{' '}
+                          {verification.dnsLookup.checkedAt
+                            ? formatDate(verification.dnsLookup.checkedAt)
+                            : 'Not checked yet'}
+                        </p>
+                        <p>
+                          <span className="font-semibold text-slate-800">Expected value found:</span>{' '}
+                          {verification.dnsLookup.expectedValueFound ? 'Yes' : 'No'}
+                        </p>
+                        <p>
+                          <span className="font-semibold text-slate-800">Records found:</span>{' '}
+                          {verification.dnsLookup.recordsFound.length}
+                        </p>
+                        {verification.dnsLookup.errorCode ? (
+                          <p>
+                            <span className="font-semibold text-slate-800">Lookup error:</span>{' '}
+                            {verification.dnsLookup.errorCode}
+                            {verification.dnsLookup.errorMessage
+                              ? ` — ${verification.dnsLookup.errorMessage}`
+                              : ''}
+                          </p>
+                        ) : null}
+                      </div>
+                      {verification.dnsLookup.recordsFound.length ? (
+                        <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                            Visible TXT values
+                          </p>
+                          <div className="mt-2 space-y-2">
+                            {verification.dnsLookup.recordsFound.map((record) => (
+                              <code
+                                key={record}
+                                className="block overflow-x-auto rounded-xl bg-white px-3 py-2 text-xs text-slate-700"
+                              >
+                                {record}
+                              </code>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="rounded-[1.25rem] border border-slate-200 bg-white p-4">
+                      <p className="text-sm font-semibold text-slate-900">Common DNS provider tips</p>
+                      <div className="mt-3 space-y-3 text-sm leading-6 text-slate-600">
+                        <p>
+                          <span className="font-semibold text-slate-800">Cloudflare:</span>{' '}
+                          create a DNS-only TXT record. Leave proxying off because TXT records are never proxied.
+                        </p>
+                        <p>
+                          <span className="font-semibold text-slate-800">Namecheap:</span>{' '}
+                          paste only the host portion exactly as shown. Namecheap usually appends the root domain automatically.
+                        </p>
+                        <p>
+                          <span className="font-semibold text-slate-800">GoDaddy:</span>{' '}
+                          use the TXT type, paste the full value, and allow a few minutes for propagation before rechecking.
+                        </p>
+                        <p>
+                          If the record is correct but ZenDocx still cannot see it, wait a little longer and use{' '}
+                          <span className="font-semibold text-slate-800">Refresh instructions</span> to rerun the DNS check.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {verifyTenantCustomDomain.error ? (
+                    <FeedbackBanner
+                      tone="error"
+                      message={getApiErrorMessage(
+                        verifyTenantCustomDomain.error,
+                        'Could not verify the custom domain right now.',
+                      )}
+                    />
+                  ) : null}
+
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        verifyTenantCustomDomain.mutate(undefined, {
+                          onSuccess: () => {
+                            toast.success('Custom domain verified successfully.');
+                          },
+                        });
+                      }}
+                      disabled={
+                        !canManageBusinessSettings ||
+                        verifyTenantCustomDomain.isPending ||
+                        overview.tenant.customDomainVerified ||
+                        !verification.verificationService.canVerifyReliably
+                      }
+                      className="rounded-2xl bg-brand-button px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-button-strong disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {overview.tenant.customDomainVerified
+                        ? 'Domain verified'
+                        : verifyTenantCustomDomain.isPending
+                          ? 'Verifying domain...'
+                          : 'Verify custom domain'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={reloadVerification}
+                      disabled={!savedCustomDomain || verificationLoading}
+                      className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Refresh DNS check
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
 
             <div className="space-y-4 rounded-[1.5rem] border border-slate-200 bg-slate-50/70 p-5">
               <div>

@@ -4,8 +4,10 @@ import {
   ConflictException,
   ForbiddenException,
   BadRequestException,
+  InternalServerErrorException,
 } from '@nestjs/common';
-import { randomBytes } from 'crypto';
+import { createHmac, randomBytes } from 'crypto';
+import { resolveTxt } from 'node:dns/promises';
 import * as bcrypt from 'bcryptjs';
 import { Prisma, Tenant } from '@prisma/client';
 import { ProviderCredentialsService } from '../../providers/provider-credentials.service';
@@ -36,6 +38,38 @@ type TenantLogoFile = {
   buffer: Buffer;
 };
 
+type TenantDomainVerificationData = {
+  customDomain: string;
+  customDomainVerified: boolean;
+  recordType: 'TXT';
+  recordHost: string;
+  recordValue: string;
+  verificationStatus:
+    | 'VERIFIED'
+    | 'READY_TO_VERIFY'
+    | 'DNS_RECORD_NOT_FOUND'
+    | 'DNS_RECORD_MISMATCH'
+    | 'DNS_LOOKUP_ERROR'
+    | 'SERVICE_NOT_CONFIGURED';
+  verificationService: {
+    secretSource:
+      | 'DOMAIN_VERIFICATION_SECRET'
+      | 'JWT_ACCESS_SECRET'
+      | 'JWT_SECRET'
+      | 'DEFAULT_FALLBACK';
+    dedicatedSecretConfigured: boolean;
+    canVerifyReliably: boolean;
+    message: string;
+  };
+  dnsLookup: {
+    checkedAt: string | null;
+    expectedValueFound: boolean;
+    recordsFound: string[];
+    errorCode: string | null;
+    errorMessage: string | null;
+  };
+};
+
 @Injectable()
 export class TenantService {
   private readonly allowedLogoMimeTypes = new Set([
@@ -62,6 +96,185 @@ export class TenantService {
       .map((byte) => alphabet[byte % alphabet.length])
       .join('')
       .slice(0, 14);
+  }
+
+  private normalizeCustomDomain(
+    value: string | null | undefined,
+  ): string | null | undefined {
+    if (value === undefined) {
+      return undefined;
+    }
+
+    if (value === null) {
+      return null;
+    }
+
+    const normalized = value
+      .trim()
+      .toLowerCase()
+      .replace(/^https?:\/\//, '')
+      .replace(/\/.*$/, '')
+      .replace(/\.$/, '');
+    return normalized || null;
+  }
+
+  private getDomainVerificationSecretConfig(): {
+    value: string;
+    source:
+      | 'DOMAIN_VERIFICATION_SECRET'
+      | 'JWT_ACCESS_SECRET'
+      | 'JWT_SECRET'
+      | 'DEFAULT_FALLBACK';
+    dedicatedSecretConfigured: boolean;
+  } {
+    const dedicatedSecret = this.config
+      .get<string>('DOMAIN_VERIFICATION_SECRET')
+      ?.trim();
+    if (dedicatedSecret) {
+      return {
+        value: dedicatedSecret,
+        source: 'DOMAIN_VERIFICATION_SECRET',
+        dedicatedSecretConfigured: true,
+      };
+    }
+
+    const jwtAccessSecret = this.config.get<string>('JWT_ACCESS_SECRET')?.trim();
+    if (jwtAccessSecret) {
+      return {
+        value: jwtAccessSecret,
+        source: 'JWT_ACCESS_SECRET',
+        dedicatedSecretConfigured: false,
+      };
+    }
+
+    const jwtSecret = this.config.get<string>('JWT_SECRET')?.trim();
+    if (jwtSecret) {
+      return {
+        value: jwtSecret,
+        source: 'JWT_SECRET',
+        dedicatedSecretConfigured: false,
+      };
+    }
+
+    return {
+      value: 'zendocx-domain-verification-secret',
+      source: 'DEFAULT_FALLBACK',
+      dedicatedSecretConfigured: false,
+    };
+  }
+
+  private buildDomainVerificationData(
+    tenant: Tenant,
+  ): TenantDomainVerificationData | null {
+    const customDomain = this.normalizeCustomDomain(tenant.customDomain);
+
+    if (!customDomain) {
+      return null;
+    }
+
+    const secretConfig = this.getDomainVerificationSecretConfig();
+    const recordValue = createHmac('sha256', secretConfig.value)
+      .update(`${tenant.id}:${customDomain}`)
+      .digest('base64url')
+      .slice(0, 32);
+
+    const verificationServiceMessage = secretConfig.dedicatedSecretConfigured
+      ? 'The platform verification secret is configured and ready for production domain checks.'
+      : secretConfig.source === 'JWT_ACCESS_SECRET' ||
+          secretConfig.source === 'JWT_SECRET'
+        ? 'Domain verification can run, but the platform is still reusing a JWT secret. Set DOMAIN_VERIFICATION_SECRET in production to decouple DNS verification from auth secret rotation.'
+        : 'The platform is using a local fallback verification secret. Set DOMAIN_VERIFICATION_SECRET before relying on custom domains in production.';
+
+    return {
+      customDomain,
+      customDomainVerified: tenant.customDomainVerified,
+      recordType: 'TXT',
+      recordHost: `_zendocx-verify.${customDomain}`,
+      recordValue: `zendocx-site-verification=${recordValue}`,
+      verificationStatus: tenant.customDomainVerified
+        ? 'VERIFIED'
+        : secretConfig.source === 'DEFAULT_FALLBACK'
+          ? 'SERVICE_NOT_CONFIGURED'
+          : 'READY_TO_VERIFY',
+      verificationService: {
+        secretSource: secretConfig.source,
+        dedicatedSecretConfigured: secretConfig.dedicatedSecretConfigured,
+        canVerifyReliably: secretConfig.source !== 'DEFAULT_FALLBACK',
+        message: verificationServiceMessage,
+      },
+      dnsLookup: {
+        checkedAt: null,
+        expectedValueFound: false,
+        recordsFound: [],
+        errorCode: null,
+        errorMessage: null,
+      },
+    };
+  }
+
+  private async resolveTxtRecords(hostname: string): Promise<string[]> {
+    const records = await resolveTxt(hostname);
+    return records.flat().map((entry) => entry.trim()).filter(Boolean);
+  }
+
+  private async inspectDomainVerification(
+    tenant: Tenant,
+  ): Promise<TenantDomainVerificationData | null> {
+    const verification = this.buildDomainVerificationData(tenant);
+
+    if (!verification) {
+      return null;
+    }
+
+    if (!verification.verificationService.canVerifyReliably) {
+      return verification;
+    }
+
+    const checkedAt = new Date().toISOString();
+
+    try {
+      const recordsFound = await this.resolveTxtRecords(verification.recordHost);
+      const expectedValueFound = recordsFound.includes(verification.recordValue);
+
+      return {
+        ...verification,
+        verificationStatus: tenant.customDomainVerified
+          ? 'VERIFIED'
+          : expectedValueFound
+            ? 'READY_TO_VERIFY'
+            : recordsFound.length
+              ? 'DNS_RECORD_MISMATCH'
+              : 'DNS_RECORD_NOT_FOUND',
+        dnsLookup: {
+          checkedAt,
+          expectedValueFound,
+          recordsFound,
+          errorCode: null,
+          errorMessage: null,
+        },
+      };
+    } catch (error) {
+      const errorCode =
+        typeof error === 'object' && error && 'code' in error
+          ? String((error as { code?: string }).code ?? '')
+          : '';
+      const errorMessage =
+        error instanceof Error ? error.message : 'DNS lookup failed';
+
+      return {
+        ...verification,
+        verificationStatus: tenant.customDomainVerified
+          ? 'VERIFIED'
+          : 'DNS_LOOKUP_ERROR',
+        dnsLookup: {
+          checkedAt,
+          expectedValueFound: false,
+          recordsFound: [],
+          errorCode: errorCode || null,
+          errorMessage,
+        },
+      };
+    }
   }
 
   private toTenantAdminAccessRecord(access: {
@@ -206,19 +419,20 @@ export class TenantService {
     dto: CreateTenantDto,
     createdById: string,
   ): Promise<Tenant> {
+    const customDomain = this.normalizeCustomDomain(dto.customDomain);
     const existing = await this.prisma.tenant.findUnique({
       where: { slug: dto.slug },
     });
     if (existing)
       throw new ConflictException(`Tenant slug "${dto.slug}" is already taken`);
 
-    if (dto.customDomain) {
+    if (customDomain) {
       const domainConflict = await this.prisma.tenant.findUnique({
-        where: { customDomain: dto.customDomain },
+        where: { customDomain },
       });
       if (domainConflict)
         throw new ConflictException(
-          `Custom domain "${dto.customDomain}" is already in use`,
+          `Custom domain "${customDomain}" is already in use`,
         );
     }
 
@@ -241,7 +455,7 @@ export class TenantService {
         homepageManualSteps:
           this.getDefaultHomepageManualSteps() as unknown as Prisma.InputJsonValue,
         tenantMarginRate: dto.tenantMarginRate ?? 0,
-        customDomain: dto.customDomain ?? null,
+        customDomain: customDomain ?? null,
         createdById,
       },
     });
@@ -407,14 +621,17 @@ export class TenantService {
 
   async updateTenant(id: string, dto: UpdateTenantDto): Promise<Tenant> {
     const tenant = await this.getTenantById(id);
+    const customDomain = this.normalizeCustomDomain(dto.customDomain);
+    const nextCustomDomain =
+      customDomain === undefined ? tenant.customDomain : customDomain;
 
     if (
-      dto.customDomain !== undefined &&
-      dto.customDomain !== tenant.customDomain
+      customDomain !== undefined &&
+      customDomain !== tenant.customDomain
     ) {
-      if (dto.customDomain !== null) {
+      if (customDomain !== null) {
         const conflict = await this.prisma.tenant.findUnique({
-          where: { customDomain: dto.customDomain },
+          where: { customDomain },
         });
         if (conflict && conflict.id !== id)
           throw new ConflictException('Custom domain already in use');
@@ -428,13 +645,114 @@ export class TenantService {
 
     const updated = await this.prisma.tenant.update({
       where: { id },
-      data: dto,
+      data: {
+        ...dto,
+        customDomain: nextCustomDomain,
+      },
     });
 
     // Invalidate resolver cache
-    await this.resolver.invalidateCache(updated.slug);
+    await this.resolver.invalidateCache({
+      slug: updated.slug,
+      customDomains: [tenant.customDomain, updated.customDomain],
+    });
 
     return updated;
+  }
+
+  async getOwnTenantDomainVerification(userId: string) {
+    const membership = await this.assertTenantAdminPermission(
+      userId,
+      'MANAGE_BUSINESS_SETTINGS',
+    );
+    const tenant = await this.getTenantById(membership.tenantId);
+    const verification = await this.inspectDomainVerification(tenant);
+
+    if (!verification) {
+      throw new BadRequestException(
+        'Save a custom domain before requesting verification instructions.',
+      );
+    }
+
+    return {
+      message: 'Custom domain verification details retrieved.',
+      data: verification,
+    };
+  }
+
+  async verifyOwnTenantCustomDomain(userId: string) {
+    const membership = await this.assertTenantAdminPermission(
+      userId,
+      'MANAGE_BUSINESS_SETTINGS',
+    );
+    const tenant = await this.getTenantById(membership.tenantId);
+    const verification = await this.inspectDomainVerification(tenant);
+
+    if (!verification) {
+      throw new BadRequestException(
+        'Save a custom domain before verifying it.',
+      );
+    }
+
+    if (!verification.verificationService.canVerifyReliably) {
+      throw new InternalServerErrorException(
+        'The platform verification service is not configured for reliable production checks yet. Ask a platform operator to set DOMAIN_VERIFICATION_SECRET and try again.',
+      );
+    }
+
+    if (!verification.dnsLookup.expectedValueFound) {
+      if (verification.verificationStatus === 'DNS_RECORD_NOT_FOUND') {
+        throw new BadRequestException(
+          'We could not find the expected TXT record yet. Double-check the host and value, then try again.',
+        );
+      }
+
+      if (verification.verificationStatus === 'DNS_RECORD_MISMATCH') {
+        throw new BadRequestException(
+          'A TXT record was found, but the value does not match the expected verification token yet.',
+        );
+      }
+
+      if (verification.verificationStatus === 'DNS_LOOKUP_ERROR') {
+        throw new InternalServerErrorException(
+          'We could not complete the DNS lookup right now. Please try again shortly.',
+        );
+      }
+    }
+
+    const updatedTenant =
+      tenant.customDomainVerified
+        ? tenant
+        : await this.prisma.tenant.update({
+            where: { id: tenant.id },
+            data: { customDomainVerified: true },
+          });
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId,
+        tenantId: tenant.id,
+        action: 'CUSTOM_DOMAIN_VERIFIED',
+        entity: 'Tenant',
+        entityId: tenant.id,
+        oldValues: this.toPublic(tenant) as unknown as Prisma.InputJsonValue,
+        newValues:
+          this.toPublic(updatedTenant) as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    await this.resolver.invalidateCache({
+      slug: updatedTenant.slug,
+      customDomains: [updatedTenant.customDomain],
+    });
+
+    return {
+      message: 'Custom domain verified successfully.',
+      data: {
+        tenant: this.toPublic(updatedTenant),
+        verification: await this.inspectDomainVerification(updatedTenant),
+      },
+    };
   }
 
   private async createTenantAdminAccount(
@@ -1455,14 +1773,17 @@ export class TenantService {
     );
 
     const tenant = await this.getTenantById(membership.tenantId);
+    const customDomain = this.normalizeCustomDomain(dto.customDomain);
+    const nextCustomDomain =
+      customDomain === undefined ? tenant.customDomain : customDomain;
 
     if (
-      dto.customDomain !== undefined &&
-      dto.customDomain !== tenant.customDomain &&
-      dto.customDomain !== null
+      customDomain !== undefined &&
+      customDomain !== tenant.customDomain &&
+      customDomain !== null
     ) {
       const conflict = await this.prisma.tenant.findUnique({
-        where: { customDomain: dto.customDomain },
+        where: { customDomain },
       });
 
       if (conflict && conflict.id !== tenant.id) {
@@ -1496,14 +1817,11 @@ export class TenantService {
             : (dto.homepageAbout ?? null),
         homepageManualSteps:
           dto.homepageManualSteps === undefined
-            ? (tenant.homepageManualSteps as Prisma.InputJsonValue)
-            : (dto.homepageManualSteps as unknown as Prisma.InputJsonValue),
-        customDomain:
-          dto.customDomain === undefined
-            ? tenant.customDomain
-            : (dto.customDomain ?? null),
-        ...(dto.customDomain !== undefined &&
-        dto.customDomain !== tenant.customDomain
+          ? (tenant.homepageManualSteps as Prisma.InputJsonValue)
+          : (dto.homepageManualSteps as unknown as Prisma.InputJsonValue),
+        customDomain: nextCustomDomain,
+        ...(customDomain !== undefined &&
+        customDomain !== tenant.customDomain
           ? { customDomainVerified: false }
           : {}),
       },
@@ -1521,7 +1839,10 @@ export class TenantService {
       },
     });
 
-    await this.resolver.invalidateCache(updated.slug);
+    await this.resolver.invalidateCache({
+      slug: updated.slug,
+      customDomains: [tenant.customDomain, updated.customDomain],
+    });
 
     return {
       message: 'Tenant settings updated successfully.',
@@ -1573,6 +1894,7 @@ export class TenantService {
       buttonColor: tenant.buttonColor,
       fontStyle: tenant.fontStyle,
       customDomain: tenant.customDomain,
+      customDomainVerified: tenant.customDomainVerified,
       homepageTemplate: (
         TENANT_HOMEPAGE_TEMPLATES.includes(
           tenant.homepageTemplate as (typeof TENANT_HOMEPAGE_TEMPLATES)[number],

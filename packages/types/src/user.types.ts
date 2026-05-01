@@ -47,6 +47,7 @@ export interface TenantPublic {
   buttonColor: string;
   fontStyle: string;
   customDomain: string | null;
+  customDomainVerified: boolean;
   homepageTemplate: TenantHomepageTemplate;
   homepageHeading: string | null;
   homepageSubheading: string | null;

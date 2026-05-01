@@ -14,6 +14,13 @@ describe('TenantService', () => {
     textColor: '#10203C',
     buttonColor: '#0D1B3E',
     fontStyle: 'modern',
+    homepageTemplate: 'spotlight',
+    homepageHeading: 'Access Test Biz from one business portal',
+    homepageSubheading:
+      'Start with the public business homepage, review available services, then sign in or create your account when you are ready.',
+    homepageAbout:
+      'Test Biz uses ZenDocx to manage service requests, customer onboarding, and manual document workflows from one tenant-owned workspace.',
+    homepageManualSteps: [],
     tenantMarginRate: 0,
     usesCustomServiceSelection: false,
     customDomain: 'portal.testbiz.com',
@@ -258,8 +265,126 @@ describe('TenantService', () => {
     expect(updateInput.data.customDomain).toBe('portal.updated.com');
     expect(updateInput.data.customDomainVerified).toBe(false);
     expect(prisma.auditLog.create).toHaveBeenCalled();
-    expect(resolver.invalidateCache).toHaveBeenCalledWith('testbiz');
+    expect(resolver.invalidateCache).toHaveBeenCalledWith({
+      slug: 'testbiz',
+      customDomains: ['portal.testbiz.com', 'portal.updated.com'],
+    });
     expect(result.data.name).toBe('Updated Biz');
+  });
+
+  it('returns DNS verification instructions for a saved custom domain', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      role: UserRole.TENANT_ADMIN,
+      tenantId: tenant.id,
+      adminPermissions: ['MANAGE_BUSINESS_SETTINGS'],
+    });
+    prisma.tenant.findUnique.mockResolvedValue(tenant);
+    config.get.mockImplementation((key: string) =>
+      key === 'DOMAIN_VERIFICATION_SECRET' ? 'test-domain-secret' : undefined,
+    );
+    jest
+      .spyOn(service as never, 'resolveTxtRecords')
+      .mockResolvedValue(['zendocx-site-verification=other-token'] as never);
+
+    const result = await service.getOwnTenantDomainVerification('tenant-admin-1');
+
+    expect(result.message).toBe('Custom domain verification details retrieved.');
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        customDomain: 'portal.testbiz.com',
+        customDomainVerified: true,
+        recordType: 'TXT',
+        recordHost: '_zendocx-verify.portal.testbiz.com',
+        recordValue: expect.stringMatching(/^zendocx-site-verification=/),
+        verificationStatus: 'VERIFIED',
+        verificationService: {
+          secretSource: 'DOMAIN_VERIFICATION_SECRET',
+          dedicatedSecretConfigured: true,
+          canVerifyReliably: true,
+          message:
+            'The platform verification secret is configured and ready for production domain checks.',
+        },
+        dnsLookup: expect.objectContaining({
+          checkedAt: expect.any(String),
+          expectedValueFound: false,
+          recordsFound: ['zendocx-site-verification=other-token'],
+          errorCode: null,
+          errorMessage: null,
+        }),
+      }),
+    );
+  });
+
+  it('marks a tenant custom domain as verified when the DNS TXT record matches', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      role: UserRole.TENANT_ADMIN,
+      tenantId: tenant.id,
+      adminPermissions: ['MANAGE_BUSINESS_SETTINGS'],
+    });
+    prisma.tenant.findUnique.mockResolvedValue({
+      ...tenant,
+      customDomainVerified: false,
+    });
+    config.get.mockImplementation((key: string) =>
+      key === 'DOMAIN_VERIFICATION_SECRET' ? 'test-domain-secret' : undefined,
+    );
+    prisma.tenant.update.mockResolvedValue({
+      ...tenant,
+      customDomainVerified: true,
+    });
+    prisma.auditLog.create.mockResolvedValue(null);
+    const expectedRecordValue = (
+      service as never as {
+        buildDomainVerificationData: (value: Tenant) => { recordValue: string };
+      }
+    ).buildDomainVerificationData({
+      ...tenant,
+      customDomainVerified: false,
+    }).recordValue;
+    jest
+      .spyOn(service as never, 'resolveTxtRecords')
+      .mockResolvedValue([expectedRecordValue] as never);
+
+    const verification = await service.getOwnTenantDomainVerification(
+      'tenant-admin-1',
+    );
+
+    const result = await service.verifyOwnTenantCustomDomain('tenant-admin-1');
+
+    expect(prisma.tenant.update).toHaveBeenCalledWith({
+      where: { id: tenant.id },
+      data: { customDomainVerified: true },
+    });
+    expect(prisma.auditLog.create).toHaveBeenCalled();
+    expect(resolver.invalidateCache).toHaveBeenCalledWith({
+      slug: 'testbiz',
+      customDomains: ['portal.testbiz.com'],
+    });
+    expect(result.data.tenant.customDomainVerified).toBe(true);
+    expect(result.data.verification?.customDomainVerified).toBe(true);
+  });
+
+  it('rejects verification when the DNS TXT record does not match', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      role: UserRole.TENANT_ADMIN,
+      tenantId: tenant.id,
+      adminPermissions: ['MANAGE_BUSINESS_SETTINGS'],
+    });
+    prisma.tenant.findUnique.mockResolvedValue({
+      ...tenant,
+      customDomainVerified: false,
+    });
+    config.get.mockImplementation((key: string) =>
+      key === 'DOMAIN_VERIFICATION_SECRET' ? 'test-domain-secret' : undefined,
+    );
+
+    jest
+      .spyOn(service as never, 'resolveTxtRecords')
+      .mockResolvedValue(['zendocx-site-verification=wrong-token'] as never);
+
+    await expect(
+      service.verifyOwnTenantCustomDomain('tenant-admin-1'),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('updates a tenant user role for a tenant admin', async () => {

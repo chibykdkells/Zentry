@@ -23,6 +23,7 @@ export interface TenantAdminOverview {
     buttonColor: string;
     fontStyle: string;
     customDomain: string | null;
+    customDomainVerified: boolean;
     homepageTemplate: 'spotlight' | 'service-grid' | 'guided-flow';
     homepageHeading: string | null;
     homepageSubheading: string | null;
@@ -150,6 +151,38 @@ export interface UpdateTenantSettingsInput {
   }>;
 }
 
+export interface TenantDomainVerificationDetails {
+  customDomain: string;
+  customDomainVerified: boolean;
+  recordType: 'TXT';
+  recordHost: string;
+  recordValue: string;
+  verificationStatus:
+    | 'VERIFIED'
+    | 'READY_TO_VERIFY'
+    | 'DNS_RECORD_NOT_FOUND'
+    | 'DNS_RECORD_MISMATCH'
+    | 'DNS_LOOKUP_ERROR'
+    | 'SERVICE_NOT_CONFIGURED';
+  verificationService: {
+    secretSource:
+      | 'DOMAIN_VERIFICATION_SECRET'
+      | 'JWT_ACCESS_SECRET'
+      | 'JWT_SECRET'
+      | 'DEFAULT_FALLBACK';
+    dedicatedSecretConfigured: boolean;
+    canVerifyReliably: boolean;
+    message: string;
+  };
+  dnsLookup: {
+    checkedAt: string | null;
+    expectedValueFound: boolean;
+    recordsFound: string[];
+    errorCode: string | null;
+    errorMessage: string | null;
+  };
+}
+
 export const getTenantUsersQueryKey = (filters: TenantAdminUsersFilters) =>
   ['tenant-admin', 'users', filters] as const;
 
@@ -228,6 +261,62 @@ export function useUpdateTenantSettings() {
       setTenant(updatedTenant);
       await queryClient.invalidateQueries({
         queryKey: TENANT_ADMIN_OVERVIEW_QUERY_KEY,
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ['tenant-bootstrap'],
+      });
+    },
+  });
+}
+
+export function useTenantDomainVerification(enabled: boolean) {
+  const query = useQuery({
+    queryKey: ['tenant-admin', 'domain-verification'],
+    enabled,
+    queryFn: async () => {
+      const response = await apiClient.get<{ data: TenantDomainVerificationDetails }>(
+        '/tenants/me/domain-verification',
+      );
+      return response.data.data;
+    },
+  });
+
+  return {
+    verification: query.data ?? null,
+    loading: query.isLoading,
+    error: query.error
+      ? getApiErrorMessage(
+          query.error,
+          'Could not load domain verification instructions right now.',
+        )
+      : null,
+    reload: () => {
+      void query.refetch();
+    },
+  };
+}
+
+export function useVerifyTenantCustomDomain() {
+  const queryClient = useQueryClient();
+  const setTenant = useTenantStore((state) => state.setTenant);
+
+  return useMutation({
+    mutationFn: async () => {
+      const response = await apiClient.post<{
+        data: {
+          tenant: TenantAdminOverview['tenant'];
+          verification: TenantDomainVerificationDetails | null;
+        };
+      }>('/tenants/me/domain-verification/verify');
+      return response.data.data;
+    },
+    onSuccess: async (payload) => {
+      setTenant(payload.tenant);
+      await queryClient.invalidateQueries({
+        queryKey: TENANT_ADMIN_OVERVIEW_QUERY_KEY,
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ['tenant-admin', 'domain-verification'],
       });
       await queryClient.invalidateQueries({
         queryKey: ['tenant-bootstrap'],

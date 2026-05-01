@@ -20,6 +20,10 @@ export class TenantResolverService {
     return host === 'localhost' || /^\d{1,3}(\.\d{1,3}){3}$/.test(host);
   }
 
+  private normalizeHostname(hostname: string): string {
+    return hostname.split(':')[0]?.trim().toLowerCase() ?? '';
+  }
+
   async resolveFromSlug(slug: string): Promise<Tenant | null> {
     const normalizedSlug = slug.trim().toLowerCase();
     if (!normalizedSlug) {
@@ -61,7 +65,7 @@ export class TenantResolverService {
     if (!hostname) return null;
 
     // Strip port from hostname if present (e.g., "testbiz.zendocx.net:3000")
-    const host = hostname.split(':')[0];
+    const host = this.normalizeHostname(hostname);
 
     // Platform root domain and reserved subdomains — no tenant resolution
     const PLATFORM_SUBDOMAINS = ['www', 'api', 'app', 'mail', 'cdn', 'static'];
@@ -104,6 +108,7 @@ export class TenantResolverService {
         .findFirst({
           where: {
             customDomain: host,
+            customDomainVerified: true,
             isActive: true,
           },
         })
@@ -120,9 +125,30 @@ export class TenantResolverService {
   }
 
   /** Invalidate cached tenant resolution for a given hostname. */
-  async invalidateCache(slug: string): Promise<void> {
-    await this.redis
-      .del(`tenant:host:${slug}.${PLATFORM_HOSTNAME}`)
-      .catch(() => null);
+  async invalidateCache(input: {
+    slug: string;
+    customDomains?: Array<string | null | undefined>;
+  }): Promise<void> {
+    const hosts = new Set<string>();
+
+    const normalizedSlug = input.slug.trim().toLowerCase();
+    if (normalizedSlug) {
+      hosts.add(`${normalizedSlug}.${PLATFORM_HOSTNAME}`);
+    }
+
+    for (const customDomain of input.customDomains ?? []) {
+      const normalizedHost = customDomain
+        ? this.normalizeHostname(customDomain)
+        : '';
+      if (normalizedHost) {
+        hosts.add(normalizedHost);
+      }
+    }
+
+    await Promise.all(
+      Array.from(hosts).map((host) =>
+        this.redis.del(`tenant:host:${host}`).catch(() => null),
+      ),
+    );
   }
 }

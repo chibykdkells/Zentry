@@ -14,6 +14,7 @@ export interface TenantConfig {
   buttonColor: string;
   fontStyle: string;
   customDomain: string | null;
+  customDomainVerified: boolean;
   homepageTemplate: 'spotlight' | 'service-grid' | 'guided-flow';
   homepageHeading: string | null;
   homepageSubheading: string | null;

@@ -12,6 +12,13 @@ describe('TenantResolverService', () => {
     textColor: '#10203C',
     buttonColor: '#0D1B3E',
     fontStyle: 'modern',
+    homepageTemplate: 'spotlight',
+    homepageHeading: 'Access Test Biz from one business portal',
+    homepageSubheading:
+      'Start with the public business homepage, review available services, then sign in or create your account when you are ready.',
+    homepageAbout:
+      'Test Biz uses ZenDocx to manage service requests, customer onboarding, and manual document workflows from one tenant-owned workspace.',
+    homepageManualSteps: [],
     tenantMarginRate: 0,
     usesCustomServiceSelection: false,
     customDomain: 'portal.testbiz.com',
@@ -139,6 +146,23 @@ describe('TenantResolverService', () => {
     expect(prisma.tenant.findFirst).toHaveBeenCalledWith({
       where: {
         customDomain: 'portal.testbiz.com',
+        customDomainVerified: true,
+        isActive: true,
+      },
+    });
+  });
+
+  it('does not resolve unverified custom domains', async () => {
+    redis.getJson.mockResolvedValue(null);
+    prisma.tenant.findFirst.mockResolvedValue(null);
+
+    const result = await service.resolveFromHostname('Portal.TestBiz.com');
+
+    expect(result).toBeNull();
+    expect(prisma.tenant.findFirst).toHaveBeenCalledWith({
+      where: {
+        customDomain: 'portal.testbiz.com',
+        customDomainVerified: true,
         isActive: true,
       },
     });

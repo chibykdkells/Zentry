@@ -172,6 +172,18 @@ export class TenantController {
     return this.tenantService.updateOwnTenantSettings(user.sub, body);
   }
 
+  @Get('me/domain-verification')
+  @Roles(UserRole.TENANT_ADMIN)
+  async getMyTenantDomainVerification(@CurrentUser() user: JwtUser) {
+    return this.tenantService.getOwnTenantDomainVerification(user.sub);
+  }
+
+  @Post('me/domain-verification/verify')
+  @Roles(UserRole.TENANT_ADMIN)
+  async verifyMyTenantCustomDomain(@CurrentUser() user: JwtUser) {
+    return this.tenantService.verifyOwnTenantCustomDomain(user.sub);
+  }
+
   @Post('me/logo')
   @Roles(UserRole.TENANT_ADMIN)
   @UseInterceptors(FileInterceptor('file'))

@@ -446,7 +446,9 @@ Also define in this stage:
 
 Current state:
 - Stage 1 is largely implemented
-- custom domains are still not started
+- custom domains are now partially implemented: storage, safe host resolution,
+  and tenant-admin DNS TXT verification exist, but full onboarding, DNS
+  automation, and production domain operations are still later work
 - tenant-owned provider expansion is only partially implemented through VTU
   readiness/configuration and fallback-aware resolution
 

@@ -6390,3 +6390,195 @@ Multi-tenancy re-architecture Batch 4 (backend scoping) is fully complete. Batch
   best batch is to return to Phase 9 live VAPID/browser verification for
   background push delivery on the normal stack, then finish the remaining SMS
   follow-through and notification coverage audit.
+
+## Session 2026-05-01 — Multi-Tenancy Closeout Batch: Custom Domain Safety Gate + DNS Verification Workflow
+
+**Phase:** MULTI-TENANCY RE-ARCHITECTURE (IN PROGRESS)
+**AI Assistant:** GPT-5 Codex
+
+### What Was Done
+
+- Restored the workspace verification baseline by fixing the shared `utils`
+  package TypeScript config so `pnpm typecheck` now completes successfully
+  again on the full monorepo.
+- Tightened tenant custom-domain safety so host resolution only activates for
+  domains that are both saved and verified.
+- Added tenant-side custom-domain normalization and broader resolver cache
+  invalidation so changing a custom domain now clears both slug and
+  custom-domain host cache entries safely.
+- Built a tenant-admin DNS TXT verification workflow:
+  - `GET /tenants/me/domain-verification`
+  - `POST /tenants/me/domain-verification/verify`
+- Added deterministic DNS challenge generation from tenant/domain identity and
+  a server-side TXT lookup verification pass before `customDomainVerified`
+  flips to `true`.
+- Extended the tenant settings UI with a dedicated verification workspace that
+  shows the TXT host/value, copy actions, current verification status, and a
+  verify action for tenant admins.
+- Extended shared tenant/public types and tenant store state so verified domain
+  status now travels through overview/bootstrap flows cleanly.
+
+### Files Created / Modified
+
+- `packages/utils/tsconfig.json`
+- `packages/types/src/user.types.ts`
+- `apps/api/src/modules/tenant/tenant.controller.ts`
+- `apps/api/src/modules/tenant/tenant.service.ts`
+- `apps/api/src/modules/tenant/tenant.service.spec.ts`
+- `apps/api/src/modules/tenant/tenant-resolver.service.ts`
+- `apps/api/src/modules/tenant/tenant-resolver.service.spec.ts`
+- `apps/web/src/hooks/use-tenant-admin.ts`
+- `apps/web/src/stores/tenant.store.ts`
+- `apps/web/src/app/(tenant-admin)/tenant/settings/page.tsx`
+- `docs/ai-context/WHITE_LABEL_ROADMAP.md`
+- `docs/ai-context/SESSION_LOG.md`
+
+### Decisions Made
+
+- Custom domains should never become routable based on ownership claims alone;
+  DNS TXT verification is now the minimum gate before tenant-domain resolution
+  can go live.
+- Verification tokens are deterministic per `tenantId + customDomain` using a
+  server secret, which avoids adding another persistence layer just to issue
+  and rotate one-time verification challenges.
+- Tenant-domain updates must invalidate both subdomain and custom-domain host
+  cache entries, not only the slug route, or stale routing can survive domain
+  changes.
+
+### Verification
+
+- `pnpm typecheck`
+- `pnpm test`
+
+### Runtime Verification Result
+
+- Full workspace typecheck passed after the `packages/utils` TypeScript fix.
+- API unit test suite passed with the stricter custom-domain resolver rules and
+  the new DNS verification service tests.
+
+### Blockers / Notes for Next Session
+
+- The workflow now proves domain ownership and safely flips verification on,
+  but it still depends on manual DNS changes by the tenant.
+- Production-grade custom-domain rollout still needs later operational work:
+  onboarding guidance, domain status observability, DNS/edge routing changes,
+  and final production environment secret configuration for the verification
+  secret.
+
+## Session 2026-05-01 — Multi-Tenancy Closeout Batch: Domain Verification Productionization
+
+**Phase:** MULTI-TENANCY RE-ARCHITECTURE (IN PROGRESS)
+**AI Assistant:** GPT-5 Codex
+
+### What Was Done
+
+- Extended the tenant custom-domain verification flow from a basic
+  instruction/check path into a richer operator-facing diagnostics workflow.
+- Added live verification diagnostics to the tenant domain API so the admin UI
+  can now show:
+  - verification status
+  - verification secret source/readiness
+  - DNS lookup time
+  - whether the expected TXT value was found
+  - visible TXT values currently returned by DNS
+  - lookup error code/message when DNS resolution fails
+- Expanded the tenant settings page with:
+  - clearer verification state messaging
+  - a platform-operator readiness banner
+  - a live DNS diagnostics panel
+  - practical DNS-provider onboarding tips for Cloudflare, Namecheap, and
+    GoDaddy
+  - stronger “refresh DNS check” wording instead of a generic instruction
+    refresh action
+- Added `DOMAIN_VERIFICATION_SECRET` placeholders to both the root
+  `.env.example` and local API `.env` template so the dedicated secret is part
+  of the documented runtime contract.
+- Added Fly deployment guidance in `fly.toml` reminding operators to set
+  `DOMAIN_VERIFICATION_SECRET`, `JWT_ACCESS_SECRET`, and `JWT_REFRESH_SECRET`
+  through Fly secrets instead of committing them to source control.
+
+### Files Created / Modified
+
+- `apps/api/src/modules/tenant/tenant.service.ts`
+- `apps/api/src/modules/tenant/tenant.service.spec.ts`
+- `apps/web/src/hooks/use-tenant-admin.ts`
+- `apps/web/src/app/(tenant-admin)/tenant/settings/page.tsx`
+- `.env.example`
+- `apps/api/.env`
+- `fly.toml`
+- `docs/ai-context/SESSION_LOG.md`
+
+### Decisions Made
+
+- The read-side domain-verification endpoint should act as a diagnostics
+  inspector, not only a token provider, so operators can see why a domain is
+  blocked before attempting a verification mutation.
+- Reusing JWT secrets for domain verification is acceptable as a compatibility
+  fallback, but the system should surface that as a production warning and push
+  operators toward a dedicated `DOMAIN_VERIFICATION_SECRET`.
+- DNS-provider onboarding belongs in the product surface itself, not only in
+  docs, because the failure mode is usually operational confusion rather than a
+  code defect.
+
+### Verification
+
+- `pnpm typecheck`
+- `pnpm test`
+
+### Runtime Verification Result
+
+- Full workspace typecheck passed.
+- API unit tests passed with the richer diagnostics payload and production
+  readiness warnings.
+
+### Blockers / Notes for Next Session
+
+- The repo is now wired for a dedicated verification secret, but the actual
+  production environment still needs an operator to set
+  `DOMAIN_VERIFICATION_SECRET` in the deployment secret manager.
+- Full production custom-domain rollout still needs later platform work around
+  DNS/edge routing, operational observability, and end-to-end live verification
+  against a real tenant-owned domain.
+
+## Session 2026-05-01 — Tenant Settings Hotfix: Restore Business Settings Page
+
+**Phase:** MULTI-TENANCY RE-ARCHITECTURE (IN PROGRESS)
+**AI Assistant:** GPT-5 Codex
+
+### What Was Done
+
+- Fixed a client-side crash on `/tenant/settings` caused by React hooks being
+  called after early returns in the tenant settings page.
+- Moved the `useMemo` and tenant domain verification hook setup so hooks now
+  run unconditionally before any loading/error returns.
+- Kept the tenant settings fallback values safe even when the overview payload
+  is still loading, preventing the business settings page from failing before
+  render.
+- Cleaned up the page-local hook dependency warning for the manual-steps memo.
+
+### Files Created / Modified
+
+- `apps/web/src/app/(tenant-admin)/tenant/settings/page.tsx`
+- `docs/ai-context/SESSION_LOG.md`
+
+### Decisions Made
+
+- The tenant settings page should compute safe defaults before the early
+  loading/error returns so page-level hooks stay stable across all render
+  states.
+
+### Verification
+
+- `pnpm --filter @zendocx/web exec eslint 'src/app/(tenant-admin)/tenant/settings/page.tsx'`
+- `pnpm --filter @zendocx/web build`
+
+### Runtime Verification Result
+
+- The tenant settings page no longer has Rules-of-Hooks violations.
+- The web app production build completed successfully, including `/tenant/settings`.
+
+### Blockers / Notes for Next Session
+
+- The broader web lint backlog still contains unrelated React hook/style
+  findings outside the tenant settings page, but they are not the blocker that
+  was breaking this route.
