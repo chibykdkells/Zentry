@@ -75,14 +75,14 @@ type NullableDraftKey = Exclude<ConfigFieldKey, 'apiKey'> | 'notes';
 
 const DELIVERY_LABELS: Record<ServiceDeliveryMode, string> = {
   [ServiceDeliveryMode.CBT_MANUAL]: 'Handled by your team',
-  [ServiceDeliveryMode.API_AUTOMATED]: 'Automated',
-  [ServiceDeliveryMode.PIN_STOCK]: 'PIN stock',
+  [ServiceDeliveryMode.API_AUTOMATED]: 'Runs through an API',
+  [ServiceDeliveryMode.PIN_STOCK]: 'Runs from stored stock',
 };
 
 const ROLLOUT_LABELS: Record<'AUTO' | 'MOCK' | 'LIVE', string> = {
-  AUTO: 'Auto routing',
-  MOCK: 'Mock mode',
-  LIVE: 'Live API',
+  AUTO: 'Use saved routing',
+  MOCK: 'Use test responses',
+  LIVE: 'Use live provider',
 };
 
 const PROBE_STATUS_LABELS: Record<string, string> = {
@@ -283,19 +283,19 @@ function getServiceStatus({
 }) {
   if (!isSelected) {
     return {
-      label: 'Available to add',
-      detail: 'Hidden from this business right now.',
+      label: 'Hidden',
+      detail: 'This service is currently hidden from this business.',
       tone: 'neutral' as ServiceStatusTone,
     };
   }
 
   if (deliveryMode !== ServiceDeliveryMode.API_AUTOMATED) {
     return {
-      label: 'Ready',
+      label: 'Live in business',
       detail:
         deliveryMode === ServiceDeliveryMode.CBT_MANUAL
-          ? 'Runs through your business team.'
-          : 'Runs from stocked inventory instead of a live API.',
+          ? 'Handled manually by your business team.'
+          : 'Delivered from stored inventory instead of a provider API.',
       tone: 'success' as ServiceStatusTone,
     };
   }
@@ -303,7 +303,7 @@ function getServiceStatus({
   if (!isEnabled) {
     return {
       label: 'Paused',
-      detail: 'Automation is turned off for this business.',
+      detail: 'Automated requests are turned off for this business.',
       tone: 'danger' as ServiceStatusTone,
     };
   }
@@ -311,7 +311,7 @@ function getServiceStatus({
   if (missingConfigCount > 0) {
     return {
       label: 'Needs setup',
-      detail: 'Connection details are still incomplete.',
+      detail: 'The API connection is missing required details.',
       tone: 'warning' as ServiceStatusTone,
     };
   }
@@ -319,15 +319,15 @@ function getServiceStatus({
   if (probeStatus === 'healthy' && mode === 'live') {
     return {
       label: 'Live',
-      detail: 'Requests can route through the configured provider.',
+      detail: 'Automated requests can use the current provider connection.',
       tone: 'success' as ServiceStatusTone,
     };
   }
 
   if (probeStatus === 'healthy' && mode === 'mock') {
     return {
-      label: 'Mock mode',
-      detail: 'Using test responses until you switch to live mode.',
+      label: 'Test mode',
+      detail: 'Using test responses until you switch to the live provider.',
       tone: 'info' as ServiceStatusTone,
     };
   }
@@ -335,14 +335,14 @@ function getServiceStatus({
   if (probeStatus === 'unreachable' || probeStatus === 'error') {
     return {
       label: 'Attention',
-      detail: 'The last connection check failed.',
+      detail: 'The last connection check did not succeed.',
       tone: 'warning' as ServiceStatusTone,
     };
   }
 
   return {
-    label: 'Not validated',
-    detail: 'Run a connection check before relying on automation.',
+    label: 'Unchecked',
+    detail: 'Run a connection check before relying on automated requests.',
     tone: 'neutral' as ServiceStatusTone,
   };
 }
@@ -669,16 +669,16 @@ export function TenantBusinessIntegrationsWorkspace() {
             <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
               <div className="max-w-3xl">
                 <p className="text-sm font-semibold uppercase tracking-[0.22em] text-amber-600">
-                  Business Integrations
+                  Service Connections
                 </p>
                 <h1 className="mt-3 max-w-2xl text-4xl font-black leading-[1.02] tracking-[-0.04em] text-slate-950">
-                  Manage services and API routing from one business workspace
+                  Control what this business offers and how automated services connect
                 </h1>
                 <p className="mt-4 max-w-3xl text-base leading-8 text-slate-600">
-                  This business automatically inherits the Zendocx default
-                  provider. Use this page to choose which services the business
-                  offers, validate the shared connection, or switch the business
-                  to its own custom API when needed.
+                  This business starts on the Zendocx default connection. Use
+                  this page to decide which services stay visible, check whether
+                  automated requests are healthy, and switch to a business-owned
+                  API only when this tenant needs it.
                 </p>
               </div>
 
@@ -689,7 +689,7 @@ export function TenantBusinessIntegrationsWorkspace() {
                   className="inline-flex items-center gap-2 rounded-2xl bg-[#0D1B3E] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#132754]"
                 >
                   <Settings2 size={16} />
-                  Configure API
+                  Edit business API
                 </button>
                 <button
                   type="button"
@@ -702,7 +702,7 @@ export function TenantBusinessIntegrationsWorkspace() {
                   ) : (
                     <ShieldCheck size={16} />
                   )}
-                  Validate connection
+                  Check connection
                 </button>
               </div>
             </div>
@@ -710,26 +710,26 @@ export function TenantBusinessIntegrationsWorkspace() {
 
           <div className="grid gap-4 px-5 py-5 md:grid-cols-2 xl:grid-cols-4 md:px-8 md:py-6">
             <SectionMetric
-              label="Services in lineup"
+              label="Visible in this business"
               value={`${visibleServiceCount}/${services.length}`}
-              detail="Everything this business currently offers to its users."
+              detail="These are the services people in this business can see right now."
             />
             <SectionMetric
-              label="Automated services"
+              label="Services using an API"
               value={`${readyApiServices}/${apiManagedServices.length}`}
-              detail="Services that depend on the business or platform API connection."
+              detail="These services depend on either the Zendocx connection or a business-owned API."
             />
             <SectionMetric
-              label="Connection source"
-              value={isTenantOverride ? 'Custom API' : 'Default API'}
+              label="Connection in use"
+              value={isTenantOverride ? 'Business API' : 'Zendocx default'}
               detail={
                 isTenantOverride
-                  ? 'This business has its own provider settings.'
-                  : 'This business is using the Zendocx provider settings.'
+                  ? 'This business has its own saved connection details.'
+                  : 'This business is currently using the Zendocx shared connection.'
               }
             />
             <SectionMetric
-              label="Connection health"
+              label="Latest connection check"
               value={probeLabel}
               detail={readiness.vtu.probe.message}
             />
@@ -772,15 +772,15 @@ export function TenantBusinessIntegrationsWorkspace() {
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div className="max-w-3xl">
                 <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-400">
-                  Service catalog
+                  Service list
                 </p>
                 <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
-                  All services managed under this business integration
+                  Every service managed for this business
                 </h2>
                 <p className="mt-2 text-sm leading-7 text-slate-500">
-                  Add or remove services from the business lineup, then review
-                  which ones depend on the default Zendocx API and which ones
-                  will use the business&apos;s custom API setup.
+                  Show or hide services for this tenant, then see which ones use
+                  Zendocx by default and which ones would use a business-owned
+                  API connection.
                 </p>
               </div>
 
@@ -788,9 +788,9 @@ export function TenantBusinessIntegrationsWorkspace() {
                 {(
                   [
                     ['ALL', `All (${services.length})`],
-                    ['OFFERED', `In business (${visibleServiceCount})`],
+                    ['OFFERED', `Visible (${visibleServiceCount})`],
                     ['AVAILABLE', `Hidden (${hiddenServiceCount})`],
-                    ['AUTOMATED', `Automated (${apiManagedServices.length})`],
+                    ['AUTOMATED', `Uses API (${apiManagedServices.length})`],
                   ] as const
                 ).map(([value, label]) => (
                   <button
@@ -856,14 +856,14 @@ export function TenantBusinessIntegrationsWorkspace() {
                 <Sparkles size={18} className="mt-0.5 shrink-0 text-amber-500" />
                 <div className="space-y-2 leading-7">
                   <p>
-                    <span className="font-semibold text-slate-900">Default behavior:</span>{' '}
-                    this business uses the Zendocx provider for automated
-                    services until you save a custom business API.
+                    <span className="font-semibold text-slate-900">Zendocx default:</span>{' '}
+                    automated services use the Zendocx connection until you save
+                    a business-specific API.
                   </p>
                   <p>
-                    <span className="font-semibold text-slate-900">Service management:</span>{' '}
-                    hide any service the business should not sell, or turn a
-                    hidden service back on from this same table.
+                    <span className="font-semibold text-slate-900">Hidden services:</span>{' '}
+                    hidden services disappear from this business, but you can
+                    turn them back on from the same table at any time.
                   </p>
                 </div>
               </div>
@@ -881,13 +881,13 @@ export function TenantBusinessIntegrationsWorkspace() {
                     Customer price
                   </th>
                   <th className="px-4 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                    Delivery
+                    How it is fulfilled
                   </th>
                   <th className="px-4 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                    API connection
+                    Connection used
                   </th>
                   <th className="px-4 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                    Status
+                    Business status
                   </th>
                   <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
                     Actions
@@ -908,9 +908,9 @@ export function TenantBusinessIntegrationsWorkspace() {
                     const automationSource =
                       service.deliveryMode === ServiceDeliveryMode.API_AUTOMATED
                         ? isTenantOverride
-                          ? 'Custom API'
+                          ? 'Business API'
                           : 'Zendocx default'
-                        : 'No API required';
+                        : 'No API needed';
 
                     return (
                       <tr
@@ -967,10 +967,10 @@ export function TenantBusinessIntegrationsWorkspace() {
                             </span>
                             <p className="text-sm leading-6 text-slate-500">
                               {service.deliveryMode === ServiceDeliveryMode.API_AUTOMATED
-                                ? 'Uses the shared provider connection shown on this page.'
+                                ? 'Handled automatically through the connection shown on this page.'
                                 : service.deliveryMode === ServiceDeliveryMode.CBT_MANUAL
-                                  ? 'Delivered manually by the business team.'
-                                  : 'Delivered from stocked inventory rather than a live provider API.'}
+                                  ? 'Handled manually by people inside this business.'
+                                  : 'Delivered from stored inventory instead of a live provider connection.'}
                             </p>
                           </div>
                         </td>
@@ -982,9 +982,9 @@ export function TenantBusinessIntegrationsWorkspace() {
                             <p className="text-sm leading-6 text-slate-500">
                               {service.deliveryMode === ServiceDeliveryMode.API_AUTOMATED
                                 ? isTenantOverride
-                                  ? 'This service will use the business API account.'
-                                  : 'This service will use the Zendocx platform connection.'
-                                : 'This service does not depend on API credentials.'}
+                                  ? 'This service will use the business-owned API connection.'
+                                  : 'This service will use the Zendocx shared connection.'
+                                : 'This service works without API credentials.'}
                             </p>
                           </div>
                         </td>
@@ -1023,7 +1023,7 @@ export function TenantBusinessIntegrationsWorkspace() {
                               ) : (
                                 <Eye size={15} />
                               )}
-                              {service.isSelected ? 'Hide' : 'Add'}
+                              {service.isSelected ? 'Hide service' : 'Show service'}
                             </button>
                             {service.deliveryMode === ServiceDeliveryMode.API_AUTOMATED ? (
                               <button
@@ -1032,7 +1032,7 @@ export function TenantBusinessIntegrationsWorkspace() {
                                 className="inline-flex items-center gap-2 rounded-2xl bg-[#0D1B3E] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#132754]"
                               >
                                 <Settings2 size={15} />
-                                API
+                                Edit API
                               </button>
                             ) : null}
                           </div>
@@ -1064,15 +1064,15 @@ export function TenantBusinessIntegrationsWorkspace() {
               </div>
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-400">
-                  Automation controls
+                  Automated service controls
                 </p>
                 <h3 className="mt-2 text-xl font-bold tracking-tight text-slate-950">
-                  Control how automated calls flow for this business
+                  Decide how automated services behave for this business
                 </h3>
                 <p className="mt-2 text-sm leading-7 text-slate-500">
-                  These controls apply to every automated service in the table.
-                  Manual services and PIN stock services stay available, but they
-                  do not use the API connection.
+                  These settings affect every service that depends on an API.
+                  Manual services and stock-based services stay available, but
+                  they do not use this connection.
                 </p>
               </div>
             </div>
@@ -1080,15 +1080,15 @@ export function TenantBusinessIntegrationsWorkspace() {
             <div className="mt-6 grid gap-4 md:grid-cols-2">
               <label className="rounded-[1.5rem] border border-slate-200 bg-slate-50/70 px-4 py-4">
                 <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                  Connection enabled
+                  API access
                 </span>
                 <div className="mt-3 flex items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-slate-950">
-                      Allow automated traffic
+                      Allow automated requests
                     </p>
                     <p className="mt-1 text-sm text-slate-500">
-                      Turn this off to pause automated requests for the business.
+                      Turn this off if the business should temporarily stop using automated provider calls.
                     </p>
                   </div>
                   <input
@@ -1107,7 +1107,7 @@ export function TenantBusinessIntegrationsWorkspace() {
 
               <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/70 px-4 py-4">
                 <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                  Routing mode
+                  API mode
                 </span>
                 <select
                   value={effectiveRolloutMode}
@@ -1151,7 +1151,7 @@ export function TenantBusinessIntegrationsWorkspace() {
                   className="inline-flex items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-700 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Unplug size={16} />
-                  Use Zendocx default
+                  Switch back to Zendocx default
                 </button>
               ) : null}
             </div>
@@ -1167,12 +1167,12 @@ export function TenantBusinessIntegrationsWorkspace() {
                   Current connection
                 </p>
                 <h3 className="mt-2 text-xl font-bold tracking-tight text-slate-950">
-                  {isTenantOverride ? 'Custom business API' : 'Zendocx default API'}
+                  {isTenantOverride ? 'Business-owned API connection' : 'Zendocx default connection'}
                 </h3>
                 <p className="mt-2 text-sm leading-7 text-slate-500">
                   {isTenantOverride
-                    ? 'This business has its own saved endpoint and credentials.'
-                    : 'No business-specific endpoint is saved, so automated services fall back to the Zendocx default provider.'}
+                    ? 'This business has its own saved endpoint and credentials for automated services.'
+                    : 'No business-specific connection is saved, so automated services fall back to the Zendocx shared provider.'}
                 </p>
               </div>
             </div>
@@ -1183,7 +1183,7 @@ export function TenantBusinessIntegrationsWorkspace() {
                   Endpoint
                 </p>
                 <p className="mt-2 text-sm font-semibold text-slate-950">
-                  {effectiveBaseUrl || 'Using the Zendocx platform endpoint'}
+                  {effectiveBaseUrl || 'Using the Zendocx shared endpoint'}
                 </p>
               </div>
               <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/70 px-4 py-4">
@@ -1204,7 +1204,7 @@ export function TenantBusinessIntegrationsWorkspace() {
                   Internal notes
                 </p>
                 <p className="mt-2 text-sm leading-6 text-slate-500">
-                  {effectiveNotes || 'No rollout notes saved for this business yet.'}
+                  {effectiveNotes || 'No business-specific notes have been saved yet.'}
                 </p>
               </div>
             </div>
@@ -1222,13 +1222,13 @@ export function TenantBusinessIntegrationsWorkspace() {
                 </p>
                 <h3 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
                   {selectedServiceName
-                    ? `API setup for ${selectedServiceName}`
-                    : 'Business API setup'}
+                    ? `API connection for ${selectedServiceName}`
+                    : 'Business API connection'}
                 </h3>
                 <p className="mt-2 text-sm leading-7 text-slate-500">
-                  By default, this business uses the Zendocx provider. Save a
-                  custom endpoint only when the business has its own provider
-                  account for automated services.
+                  By default, this business uses Zendocx. Save a business-owned
+                  endpoint only when this tenant has its own provider account
+                  for automated services.
                 </p>
               </div>
               <button
@@ -1329,9 +1329,9 @@ export function TenantBusinessIntegrationsWorkspace() {
               </label>
 
               <div className="rounded-[1.5rem] border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
-                API credentials saved here are reused by every automated service
-                in this business. Manual services and PIN stock services stay in
-                the service list, but they do not use this API connection.
+                The connection saved here is reused by every service in this
+                business that depends on an API. Manual services and stock-based
+                services remain in the list, but they do not use these credentials.
               </div>
             </div>
 
@@ -1349,7 +1349,7 @@ export function TenantBusinessIntegrationsWorkspace() {
                   </button>
                 ) : (
                   <p className="text-sm text-slate-500">
-                    Leave this blank if the Zendocx default provider is enough.
+                    Leave this blank if the Zendocx default connection is enough for this business.
                   </p>
                 )}
               </div>
@@ -1378,7 +1378,7 @@ export function TenantBusinessIntegrationsWorkspace() {
                   ) : (
                     <Settings2 size={16} />
                   )}
-                  Save API config
+                  Save API connection
                 </button>
               </div>
             </div>
