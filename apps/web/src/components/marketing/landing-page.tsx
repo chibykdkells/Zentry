@@ -67,9 +67,9 @@ function PortalScreen() {
           className="bg-[#0D1B3E] flex items-center justify-center shrink-0"
           style={{ width: 20, height: 20, borderRadius: 5 }}
         >
-          <span className="text-[#F5A623] font-bold" style={{ fontSize: 7 }}>B</span>
+          <span className="text-[#F5A623] font-bold" style={{ fontSize: 7 }}>Y</span>
         </div>
-        <span className="font-bold text-[#0D1B3E]" style={{ fontSize: 9 }}>BuyCard.ng</span>
+        <span className="font-bold text-[#0D1B3E]" style={{ fontSize: 9 }}>yourbiz.com</span>
       </div>
 
       <div className="flex-1 flex flex-col items-center justify-center px-5 text-center">
@@ -82,11 +82,11 @@ function PortalScreen() {
             boxShadow: '0 8px 24px rgba(13,27,62,0.35)',
           }}
         >
-          <span className="text-[#F5A623] font-bold" style={{ fontSize: 22 }}>B</span>
+          <span className="text-[#F5A623] font-bold" style={{ fontSize: 22 }}>Y</span>
         </div>
 
         <p className="font-bold text-[#0D1B3E] leading-tight" style={{ fontSize: 10 }}>Welcome to</p>
-        <p className="font-extrabold text-[#0D1B3E]" style={{ fontSize: 15 }}>BuyCard.ng</p>
+        <p className="font-extrabold text-[#0D1B3E]" style={{ fontSize: 15 }}>yourbiz.com</p>
         <p className="text-gray-400 mt-1 mb-5" style={{ fontSize: 8 }}>
           Government services, made easy
         </p>

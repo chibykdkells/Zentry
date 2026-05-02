@@ -281,15 +281,15 @@ export function LoginForm({ mode = 'auto' }: { mode?: LoginMode }) {
   return (
     <AuthShell
       variant={platformMode ? 'platform' : 'default'}
-      title={platformMode ? 'Platform owner sign in' : 'Welcome back'}
+      title={platformMode ? 'Platform sign in' : 'Sign in'}
       description={
         platformMode
-          ? 'Use this ZenDocx access point to manage tenants, provision tenant admins, and operate the platform dashboard.'
-          : 'Sign in to continue inside your ZenDocx workspace. If you arrived through a business portal, you will stay inside that tenant experience.'
+          ? 'Access the ZenDocx control layer to manage tenants and platform operations.'
+          : 'Enter your credentials to continue to your workspace.'
       }
       footer={footer}
     >
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         {infoMessage ? (
           <FeedbackBanner tone="info" message={infoMessage} />
         ) : null}
@@ -306,12 +306,12 @@ export function LoginForm({ mode = 'auto' }: { mode?: LoginMode }) {
           <FeedbackBanner
             tone="info"
             title="Platform owner access"
-            message="This login is for ZenDocx platform owners and internal admins. Tenant users should use their own business portal URL."
+            message="Tenant users should sign in through their organization's portal URL, not here."
           />
         ) : null}
 
         <div>
-          <label className="mb-2 block text-[12px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+          <label className="mb-1.5 block text-xs font-semibold text-slate-500 uppercase tracking-wider">
             Email address
           </label>
           <input
@@ -319,29 +319,25 @@ export function LoginForm({ mode = 'auto' }: { mode?: LoginMode }) {
             autoComplete="email"
             placeholder="you@example.com"
             className={cn(
-              'w-full rounded-[1.35rem] border px-4 py-3.5 text-[15px] font-medium text-slate-900 outline-none transition',
-              'focus:border-[#0D1B3E] focus:bg-white focus:ring-2 focus:ring-[#0D1B3E]/10',
-              errors.email
-                ? 'border-red-300 bg-red-50'
-                : 'border-slate-200 bg-slate-50',
+              'w-full rounded-2xl border px-4 py-3.5 text-[15px] font-medium text-slate-900 outline-none transition bg-slate-50',
+              'focus:border-[#0D1B3E] focus:bg-white focus:ring-2 focus:ring-[#0D1B3E]/8',
+              errors.email ? 'border-red-300 bg-red-50' : 'border-slate-200',
             )}
             {...register('email')}
           />
           {errors.email ? (
-            <p className="mt-1 text-xs text-red-500">
-              {errors.email.message}
-            </p>
+            <p className="mt-1.5 text-xs text-red-500">{errors.email.message}</p>
           ) : null}
         </div>
 
         <div>
-          <div className="mb-2 flex items-center justify-between gap-4">
-            <label className="block text-[12px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+          <div className="mb-1.5 flex items-center justify-between">
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">
               Password
             </label>
             <Link
               href={forgotPasswordHref}
-              className="text-xs font-semibold text-slate-500 hover:text-[#0D1B3E]"
+              className="text-xs font-semibold text-[#0D1B3E]/60 hover:text-[#0D1B3E] transition-colors"
             >
               Forgot password?
             </Link>
@@ -350,13 +346,11 @@ export function LoginForm({ mode = 'auto' }: { mode?: LoginMode }) {
             <input
               type={showPassword ? 'text' : 'password'}
               autoComplete="current-password"
-              placeholder="Enter your password"
+              placeholder="Your password"
               className={cn(
-                'w-full rounded-[1.35rem] border px-4 py-3.5 pr-11 text-[15px] font-medium text-slate-900 outline-none transition',
-                'focus:border-[#0D1B3E] focus:bg-white focus:ring-2 focus:ring-[#0D1B3E]/10',
-                errors.password
-                  ? 'border-red-300 bg-red-50'
-                  : 'border-slate-200 bg-slate-50',
+                'w-full rounded-2xl border px-4 py-3.5 pr-12 text-[15px] font-medium text-slate-900 outline-none transition bg-slate-50',
+                'focus:border-[#0D1B3E] focus:bg-white focus:ring-2 focus:ring-[#0D1B3E]/8',
+                errors.password ? 'border-red-300 bg-red-50' : 'border-slate-200',
               )}
               {...register('password')}
             />
@@ -364,15 +358,13 @@ export function LoginForm({ mode = 'auto' }: { mode?: LoginMode }) {
               type="button"
               tabIndex={-1}
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
             >
-              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
             </button>
           </div>
           {errors.password ? (
-            <p className="mt-1 text-xs text-red-500">
-              {errors.password.message}
-            </p>
+            <p className="mt-1.5 text-xs text-red-500">{errors.password.message}</p>
           ) : null}
         </div>
 
@@ -380,13 +372,13 @@ export function LoginForm({ mode = 'auto' }: { mode?: LoginMode }) {
           type="submit"
           disabled={loading}
           className={cn(
-            'flex w-full items-center justify-center gap-2 rounded-[1.35rem] px-5 py-3.5 text-[15px] font-semibold transition',
-            'bg-[#0D1B3E] text-white hover:bg-[#132754]',
+            'mt-2 flex w-full items-center justify-center gap-2 rounded-2xl px-5 py-3.5 text-[15px] font-bold transition',
+            'bg-[#F5A623] text-[#0D1B3E] hover:bg-[#e8961a] active:scale-[0.99]',
             'disabled:cursor-not-allowed disabled:opacity-60',
           )}
         >
           {loading ? <Loader2 size={16} className="animate-spin" /> : null}
-          {loading ? 'Signing in...' : 'Sign in'}
+          {loading ? 'Signing in…' : 'Sign in'}
         </button>
       </form>
     </AuthShell>
