@@ -12,6 +12,20 @@ import {
 import apiClient from '@/lib/api-client';
 import { getApiErrorMessage } from '@/lib/api-error';
 
+export interface OrderDocumentAttachment {
+  name: string;
+  label: string | null;
+  url: string;
+  filename: string | null;
+  publicId: string | null;
+}
+
+export interface DisputeEvidenceAttachment {
+  url: string;
+  filename: string | null;
+  publicId: string | null;
+}
+
 export interface OrderListItem {
   id: string;
   orderNumber: string;
@@ -21,6 +35,7 @@ export interface OrderListItem {
   platformFee: string;
   cbtCommission: string;
   submittedData: Record<string, string>;
+  requesterDocuments: OrderDocumentAttachment[];
   requesterDocUrls: string[];
   resultFileUrl: string | null;
   resultUploadedAt: string | null;
@@ -113,6 +128,7 @@ export interface OrderDetail extends OrderListItem {
     redoDeadline: string | null;
     redoCompletedAt: string | null;
     resolutionNote: string | null;
+    evidenceFiles: DisputeEvidenceAttachment[];
     evidenceUrls: string[];
   } | null;
   disputeGroundwork: {

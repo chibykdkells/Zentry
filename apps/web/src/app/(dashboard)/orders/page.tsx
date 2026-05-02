@@ -26,6 +26,11 @@ import { useOrderDetail, useOrders } from '@/hooks/use-orders';
 import { getApiErrorMessage } from '@/lib/api-error';
 import { formatDate, formatNaira, formatTimeUntil } from '@/lib/format';
 import {
+  cleanupOrderUploads,
+  uploadOrderFiles,
+  type UploadedOrderFile,
+} from '@/lib/order-file-uploads';
+import {
   emptyOrderReasons,
   ordersEmptyFilters,
   ordersLifecycle,
@@ -173,7 +178,7 @@ export default function OrdersPage() {
 
           <FilePreviewGallery
             title="Supporting files"
-            files={detail.requesterDocUrls}
+            files={detail.requesterDocuments}
             emptyMessage="No supporting files were attached to this request."
           />
 
@@ -435,21 +440,14 @@ export default function OrdersPage() {
                   </p>
                 </div>
               ) : null}
-              {detail.dispute.evidenceUrls.length ? (
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {detail.dispute.evidenceUrls.map((url, index) => (
-                    <a
-                      key={url}
-                      href={url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="rounded-full border border-rose-200 bg-white px-3 py-2 text-xs font-semibold text-rose-800 transition hover:bg-rose-50"
-                    >
-                      Evidence {index + 1}
-                    </a>
-                  ))}
-                </div>
-              ) : null}
+              <div className="mt-4">
+                <FilePreviewGallery
+                  title="Evidence files"
+                  files={detail.dispute.evidenceFiles}
+                  emptyMessage="No evidence files were attached to this dispute."
+                  className="border-rose-200 bg-white/70"
+                />
+              </div>
             </div>
           ) : canRaiseDispute(detail) ? (
             <CreateDisputePanel detail={detail} />
@@ -705,25 +703,31 @@ function CreateDisputePanel({
   const createDispute = useCreateOrderDispute();
   const usesMobileSheet = useMediaQuery('(max-width: 1279px)');
   const [reason, setReason] = useState('');
-  const [evidenceText, setEvidenceText] = useState('');
+  const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
+  const [uploadingEvidence, setUploadingEvidence] = useState(false);
 
   const handleSubmit = async () => {
-    const evidenceUrls = evidenceText
-      .split('\n')
-      .map((value) => value.trim())
-      .filter(Boolean);
+    let uploadedEvidenceFiles: UploadedOrderFile[] = [];
 
     try {
+      setUploadingEvidence(true);
+      uploadedEvidenceFiles = await uploadOrderFiles(evidenceFiles);
       const response = await createDispute.mutateAsync({
         orderId: detail.id,
         reason,
-        evidenceUrls,
+        evidenceFiles: uploadedEvidenceFiles,
       });
       toast.success(response.message ?? 'Dispute created successfully.');
       setReason('');
-      setEvidenceText('');
+      setEvidenceFiles([]);
     } catch (error) {
+      if (uploadedEvidenceFiles.length > 0) {
+        await cleanupOrderUploads(uploadedEvidenceFiles).catch(() => undefined);
+      }
+
       toast.error(getApiErrorMessage(error, 'Could not create the dispute right now.'));
+    } finally {
+      setUploadingEvidence(false);
     }
   };
 
@@ -752,13 +756,37 @@ function CreateDisputePanel({
         className="mt-4 w-full rounded-3xl border border-rose-200 bg-white px-4 py-3 text-sm leading-6 text-slate-800 outline-none transition focus:border-rose-300 focus:ring-2 focus:ring-rose-200"
       />
 
-      <textarea
-        value={evidenceText}
-        onChange={(event) => setEvidenceText(event.target.value)}
-        rows={3}
-        placeholder="Optional evidence URLs, one per line"
-        className="mt-3 w-full rounded-3xl border border-rose-200 bg-white px-4 py-3 text-sm leading-6 text-slate-800 outline-none transition focus:border-rose-300 focus:ring-2 focus:ring-rose-200"
-      />
+      <label className="mt-3 block">
+        <span className="mb-2 block text-sm font-medium text-rose-900">
+          Optional evidence files
+        </span>
+        <input
+          type="file"
+          multiple
+          accept=".pdf,.jpg,.jpeg,.png,.webp"
+          onChange={(event) =>
+            setEvidenceFiles(Array.from(event.target.files ?? []))
+          }
+          className="block w-full rounded-3xl border border-dashed border-rose-200 bg-white px-4 py-3 text-sm text-slate-700 file:mr-4 file:rounded-full file:border-0 file:bg-rose-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-rose-900 hover:file:bg-rose-200"
+        />
+        <span className="mt-2 block text-xs text-rose-800/80">
+          Attach screenshots, PDFs, or photos up to 5MB each. These files will
+          be uploaded with the dispute instead of pasted as links.
+        </span>
+      </label>
+
+      {evidenceFiles.length ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {evidenceFiles.map((file) => (
+            <span
+              key={`${file.name}-${file.lastModified}`}
+              className="rounded-full border border-rose-200 bg-white px-3 py-2 text-xs font-semibold text-rose-900"
+            >
+              {file.name}
+            </span>
+          ))}
+        </div>
+      ) : null}
 
       <div
         className={cn(
@@ -774,13 +802,19 @@ function CreateDisputePanel({
         </p>
         <button
           type="button"
-          disabled={reason.trim().length < 10 || createDispute.isPending}
+          disabled={
+            reason.trim().length < 10 ||
+            createDispute.isPending ||
+            uploadingEvidence
+          }
           onClick={() => {
             void handleSubmit();
           }}
           className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-rose-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-rose-800 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {createDispute.isPending ? 'Submitting...' : 'Open dispute'}
+          {createDispute.isPending || uploadingEvidence
+            ? 'Submitting...'
+            : 'Open dispute'}
         </button>
       </div>
     </div>

@@ -129,7 +129,7 @@ export default function MyJobsPage() {
 
           <FilePreviewGallery
             title="Requester files"
-            files={detail.requesterDocUrls}
+            files={detail.requesterDocuments}
             emptyMessage="No supporting files were attached to this request."
           />
 

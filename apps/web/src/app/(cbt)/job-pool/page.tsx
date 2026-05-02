@@ -115,14 +115,14 @@ export default function JobPoolPage() {
               ))}
             </div>
             <p className="mt-4 text-sm text-slate-500">
-              Submitted {formatDate(detail.createdAt)} • {detail.requesterDocUrls.length} supporting document
-              {detail.requesterDocUrls.length === 1 ? '' : 's'}
+              Submitted {formatDate(detail.createdAt)} • {detail.requesterDocuments.length} supporting document
+              {detail.requesterDocuments.length === 1 ? '' : 's'}
             </p>
           </div>
 
           <FilePreviewGallery
             title="Requester files"
-            files={detail.requesterDocUrls}
+            files={detail.requesterDocuments}
             emptyMessage="No supporting files were attached to this request."
           />
 

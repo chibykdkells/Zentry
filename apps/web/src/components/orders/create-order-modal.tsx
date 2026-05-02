@@ -15,6 +15,11 @@ import {
   type VtuIntegrationMeta,
 } from '@/hooks/use-service-catalog';
 import { formatNaira } from '@/lib/format';
+import {
+  cleanupOrderUploads,
+  uploadOrderFiles,
+  type UploadedOrderFile,
+} from '@/lib/order-file-uploads';
 import { cn } from '@/lib/utils';
 
 interface CreateOrderModalProps {
@@ -265,6 +270,7 @@ export function CreateOrderModal({
   const handleSubmit = async () => {
     setSubmitting(true);
     setInlineError(null);
+    let uploadedItems: UploadedOrderFile[] = [];
 
     try {
       if (isCableService && !cableVerification) {
@@ -290,41 +296,52 @@ export function CreateOrderModal({
         );
       }
 
-      let requesterDocUrls: string[] = [];
-      const selectedFiles = requiredDocuments
-        .map((document) => documentFiles[document.name])
-        .filter((file): file is File => Boolean(file));
+      const selectedDocuments = requiredDocuments.flatMap((document) => {
+        const file = documentFiles[document.name];
 
-      if (selectedFiles.length > 0) {
-        const formData = new FormData();
+        return file ? [{ document, file }] : [];
+      });
+      let requesterDocuments: Record<
+        string,
+        {
+          url: string;
+          filename: string | null;
+          publicId: string | null;
+        }
+      > = {};
 
-        selectedFiles.forEach((file) => {
-          formData.append('files', file);
-        });
+      if (selectedDocuments.length > 0) {
+        uploadedItems = await uploadOrderFiles(
+          selectedDocuments.map((entry) => entry.file),
+        );
 
-        const uploadResponse = await apiClient.post<{
-          data: {
-            items: Array<{ url: string }>;
-          };
-        }>('/orders/uploads', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-        });
-
-        requesterDocUrls = uploadResponse.data.data.items.map((item) => item.url);
+        requesterDocuments = Object.fromEntries(
+          uploadedItems.map((item, index) => [
+            selectedDocuments[index]!.document.name,
+            {
+              url: item.url,
+              filename:
+                item.filename ?? selectedDocuments[index]!.file.name ?? null,
+              publicId: item.publicId ?? null,
+            },
+          ]),
+        );
       }
 
       const response = await apiClient.post<{ message: string }>('/orders', {
         serviceId: service.id,
         submittedData: values,
-        requesterDocUrls,
+        requesterDocuments,
       });
 
       toast.success(response.data.message);
       onSuccess?.();
       onClose();
     } catch (error) {
+      if (uploadedItems.length > 0) {
+        await cleanupOrderUploads(uploadedItems).catch(() => undefined);
+      }
+
       const message =
         error instanceof Error && error.message
           ? error.message

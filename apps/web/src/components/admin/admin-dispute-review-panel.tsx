@@ -148,7 +148,7 @@ export function AdminDisputeReviewPanel({ detail }: { detail: OrderDetail }) {
 
       <FilePreviewGallery
         title="Evidence files"
-        files={detail.dispute.evidenceUrls}
+        files={detail.dispute.evidenceFiles}
         emptyMessage="No evidence files were attached to this dispute."
         className="border-rose-200 bg-rose-50/40"
       />

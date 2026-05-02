@@ -6,16 +6,66 @@ import { cn } from '@/lib/utils';
 
 interface FilePreviewGalleryProps {
   title: string;
-  files: string[];
+  files: Array<
+    | string
+    | {
+        url: string;
+        label?: string | null;
+        filename?: string | null;
+      }
+  >;
   emptyMessage: string;
   className?: string;
+}
+
+function getFileUrl(
+  file:
+    | string
+    | {
+        url: string;
+        label?: string | null;
+        filename?: string | null;
+      },
+) {
+  return typeof file === 'string' ? file : file.url;
+}
+
+function getDisplayLabel(
+  file:
+    | string
+    | {
+        url: string;
+        label?: string | null;
+        filename?: string | null;
+      },
+  fallbackLabel: string,
+) {
+  if (typeof file === 'string') {
+    return fallbackLabel;
+  }
+
+  return file.label?.trim() || file.filename?.trim() || fallbackLabel;
 }
 
 function isImageFile(url: string) {
   return /\.(png|jpe?g|gif|webp|bmp|svg)(\?.*)?$/i.test(url);
 }
 
-function getFileName(url: string) {
+function getFileName(
+  file:
+    | string
+    | {
+        url: string;
+        label?: string | null;
+        filename?: string | null;
+      },
+) {
+  if (typeof file !== 'string' && file.filename?.trim()) {
+    return file.filename.trim();
+  }
+
+  const url = getFileUrl(file);
+
   try {
     const pathname = new URL(url).pathname;
     return decodeURIComponent(pathname.split('/').pop() || 'File');
@@ -41,10 +91,14 @@ export function FilePreviewGallery({
       <div className="mt-4">
         {files.length ? (
           <div className="grid gap-3 sm:grid-cols-2">
-            {files.map((fileUrl, index) =>
-              isImageFile(fileUrl) ? (
+            {files.map((file, index) => {
+              const fileUrl = getFileUrl(file);
+              const displayLabel = getDisplayLabel(file, `File ${index + 1}`);
+              const displayName = getFileName(file);
+
+              return isImageFile(fileUrl) ? (
                 <a
-                  key={fileUrl}
+                  key={`${fileUrl}-${index}`}
                   href={fileUrl}
                   target="_blank"
                   rel="noreferrer"
@@ -62,10 +116,10 @@ export function FilePreviewGallery({
                   <div className="flex items-center justify-between gap-3 px-4 py-3">
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-slate-900">
-                        Image {index + 1}
+                        {truncate(displayLabel, 30)}
                       </p>
                       <p className="mt-1 text-xs text-slate-500">
-                        {truncate(getFileName(fileUrl), 30)}
+                        {truncate(displayName, 30)}
                       </p>
                     </div>
                     <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#0D1B3E]">
@@ -76,7 +130,7 @@ export function FilePreviewGallery({
                 </a>
               ) : (
                 <a
-                  key={fileUrl}
+                  key={`${fileUrl}-${index}`}
                   href={fileUrl}
                   target="_blank"
                   rel="noreferrer"
@@ -87,10 +141,10 @@ export function FilePreviewGallery({
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-slate-900">
-                      File {index + 1}
+                      {truncate(displayLabel, 34)}
                     </p>
                     <p className="mt-1 text-xs text-slate-500">
-                      {truncate(getFileName(fileUrl), 34)}
+                      {truncate(displayName, 34)}
                     </p>
                   </div>
                   <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#0D1B3E]">
@@ -98,8 +152,8 @@ export function FilePreviewGallery({
                     <ExternalLink size={14} />
                   </span>
                 </a>
-              ),
-            )}
+              );
+            })}
           </div>
         ) : (
           <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-5 text-sm text-slate-500">

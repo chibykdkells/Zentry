@@ -15,6 +15,10 @@ export class CreateOrderDto {
   submittedData: Record<string, string>;
 
   @IsOptional()
+  @IsObject()
+  requesterDocuments?: Record<string, unknown>;
+
+  @IsOptional()
   @IsArray()
   @IsString({ each: true })
   requesterDocUrls?: string[];

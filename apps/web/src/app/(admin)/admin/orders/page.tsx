@@ -179,7 +179,7 @@ export default function AdminOrdersPage() {
 
           <FilePreviewGallery
             title="Supporting files"
-            files={detail.requesterDocUrls}
+            files={detail.requesterDocuments}
             emptyMessage="No supporting files were attached."
           />
 

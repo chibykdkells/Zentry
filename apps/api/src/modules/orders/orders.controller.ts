@@ -18,6 +18,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CompleteCbtJobDto } from './dto/complete-cbt-job.dto';
+import { CleanupOrderUploadsDto } from './dto/cleanup-order-uploads.dto';
 import { CreateDisputeDto } from './dto/create-dispute.dto';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { GetAdminDisputesQueryDto } from './dto/get-admin-disputes.dto';
@@ -259,6 +260,14 @@ export class OrdersController {
     @UploadedFiles() files: UploadedDocumentFile[],
   ) {
     return this.ordersService.uploadRequesterDocuments(user.sub, files);
+  }
+
+  @Post('uploads/cleanup')
+  cleanupRequesterDocuments(
+    @CurrentUser() user: JwtUser,
+    @Body() dto: CleanupOrderUploadsDto,
+  ) {
+    return this.ordersService.cleanupUploadedOrderFiles(user.sub, dto.publicIds);
   }
 
   @Post()

@@ -159,17 +159,17 @@ export default function DisputesPage() {
                       </div>
                     ) : null}
 
-                    {dispute.evidenceUrls.length ? (
+                    {dispute.evidenceFiles.length ? (
                       <div className="mt-4 flex flex-wrap gap-2">
-                        {dispute.evidenceUrls.map((url, index) => (
+                        {dispute.evidenceFiles.map((file, index) => (
                           <a
-                            key={url}
-                            href={url}
+                            key={`${file.url}-${index}`}
+                            href={file.url}
                             target="_blank"
                             rel="noreferrer"
                             className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
                           >
-                            Evidence {index + 1}
+                            {file.filename?.trim() || `Evidence ${index + 1}`}
                           </a>
                         ))}
                       </div>

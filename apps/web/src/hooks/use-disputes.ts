@@ -5,10 +5,17 @@ import { DisputeStatus, FulfillmentType, OrderStatus, ServiceDeliveryMode } from
 import apiClient from '@/lib/api-client';
 import { getApiErrorMessage } from '@/lib/api-error';
 
+export interface DisputeEvidenceAttachment {
+  url: string;
+  filename: string | null;
+  publicId: string | null;
+}
+
 export interface DisputeListItem {
   id: string;
   status: DisputeStatus;
   reason: string;
+  evidenceFiles: DisputeEvidenceAttachment[];
   evidenceUrls: string[];
   resolutionNote: string | null;
   createdAt: string;
@@ -156,16 +163,19 @@ export function useCreateOrderDispute() {
     mutationFn: async ({
       orderId,
       reason,
+      evidenceFiles,
       evidenceUrls,
     }: {
       orderId: string;
       reason: string;
+      evidenceFiles?: DisputeEvidenceAttachment[];
       evidenceUrls?: string[];
     }) => {
       const response = await apiClient.post<{ data: unknown; message: string }>(
         `/orders/me/${orderId}/dispute`,
         {
           reason,
+          evidenceFiles,
           evidenceUrls,
         },
       );

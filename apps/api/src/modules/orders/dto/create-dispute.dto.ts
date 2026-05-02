@@ -1,5 +1,6 @@
 import {
   IsArray,
+  IsObject,
   IsOptional,
   IsString,
   MaxLength,
@@ -11,6 +12,11 @@ export class CreateDisputeDto {
   @MinLength(10)
   @MaxLength(1000)
   reason!: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsObject({ each: true })
+  evidenceFiles?: Record<string, unknown>[];
 
   @IsOptional()
   @IsArray()
