@@ -20,7 +20,6 @@ import {
   TenantAdminPermission,
   UserRole,
 } from '@zendocx/types';
-import { generateTransactionRef } from '@zendocx/utils';
 import { RegisterIndividualDto, RegisterCbtDto } from './dto';
 import { EmailService } from '../../providers/email/email.service';
 
@@ -460,12 +459,21 @@ export class AuthService {
 
     // Always return the same message — prevents email enumeration
     if (user) {
-      const token = generateTransactionRef();
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      const token = Array.from({ length: 6 }, () =>
+        chars[randomInt(0, chars.length)],
+      ).join('');
       const rounds = Number(this.config.get('PIN_BCRYPT_ROUNDS', '10'));
       const hashed = await bcrypt.hash(token, rounds);
       const expiryHours = Number(
         this.config.get('PASSWORD_RESET_EXPIRY_HOURS', '1'),
       );
+
+      // Invalidate any previous unused resets for this user
+      await this.prisma.passwordReset.updateMany({
+        where: { userId: user.id, usedAt: null },
+        data: { usedAt: new Date() },
+      });
 
       await this.prisma.passwordReset.create({
         data: {
