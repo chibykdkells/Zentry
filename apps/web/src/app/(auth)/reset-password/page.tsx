@@ -60,7 +60,9 @@ function ResetPasswordContent() {
       await apiClient.post('/auth/reset-password', values);
       toast.success('Password reset successful. Sign in with your new password.');
       router.push(
-        appendTenantContextToPath('/login', resolveTenantSlugForRequest()),
+        resolveTenantSlugForRequest()
+          ? appendTenantContextToPath('/login', resolveTenantSlugForRequest())
+          : '/platform/login',
       );
     } catch (error: unknown) {
       const message = getApiErrorMessage(error, 'Could not reset password.');
@@ -79,7 +81,11 @@ function ResetPasswordContent() {
         <>
           Back to{' '}
           <Link
-            href={appendTenantContextToPath('/login', resolveTenantSlugForRequest())}
+            href={
+              resolveTenantSlugForRequest()
+                ? appendTenantContextToPath('/login', resolveTenantSlugForRequest())
+                : '/platform/login'
+            }
             className="font-semibold text-amber-600 hover:text-amber-700"
           >
             login

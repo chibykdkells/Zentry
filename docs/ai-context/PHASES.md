@@ -12,8 +12,8 @@
 
 ```
 Active Phase  : Phase 10 — Admin Analytics, Security Audit & Launch (IN PROGRESS)
-Last Session  : 2026-05-01 (Fly.io API live, Vercel live, Cloudinary signed URLs, VAPID, Sentry, SaaS landing page)
-Next Action   : Load test (500 concurrent users), complete Sentry Vercel env vars, upload janitor bug fix
+Last Session  : 2026-05-02 (Email system wired, tenant-scoped routing, platform login routing fix, dashboard redesign)
+Next Action   : Confirm password reset email delivery (fly logs), Sentry Vercel env vars, upload janitor bug fix
 ```
 
 ---
@@ -76,7 +76,7 @@ PWA installable, Provider Abstraction Layer interfaces defined.
 - [x] Provider interfaces defined (IPaymentProvider, IVtuProvider, etc.)
 - [x] PaymentService shell (delegates to adapters — adapters can be mocked)
 - [x] SmsService + Termii adapter
-- [x] EmailService + Resend adapter
+- [x] EmailService + Resend adapter (real SDK wired 2026-05-02 — was a stub returning Promise.resolve)
 - [x] StorageService + Cloudinary adapter (for license doc uploads in CBT onboarding)
 - [x] UsersModule (profile read/update)
 - [x] .env.example committed
@@ -699,6 +699,16 @@ optimized. Production deployed.
 - [x] Sentry error monitoring configured (API: @sentry/nestjs in main.ts + http-exception.filter; Web: sentry.*.config.ts + instrumentation.ts + withSentryConfig)
 - [x] UptimeRobot health monitoring (confirmed set up via screenshot)
 - [x] SaaS marketing landing page at zendocx.net/www.zendocx.net (proxy.ts + page.tsx + landing-page.tsx)
+- [x] CI pnpm version fix (removed hardcoded version: 9 from ci.yml; bumped Node 20 → 22)
+- [x] Vercel build fix — admin layout RSC boundary (added 'use client' to (admin)/layout.tsx)
+- [x] Email system fully wired — Resend real SDK, OTP + password reset emails with branded HTML templates
+- [x] Resend domain verified (zendocx.net — DKIM, SPF MX+TXT, DMARC added in Cloudflare)
+- [x] RESEND_API_KEY + FRONTEND_URL set on Fly.io
+- [x] Tenant-scoped email routing (resolveTenantSender helper in auth/orders/wallet services)
+- [x] Tenant admin welcome email on account creation (TenantService)
+- [x] Platform login routing fix — /forgot-password and /reset-password now return to /platform/login for super admin (no tenant slug context)
+- [x] Dashboard and pages redesigned (StatCard, Sidebar icons, TenantPortalHome, admin services 3-tab)
+- [ ] Confirm password reset email delivery in production (run fly logs --app zentry-api-prod)
 - [ ] Sentry Vercel env vars still needed: NEXT_PUBLIC_SENTRY_DSN, SENTRY_ORG=zendocx, SENTRY_PROJECT=zendocx-web
 - [ ] app.zendocx.net CNAME record in Cloudflare (add app → cname.vercel-dns.com)
 - [ ] Load testing: simulate 500 concurrent users

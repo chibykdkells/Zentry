@@ -57,7 +57,11 @@ export default function ForgotPasswordPage() {
         <>
           Remembered your password?{' '}
           <Link
-            href={appendTenantContextToPath('/login', resolveTenantSlugForRequest())}
+            href={
+              resolveTenantSlugForRequest()
+                ? appendTenantContextToPath('/login', resolveTenantSlugForRequest())
+                : '/platform/login'
+            }
             className="font-semibold text-amber-600 hover:text-amber-700"
           >
             Back to login

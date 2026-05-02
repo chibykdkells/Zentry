@@ -16,6 +16,94 @@
 
 ---
 
+## Session 2026-05-02 — Dashboard redesign, email system wired, platform login routing fix
+
+**Phase:** Phase 10 — Admin Analytics, Security Audit & Launch
+**AI Assistant:** Claude Sonnet 4.6
+
+### What Was Done
+
+Six distinct areas addressed this session:
+
+1. **Dashboard / UI redesign** — All dashboards and pages redesigned to a modern minimalistic style matching provided screenshots:
+   - `StatCard` component: five vivid solid-colour variants (orange, emerald, navy, teal, amber) with white text, translucent icon boxes, black values
+   - Sidebar: `LucideIcon` support per nav item, amber active state, dot fallback if no icon
+   - All four layout files (`(admin)`, `(dashboard)`, `(cbt)`, `(tenant-admin)`) now pass full `AppNavItem[]` to Sidebar
+   - `TenantPortalHome`: full rewrite — dark navy hero, amber CTA, numbered "How it works" cards, pastel 8-palette service grid, trust footer
+   - Admin services page (`/admin/services`): rewritten from ~1800 lines to a clean 3-tab interface (Services | Categories | VTU Provider) with per-service API config modal
+
+2. **Vercel build fix** — `(admin)/layout.tsx` was a Server Component passing `LucideIcon` functions (non-serialisable) to `Sidebar` (Client Component), crashing React 19 pre-render. Fix: added `'use client'` directive to that layout.
+
+3. **CI fix (pnpm version mismatch)** — `.github/workflows/ci.yml` had `version: 9` on `pnpm/action-setup@v4` but `package.json` declares `pnpm@10.33.0`. Removed the hardcoded `version:` line (action auto-reads from `packageManager` field). Also bumped Node from 20 → 22.
+
+4. **Email system — Resend wired end-to-end**:
+   - `resend.provider.ts` was a stub returning `Promise.resolve()` without ever calling Resend. Rewrote to use the real Resend SDK with proper error handling and a dev-mode log fallback when `RESEND_API_KEY` is absent.
+   - `AuthModule`: added `ProvidersModule` to imports so `EmailService` is injectable into `AuthService`.
+   - `AuthService`: replaced all `// TODO Phase 8` placeholders with real HTML email sends — OTP verification email and password reset email, both with branded inline HTML templates (navy header, amber CTA button).
+   - `zendocx.net` domain verified in Resend (DNS records added in Cloudflare: DKIM TXT, SPF MX + TXT, DMARC TXT — all DNS only, not proxied).
+   - `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_FROM_NAME`, `FRONTEND_URL` set as Fly.io secrets on `zentry-api-prod`.
+
+5. **Tenant-scoped email routing** — When a tenant has `customDomain` set AND `customDomainVerified = true`, all transactional emails to users under that tenant now use `noreply@{customDomain}` as sender and the tenant name as display name. Falls back to platform defaults otherwise.
+   - `resolveTenantSender(tenantId)` private helper added to `AuthService`, `OrdersService`, `WalletService`
+   - All `emailService.sendEmail()` calls now spread the resolved sender: OTP, password reset, order placed, order completed, dispute update (requester + CBT), withdrawal decision
+   - `TenantService`: `EmailService` injected; `createTenantAdminAccount()` now sends a welcome email with temporary credentials after creating the account (platform sender since tenant domain won't be verified yet)
+   - Test files updated: `auth.service.spec.ts` and `tenant.service.spec.ts` constructors updated with mock `EmailService`
+
+6. **Platform login routing fix** — Super admin accessing `/forgot-password` or `/reset-password` had no tenant slug, so the "Back to login" link and post-reset redirect both resolved to `/login`, which `proxy.ts` correctly blocks for non-tenant access (redirects to `access-required?reason=tenant-link`). Fix: both pages now detect no tenant slug and route to `/platform/login` instead.
+
+### Files Created / Modified
+
+- `apps/web/src/components/shared/stat-card.tsx` — vivid colour variants
+- `apps/web/src/components/layout/sidebar.tsx` — `LucideIcon` support per item
+- `apps/web/src/app/(admin)/layout.tsx` — added `'use client'` (RSC→Client boundary fix)
+- `apps/web/src/app/(dashboard)/layout.tsx` — passes full nav items
+- `apps/web/src/app/(cbt)/layout.tsx` — passes full nav items
+- `apps/web/src/app/(tenant-admin)/layout.tsx` — passes full nav items
+- `apps/web/src/components/tenant/tenant-portal-home.tsx` — full redesign
+- `apps/web/src/app/(admin)/admin/services/page.tsx` — 3-tab redesign with API config modal
+- `.github/workflows/ci.yml` — removed `version: 9`, bumped Node to 22
+- `apps/api/src/providers/email/resend.provider.ts` — real Resend SDK implementation
+- `apps/api/src/modules/auth/auth.module.ts` — added `ProvidersModule` import
+- `apps/api/src/modules/auth/auth.service.ts` — `EmailService` injected; OTP + reset emails wired; `resolveTenantSender()` helper; `sendEmailOtp` accepts `tenantId`
+- `apps/api/src/modules/auth/auth.service.spec.ts` — mock `EmailService` in constructor
+- `apps/api/src/modules/orders/orders.service.ts` — `resolveTenantSender()` helper; all email helpers accept `tenantId`
+- `apps/api/src/modules/wallet/wallet.service.ts` — `resolveTenantSender()` helper; withdrawal email uses resolved sender
+- `apps/api/src/modules/tenant/tenant.service.ts` — `EmailService` injected; welcome email on tenant admin creation; `buildTenantWelcomeEmailHtml()` template
+- `apps/api/src/modules/tenant/tenant.service.spec.ts` — mock `EmailService` in constructor
+- `apps/web/src/app/(auth)/forgot-password/page.tsx` — "Back to login" → `/platform/login` when no tenant slug
+- `apps/web/src/app/(auth)/reset-password/page.tsx` — post-reset redirect + footer link → `/platform/login` when no tenant slug
+
+### Decisions Made
+
+- **`resolveTenantSender` as a private method per service** (not a shared service): All consuming services already have `PrismaService` injected. A shared `TenantEmailSenderService` would add a file and a circular dependency risk for minimal gain. Three identical 10-line private methods are cleaner.
+- **Tenant welcome email uses platform sender**: The tenant admin account is created before the tenant's custom domain is verified. Using `noreply@zendocx.net` for the welcome email is correct — it's a platform-initiated action.
+- **Super admin entry point is `/platform/login` only**: The generic `/login` route is exclusively for tenant-scoped users arriving via a portal URL. Super admins must use `/platform/login`. `proxy.ts` enforces this. Auth pages (`/forgot-password`, `/reset-password`) now respect this boundary on their return navigation.
+- **Resend domain: operational note on custom domain emails**: For tenant custom-domain emails to work end-to-end, each tenant's custom domain must be added as a verified sending domain in Resend. Resend rejects sends from unverified domains even with a custom `fromEmail`. This is a per-tenant operational step.
+
+### Phase Checklist Updates
+
+Phase 1:
+- [x] Email OTP send (real Resend SDK, not stub)
+- [x] Password reset email (real Resend SDK, not stub)
+- [x] Tenant-scoped email sender routing (custom domain fallback)
+- [x] Tenant admin welcome email on account creation
+
+Phase 10:
+- [x] CI pnpm version fix (removed hardcoded version: 9)
+- [x] Vercel build fix (admin layout RSC boundary)
+- [x] Resend domain verified (zendocx.net — DKIM, SPF, DMARC)
+- [x] Resend API key set on Fly.io
+
+### Blockers / Notes for Next Session
+
+- **Password reset email not arriving in production**: Fly.io logs not yet checked to confirm the API is calling Resend after the `fly secrets set` command. User should run `fly logs --app zentry-api-prod` while triggering forgot-password and verify a Resend log entry appears. If no Resend log entry appears, the API may not have redeployed with the new secrets yet — run `fly deploy --app zentry-api-prod`.
+- **Super admin correct login URL**: `https://zendocx.net/platform/login` — NOT `/login`. This is critical to document for the platform owner.
+- **Tenant custom domain emails need per-domain Resend verification**: Each tenant that sets a custom domain must have that domain added and verified in the Resend dashboard before tenant-scoped emails will send from it. Without this, emails silently fall back to the platform sender.
+- **Upload janitor bug (carried forward)**: Storage deletion happens before DB row is marked DELETED in `orders-upload-janitor.service.ts`. Fix: flip order or treat "not found" as success.
+- **Sentry Vercel env vars still needed**: `NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_ORG`, `SENTRY_PROJECT` must be added to Vercel environment variables.
+
+---
+
 ## Session 2026-05-01 (continued) — VAPID keys, Signed Cloudinary URLs, Sentry, UptimeRobot, SaaS Landing Page
 
 **Phase:** Phase 10 — Admin Analytics, Security Audit & Launch
