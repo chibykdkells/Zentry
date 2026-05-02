@@ -16,6 +16,92 @@
 
 ---
 
+## Session 2026-05-02 (continued 3) — Password reset UX, payment/wallet audit & fixes
+
+**Phase:** Phase 10 — Admin Analytics, Security Audit & Launch
+**AI Assistant:** Claude Sonnet 4.6
+
+### What Was Done
+
+Four areas addressed in this continuation:
+
+#### 1. Password reset email — show token, not broken link
+The email previously embedded a link to `https://app.zendocx.net/reset-password?token=...` which doesn't resolve. Changed the email to display the raw token in a dashed `<code>` box so users can copy-paste it into the form. Updated `buildPasswordResetEmailHtml` signature from `(firstName, resetUrl, expiryHours)` → `(firstName, token, expiryHours)`.
+
+#### 2. Reset-password form — resend button + 60s countdown
+Added to the reset-password page:
+- A "Didn't receive the email?" section below the submit button
+- 60-second countdown timer starts automatically on page load (auto-started since the user just came from the forgot-password flow)
+- After countdown, a "Resend token" button calls `POST /auth/forgot-password` with the email from the URL and restarts the timer
+
+#### 3. Password reset token — 6-char code, invalidate old tokens
+Two bugs fixed in `forgotPassword`:
+- Token was `generateTransactionRef()` format (`ZDX-TXN-MOOFOQAA-IFHANL` = 22 chars). Replaced with a 6-char uppercase code from `[A-Z2-9]` (excludes I/O/0/1 to avoid visual ambiguity; 32^6 ~1B combos). Uses `randomInt` from Node crypto for security.
+- "Expired immediately" bug: each forgot-password call stacked new records. Added `passwordReset.updateMany({ where: { userId, usedAt: null } })` before creating the new record to invalidate all previous tokens for that user. Only the most recently emailed token is ever valid now.
+
+#### 4. Payment / wallet audit — 3 bugs found and fixed
+
+**Analysis scope**: `wallet.service.ts`, `orders.service.ts` (escrow/payment/dispute sections), all three payment providers (Paystack, FintavaPay, Flutterwave), `orders-release-queue.service.ts`.
+
+**Working correctly** (confirmed):
+- Escrow lock on manual order creation
+- Escrow release queue processor (distributes CBT commission + platform net, decrements escrow atomically)
+- Dispute resolution refund path (requester-favor: escrow → available)
+- Withdrawal state machine and transition guards
+- Webhook signature validation (all 3 providers)
+- CBT staff → parent CBT center wallet credit on escrow release
+
+**Bug 1 — Manual refund (COMPLETE_MANUAL_REFUND) never credited wallet** (CRITICAL):
+The `REFUND` transaction was created with SUCCESS status and `balanceAfter = balanceBefore` (identical — wrong), but no `tx.wallet.update` was issued. Funds were permanently lost when admin completed a manual refund after dispute resolution.
+FIX: Added `tx.wallet.update({ data: { availableBalance: { increment: order.totalAmount } } })` and corrected `balanceAfter = requesterWallet.availableBalance + order.totalAmount`.
+
+**Bug 2 — Active payment provider (FINTAVAPAY) had no credentials** (CRITICAL):
+Production env had `ACTIVE_PAYMENT_PROVIDER=FINTAVAPAY` but `FINTAVAPAY_BASE_URL`, `FINTAVAPAY_PUBLIC_KEY`, `FINTAVAPAY_SECRET_KEY`, `FINTAVAPAY_WEBHOOK_SECRET` were all empty strings. Every wallet funding attempt would throw an axios error. Meanwhile Paystack had `PAYSTACK_SECRET_KEY=sk_live_...` set.
+FIX: Switched `ACTIVE_PAYMENT_PROVIDER=PAYSTACK` via `fly secrets set`. Wallet funding now works.
+
+**Bug 3 — Paystack transfer passed account number instead of recipient code**:
+Paystack's `/transfer` API requires a `recipient_code` (e.g. `RCP_xyz`) obtained from a prior POST to `/transferrecipient`. The code was passing raw `accountNumber` as the `recipient` field, which would be rejected by Paystack.
+FIX: Added two-step flow in `paystack.provider.ts` — POST `/transferrecipient` first to get `recipient_code`, then POST `/transfer` with it.
+
+**Known gap (not fixed — all services currently have tenantFee=0)**:
+Automated VTU orders compute `totalAmount = providerCost + service.platformFee`, ignoring `service.tenantFee`. Manual orders use `service.totalPrice` (which includes tenantFee), but even there the tenant wallet is never credited separately — the tenantFee flows into the platform commission. This is a latent gap that needs addressing when tenant-specific pricing is activated.
+
+### Files Created / Modified
+
+- `apps/api/src/modules/auth/auth.service.ts` — Token generation (6-char), invalidate old resets, updated email template call + builder
+- `apps/web/src/app/(auth)/reset-password/page.tsx` — Resend button + 60s countdown timer
+- `apps/api/src/modules/orders/orders.service.ts` — COMPLETE_MANUAL_REFUND now updates availableBalance + corrects balanceAfter on REFUND transaction
+- `apps/api/src/providers/payment/paystack.provider.ts` — Two-step transfer: POST /transferrecipient then POST /transfer
+
+### Decisions Made
+
+- **ACTIVE_PAYMENT_PROVIDER switched to PAYSTACK**: FintavaPay has no credentials configured. Paystack has a live key. Paystack is also listed as the primary provider in CLAUDE.md.
+- **6-char password reset token**: Short enough to type by hand, long enough to resist brute force in a 1-hour window with any reasonable rate limiting. Excludes ambiguous chars (I/O/0/1).
+- **Invalidate old resets on new request**: Prevents stale tokens from test runs ever matching. Aligns with how OTP tokens work in this codebase.
+
+### Phase Checklist Updates
+
+Phase 10:
+- [x] Password reset flow fully working end-to-end
+- [x] Payment provider properly configured (Paystack, live key)
+- [x] Manual dispute refund bug fixed
+- [x] Paystack transfer two-step flow implemented
+
+### Blockers / Notes for Next Session
+
+- **tenantFee routing gap**: When tenant-specific pricing goes live, need to:
+  1. Include `service.tenantFee` in automated order `totalAmount`
+  2. Find the tenant admin's wallet and credit `tenantFee` in both manual escrow release and automated order flows
+  3. Store `tenantFee` on the created Order record
+
+- **PAYSTACK_WEBHOOK_SECRET not set**: `PAYSTACK_WEBHOOK_SECRET` is empty in production. Paystack webhooks will be rejected (`parseWebhook` returns `isValid: false` when secret is missing). Need to set this in Fly secrets and configure the webhook endpoint in the Paystack dashboard.
+
+- **Upload janitor bug (carried forward)**: `orders-upload-janitor.service.ts` deletes storage before marking DB row as DELETED. Should flip order or treat storage "not found" as success.
+
+- **Sentry Vercel env vars still needed**: `NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_ORG=zendocx`, `SENTRY_PROJECT=zendocx-web`.
+
+---
+
 ## Session 2026-05-02 (continued) — Migration unblocked, emails confirmed working
 
 **Phase:** Phase 10 — Admin Analytics, Security Audit & Launch
