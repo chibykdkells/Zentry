@@ -1,12 +1,12 @@
 import { Type } from 'class-transformer';
 import {
-  IsArray,
   IsBoolean,
-  IsEnum,
   IsInt,
+  IsEnum,
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
   Min,
   MinLength,
@@ -28,35 +28,14 @@ export class CreateServiceDto {
   @MaxLength(120)
   slug: string;
 
-  @IsOptional()
-  @IsString()
-  @MaxLength(400)
-  description?: string;
-
   @IsEnum(ServiceDeliveryMode)
   deliveryMode: ServiceDeliveryMode;
 
   @Type(() => Number)
   @IsNumber()
   @Min(0)
-  platformFeeNaira: number;
-
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0)
-  totalPriceNaira: number;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0)
-  cbtCommissionNaira?: number;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0)
-  providerCostNaira?: number;
+  @Max(100)
+  platformFeePercent: number;
 
   @IsOptional()
   @IsString()
@@ -78,11 +57,4 @@ export class CreateServiceDto {
   @Min(0)
   sortOrder?: number;
 
-  @IsOptional()
-  @IsArray()
-  requiredFields?: Record<string, unknown>[];
-
-  @IsOptional()
-  @IsArray()
-  requiredDocuments?: Record<string, unknown>[];
 }

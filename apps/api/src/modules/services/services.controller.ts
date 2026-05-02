@@ -19,6 +19,7 @@ import { GetServiceCatalogQueryDto } from './dto/get-service-catalog.dto';
 import { UpdateVtuProviderConfigDto } from './dto/update-vtu-provider-config.dto';
 import { UpdateServiceCategoryDto } from './dto/update-service-category.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
+import { UpdateTenantServiceDto } from './dto/update-tenant-service.dto';
 import { ServicesService } from './services.service';
 
 @Controller('services')
@@ -90,6 +91,20 @@ export class ServicesController {
   validateTenantVtuProviderConfig(@CurrentUser() user: JwtUser) {
     return this.servicesService.validateTenantVtuProviderConfig(
       user.tenantId ?? '',
+    );
+  }
+
+  @Roles(UserRole.TENANT_ADMIN)
+  @Patch('tenant/services/:id')
+  updateTenantService(
+    @CurrentUser() user: JwtUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateTenantServiceDto,
+  ) {
+    return this.servicesService.updateTenantService(
+      user.tenantId ?? '',
+      id,
+      dto,
     );
   }
 

@@ -337,9 +337,10 @@ model Service {
   deliveryMode        ServiceDeliveryMode
   fulfillmentType     FulfillmentType
   providerCost        BigInt               @default(0)
-  platformFee         BigInt
+  platformFee         BigInt               @default(0)
+  platformFeePercent  Float                @default(0)
   tenantFee           BigInt               @default(0)
-  totalPrice          BigInt
+  totalPrice          BigInt               @default(0)
   cbtCommission       BigInt               @default(0)
   providerKey         String?
   providerServiceCode String?

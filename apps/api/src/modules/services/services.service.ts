@@ -20,6 +20,7 @@ import { CreateServiceDto } from './dto/create-service.dto';
 import { GetAdminServicesQueryDto } from './dto/get-admin-services.dto';
 import { UpdateServiceCategoryDto } from './dto/update-service-category.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
+import { UpdateTenantServiceDto } from './dto/update-tenant-service.dto';
 import { ProviderCredentialsService } from '../../providers/provider-credentials.service';
 import { VtuService } from '../../providers/vtu/vtu.service';
 import { RedisService } from '../redis/redis.service';
@@ -222,6 +223,8 @@ export class ServicesService {
           fulfillmentType: true,
           totalPrice: true,
           cbtCommission: true,
+          providerCost: true,
+          platformFeePercent: true,
           requiredFields: true,
           requiredDocuments: true,
           category: {
@@ -272,12 +275,20 @@ export class ServicesService {
           fulfillmentType: service.fulfillmentType,
           totalPrice: service.totalPrice.toString(),
           cbtCommission: service.cbtCommission.toString(),
+          tenantCommission: service.providerCost.toString(),
+          platformFeePercent: service.platformFeePercent,
           requiredFieldsCount: Array.isArray(service.requiredFields)
             ? service.requiredFields.length
             : 0,
+          requiredFields: Array.isArray(service.requiredFields)
+            ? (service.requiredFields as RequiredFieldDefinition[])
+            : [],
           requiredDocumentsCount: Array.isArray(service.requiredDocuments)
             ? service.requiredDocuments.length
             : 0,
+          requiredDocuments: Array.isArray(service.requiredDocuments)
+            ? (service.requiredDocuments as RequiredDocumentDefinition[])
+            : [],
           eta: this.getEtaForDeliveryMode(service.deliveryMode),
           isSelected: selectionState.usesCustomSelection
             ? selectedSlugs.has(service.slug)
@@ -959,6 +970,7 @@ export class ServicesService {
           fulfillmentType: true,
           providerCost: true,
           platformFee: true,
+          platformFeePercent: true,
           totalPrice: true,
           cbtCommission: true,
           providerKey: true,
@@ -1149,7 +1161,16 @@ export class ServicesService {
   async createService(dto: CreateServiceDto) {
     await this.ensureCategoryExists(dto.categoryId);
     await this.ensureUniqueServiceSlug(this.normalizeSlug(dto.slug));
-    this.validateServiceAmounts(dto);
+
+    if (
+      Number.isNaN(dto.platformFeePercent) ||
+      dto.platformFeePercent < 0 ||
+      dto.platformFeePercent > 100
+    ) {
+      throw new BadRequestException(
+        'Platform fee must be a percentage between 0 and 100.',
+      );
+    }
 
     const service = await this.prisma.service.create({
       data: {
@@ -1157,21 +1178,15 @@ export class ServicesService {
         tenantId: null,
         name: dto.name.trim(),
         slug: this.normalizeSlug(dto.slug),
-        description: dto.description?.trim() || null,
         deliveryMode: dto.deliveryMode,
         fulfillmentType: this.getFulfillmentTypeForDeliveryMode(
           dto.deliveryMode,
         ),
-        providerCost: nairaToKobo(dto.providerCostNaira ?? 0),
-        platformFee: nairaToKobo(dto.platformFeeNaira),
-        totalPrice: nairaToKobo(dto.totalPriceNaira),
-        cbtCommission: nairaToKobo(dto.cbtCommissionNaira ?? 0),
+        platformFeePercent: dto.platformFeePercent,
         providerKey: dto.providerKey?.trim() || null,
         providerServiceCode: dto.providerServiceCode?.trim() || null,
         isActive: dto.isActive ?? true,
         sortOrder: dto.sortOrder ?? 0,
-        requiredFields: this.toRequiredFieldsJson(dto.requiredFields),
-        requiredDocuments: this.toRequiredDocumentsJson(dto.requiredDocuments),
       },
       select: {
         id: true,
@@ -1183,6 +1198,7 @@ export class ServicesService {
         fulfillmentType: true,
         providerCost: true,
         platformFee: true,
+        platformFeePercent: true,
         totalPrice: true,
         cbtCommission: true,
         providerKey: true,
@@ -1227,8 +1243,10 @@ export class ServicesService {
     }
 
     this.validateServiceAmounts({
-      ...dto,
       deliveryMode: dto.deliveryMode ?? existingService.deliveryMode,
+      platformFeePercent: dto.platformFeePercent,
+      totalPriceNaira: dto.totalPriceNaira,
+      cbtCommissionNaira: dto.cbtCommissionNaira,
     });
 
     const service = await this.prisma.service.update({
@@ -1248,17 +1266,17 @@ export class ServicesService {
               ),
             }
           : {}),
-        ...(dto.providerCostNaira !== undefined
-          ? { providerCost: nairaToKobo(dto.providerCostNaira) }
-          : {}),
-        ...(dto.platformFeeNaira !== undefined
-          ? { platformFee: nairaToKobo(dto.platformFeeNaira) }
+        ...(dto.platformFeePercent !== undefined
+          ? { platformFeePercent: dto.platformFeePercent }
           : {}),
         ...(dto.totalPriceNaira !== undefined
           ? { totalPrice: nairaToKobo(dto.totalPriceNaira) }
           : {}),
         ...(dto.cbtCommissionNaira !== undefined
           ? { cbtCommission: nairaToKobo(dto.cbtCommissionNaira) }
+          : {}),
+        ...(dto.providerCostNaira !== undefined
+          ? { providerCost: nairaToKobo(dto.providerCostNaira) }
           : {}),
         ...(dto.providerKey !== undefined
           ? { providerKey: dto.providerKey?.trim() || null }
@@ -1268,16 +1286,6 @@ export class ServicesService {
           : {}),
         ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
         ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
-        ...(dto.requiredFields !== undefined
-          ? { requiredFields: this.toRequiredFieldsJson(dto.requiredFields) }
-          : {}),
-        ...(dto.requiredDocuments !== undefined
-          ? {
-              requiredDocuments: this.toRequiredDocumentsJson(
-                dto.requiredDocuments,
-              ),
-            }
-          : {}),
       },
       select: {
         id: true,
@@ -1289,6 +1297,7 @@ export class ServicesService {
         fulfillmentType: true,
         providerCost: true,
         platformFee: true,
+        platformFeePercent: true,
         totalPrice: true,
         cbtCommission: true,
         providerKey: true,
@@ -1344,6 +1353,104 @@ export class ServicesService {
     return {
       message: `${service.name} was deleted successfully.`,
       data: { id: service.id },
+    };
+  }
+
+  async updateTenantService(
+    tenantId: string,
+    platformServiceId: string,
+    dto: UpdateTenantServiceDto,
+  ) {
+    const platformService = await this.prisma.service.findFirst({
+      where: { id: platformServiceId, tenantId: null },
+      select: {
+        id: true,
+        slug: true,
+        categoryId: true,
+        name: true,
+        deliveryMode: true,
+        fulfillmentType: true,
+        platformFeePercent: true,
+        isActive: true,
+        sortOrder: true,
+        providerKey: true,
+        providerServiceCode: true,
+      },
+    });
+
+    if (!platformService) {
+      throw new NotFoundException('Service not found.');
+    }
+
+    const data: Record<string, unknown> = {};
+
+    if (dto.description !== undefined) {
+      data.description = dto.description?.trim() || null;
+    }
+    if (dto.totalPriceNaira !== undefined) {
+      data.totalPrice = nairaToKobo(dto.totalPriceNaira);
+    }
+    if (dto.cbtCommissionNaira !== undefined) {
+      data.cbtCommission = nairaToKobo(dto.cbtCommissionNaira);
+    }
+    if (dto.tenantCommissionNaira !== undefined) {
+      data.providerCost = nairaToKobo(dto.tenantCommissionNaira);
+    }
+    if (dto.requiredFields !== undefined) {
+      data.requiredFields = this.toRequiredFieldsJson(dto.requiredFields);
+    }
+    if (dto.requiredDocuments !== undefined) {
+      data.requiredDocuments = this.toRequiredDocumentsJson(dto.requiredDocuments);
+    }
+
+    const service = await this.prisma.service.upsert({
+      where: {
+        slug_tenantId: { slug: platformService.slug, tenantId },
+      },
+      create: {
+        tenantId,
+        categoryId: platformService.categoryId,
+        name: platformService.name,
+        slug: platformService.slug,
+        deliveryMode: platformService.deliveryMode,
+        fulfillmentType: platformService.fulfillmentType,
+        platformFeePercent: platformService.platformFeePercent,
+        isActive: platformService.isActive,
+        sortOrder: platformService.sortOrder,
+        providerKey: platformService.providerKey,
+        providerServiceCode: platformService.providerServiceCode,
+        ...data,
+      },
+      update: data,
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        description: true,
+        isActive: true,
+        deliveryMode: true,
+        fulfillmentType: true,
+        providerCost: true,
+        platformFee: true,
+        platformFeePercent: true,
+        totalPrice: true,
+        cbtCommission: true,
+        providerKey: true,
+        providerServiceCode: true,
+        sortOrder: true,
+        requiredFields: true,
+        requiredDocuments: true,
+        createdAt: true,
+        updatedAt: true,
+        category: {
+          select: { id: true, name: true, slug: true },
+        },
+      },
+    });
+
+    return {
+      message: 'Service configuration saved.',
+      data: this.mapServiceRecord(service),
     };
   }
 
@@ -1838,6 +1945,7 @@ export class ServicesService {
     fulfillmentType: FulfillmentType;
     providerCost: bigint;
     platformFee: bigint;
+    platformFeePercent: number;
     totalPrice: bigint;
     cbtCommission: bigint;
     providerKey: string | null;
@@ -1863,6 +1971,7 @@ export class ServicesService {
       fulfillmentType: service.fulfillmentType,
       providerCost: service.providerCost.toString(),
       platformFee: service.platformFee.toString(),
+      platformFeePercent: service.platformFeePercent,
       totalPrice: service.totalPrice.toString(),
       cbtCommission: service.cbtCommission.toString(),
       providerKey: service.providerKey,
@@ -2032,31 +2141,28 @@ export class ServicesService {
 
   private validateServiceAmounts(dto: {
     deliveryMode?: ServiceDeliveryMode;
-    platformFeeNaira?: number;
+    platformFeePercent?: number;
     totalPriceNaira?: number;
     cbtCommissionNaira?: number;
-    providerCostNaira?: number;
   }) {
-    const values = [
-      dto.platformFeeNaira,
-      dto.totalPriceNaira,
-      dto.cbtCommissionNaira,
-      dto.providerCostNaira,
-    ].filter((value): value is number => value !== undefined);
-
-    if (values.some((value) => Number.isNaN(value) || value < 0)) {
+    if (
+      dto.platformFeePercent !== undefined &&
+      (Number.isNaN(dto.platformFeePercent) ||
+        dto.platformFeePercent < 0 ||
+        dto.platformFeePercent > 100)
+    ) {
       throw new BadRequestException(
-        'Service pricing values must be valid non-negative numbers.',
+        'Platform fee must be a percentage between 0 and 100.',
       );
     }
 
-    if (
-      dto.totalPriceNaira !== undefined &&
-      dto.platformFeeNaira !== undefined &&
-      dto.totalPriceNaira < dto.platformFeeNaira
-    ) {
+    const nairaValues = [dto.totalPriceNaira, dto.cbtCommissionNaira].filter(
+      (value): value is number => value !== undefined,
+    );
+
+    if (nairaValues.some((value) => Number.isNaN(value) || value < 0)) {
       throw new BadRequestException(
-        'Total price cannot be lower than the platform fee.',
+        'Service pricing values must be valid non-negative numbers.',
       );
     }
 

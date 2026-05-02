@@ -28,6 +28,7 @@ export interface AdminServiceItem {
   fulfillmentType: FulfillmentType;
   providerCost: string;
   platformFee: string;
+  platformFeePercent: number;
   totalPrice: string;
   cbtCommission: string;
   providerKey: string | null;

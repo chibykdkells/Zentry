@@ -102,6 +102,7 @@ type AutomatedServiceDefinition = {
   slug: string;
   totalPrice: bigint;
   platformFee: bigint;
+  platformFeePercent: number;
   cbtCommission: bigint;
   providerKey: string | null;
   deliveryMode: ServiceDeliveryMode;
@@ -3210,6 +3211,7 @@ export class OrdersService {
         slug: true,
         totalPrice: true,
         platformFee: true,
+        platformFeePercent: true,
         cbtCommission: true,
         providerKey: true,
         deliveryMode: true,
@@ -3292,7 +3294,9 @@ export class OrdersService {
           requesterDocUrls:
             normalizedRequesterDocuments as Prisma.InputJsonValue,
           totalAmount: service.totalPrice,
-          platformFee: service.platformFee,
+          platformFee: BigInt(
+            Math.floor(Number(service.totalPrice) * service.platformFeePercent / 100),
+          ),
           cbtCommission: service.cbtCommission,
         },
         select: {
@@ -3736,7 +3740,9 @@ export class OrdersService {
           submittedData,
           requesterDocUrls: [],
           totalAmount,
-          platformFee: service.platformFee,
+          platformFee: BigInt(
+            Math.floor(Number(totalAmount) * service.platformFeePercent / 100),
+          ),
           cbtCommission: service.cbtCommission,
           providerReference:
             providerResult?.providerReference ?? providerReference,

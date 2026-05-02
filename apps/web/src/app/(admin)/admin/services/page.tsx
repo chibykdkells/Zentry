@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useFieldArray, useForm, useWatch } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
@@ -21,7 +21,6 @@ import {
   Trash2,
 } from 'lucide-react';
 import { ServiceDeliveryMode } from '@zendocx/types';
-import { AccountPanel } from '@/components/shared/account-panel';
 import { EmptyState } from '@/components/shared/empty-state';
 import { StatCard } from '@/components/shared/stat-card';
 import {
@@ -35,7 +34,6 @@ import {
   useAdminServices,
 } from '@/hooks/use-admin-services';
 import { getApiErrorMessage } from '@/lib/api-error';
-import { adminServicesSections } from '@/lib/admin-content';
 import { formatNaira } from '@/lib/format';
 import apiClient from '@/lib/api-client';
 import { cn } from '@/lib/utils';
@@ -52,36 +50,12 @@ interface ServiceFormValues {
   categoryId: string;
   name: string;
   slug: string;
-  description: string;
   deliveryMode: ServiceDeliveryMode;
-  platformFeeNaira: number;
-  totalPriceNaira: number;
-  cbtCommissionNaira: number;
-  providerCostNaira: number;
+  platformFeePercent: number;
   providerKey: string;
   providerServiceCode: string;
   sortOrder: number;
   isActive: boolean;
-  requiredFields: ServiceFieldFormValue[];
-  requiredDocuments: ServiceDocumentFormValue[];
-}
-
-interface ServiceFieldFormValue {
-  name: string;
-  label: string;
-  type: 'text' | 'textarea' | 'number' | 'email' | 'tel' | 'select';
-  required: boolean;
-  placeholder: string;
-  helpText: string;
-  optionsText: string;
-}
-
-interface ServiceDocumentFormValue {
-  name: string;
-  label: string;
-  required: boolean;
-  description: string;
-  acceptedTypesText: string;
 }
 
 interface VtuProviderFormValues {
@@ -107,18 +81,12 @@ const DEFAULT_SERVICE_VALUES: ServiceFormValues = {
   categoryId: '',
   name: '',
   slug: '',
-  description: '',
   deliveryMode: ServiceDeliveryMode.CBT_MANUAL,
-  platformFeeNaira: 0,
-  totalPriceNaira: 0,
-  cbtCommissionNaira: 0,
-  providerCostNaira: 0,
+  platformFeePercent: 0,
   providerKey: '',
   providerServiceCode: '',
   sortOrder: 0,
   isActive: true,
-  requiredFields: [],
-  requiredDocuments: [],
 };
 
 const DEFAULT_VTU_PROVIDER_VALUES: VtuProviderFormValues = {
@@ -195,20 +163,8 @@ export default function AdminServicesPage() {
   const serviceForm = useForm<ServiceFormValues>({
     defaultValues: DEFAULT_SERVICE_VALUES,
   });
-  const requiredFieldsArray = useFieldArray({
-    control: serviceForm.control,
-    name: 'requiredFields',
-  });
-  const requiredDocumentsArray = useFieldArray({
-    control: serviceForm.control,
-    name: 'requiredDocuments',
-  });
   const providerForm = useForm<VtuProviderFormValues>({
     defaultValues: DEFAULT_VTU_PROVIDER_VALUES,
-  });
-  const requiredFieldValues = useWatch({
-    control: serviceForm.control,
-    name: 'requiredFields',
   });
   const providerRolloutMode = useWatch({
     control: providerForm.control,
@@ -251,20 +207,12 @@ export default function AdminServicesPage() {
       categoryId: editingService.category.id,
       name: editingService.name,
       slug: editingService.slug,
-      description: editingService.description ?? '',
       deliveryMode: editingService.deliveryMode,
-      platformFeeNaira: koboToNairaNumber(editingService.platformFee),
-      totalPriceNaira: koboToNairaNumber(editingService.totalPrice),
-      cbtCommissionNaira: koboToNairaNumber(editingService.cbtCommission),
-      providerCostNaira: koboToNairaNumber(editingService.providerCost),
+      platformFeePercent: editingService.platformFeePercent ?? 0,
       providerKey: editingService.providerKey ?? '',
       providerServiceCode: editingService.providerServiceCode ?? '',
       sortOrder: editingService.sortOrder,
       isActive: editingService.isActive,
-      requiredFields: editingService.requiredFields.map(mapFieldToFormValue),
-      requiredDocuments: editingService.requiredDocuments.map(
-        mapDocumentToFormValue,
-      ),
     });
   }, [categories, editingService, serviceForm]);
 
@@ -351,20 +299,12 @@ export default function AdminServicesPage() {
         categoryId: values.categoryId,
         name: values.name.trim(),
         slug: values.slug.trim(),
-        description: values.description.trim() || undefined,
         deliveryMode: values.deliveryMode,
-        platformFeeNaira: Number(values.platformFeeNaira),
-        totalPriceNaira: Number(values.totalPriceNaira),
-        cbtCommissionNaira: Number(values.cbtCommissionNaira),
-        providerCostNaira: Number(values.providerCostNaira),
+        platformFeePercent: Number(values.platformFeePercent),
         providerKey: values.providerKey.trim() || undefined,
         providerServiceCode: values.providerServiceCode.trim() || undefined,
         sortOrder: Number(values.sortOrder),
         isActive: values.isActive,
-        requiredFields: serializeFieldDefinitions(values.requiredFields),
-        requiredDocuments: serializeDocumentDefinitions(
-          values.requiredDocuments,
-        ),
       };
 
       if (editingService) {
@@ -441,10 +381,7 @@ export default function AdminServicesPage() {
       toast.success(response.message);
       setEditingService(null);
       setShowServiceModal(false);
-      serviceForm.reset({
-        ...DEFAULT_SERVICE_VALUES,
-        categoryId: categories[0]?.id ?? '',
-      });
+      serviceForm.reset({ ...DEFAULT_SERVICE_VALUES, categoryId: categories[0]?.id ?? '' });
     },
     onError: (mutationError: unknown) => {
       toast.error(
@@ -1093,118 +1030,18 @@ export default function AdminServicesPage() {
                   <input className={inputClass(false)} {...serviceForm.register('slug')} />
                 </Field>
               </div>
-              <Field label="Description">
-                <textarea rows={2} className={inputClass(false)} {...serviceForm.register('description')} />
-              </Field>
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Platform fee (₦)">
-                  <input type="number" step="0.01" className={inputClass(false)} {...serviceForm.register('platformFeeNaira', { valueAsNumber: true })} />
+                <Field label="Platform fee (%)">
+                  <input type="number" step="0.1" min="0" max="100" className={inputClass(false)} {...serviceForm.register('platformFeePercent', { valueAsNumber: true })} />
                 </Field>
-                <Field label="Total price (₦)">
-                  <input type="number" step="0.01" className={inputClass(false)} {...serviceForm.register('totalPriceNaira', { valueAsNumber: true })} />
-                </Field>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="CBT commission (₦)">
-                  <input type="number" step="0.01" className={inputClass(false)} {...serviceForm.register('cbtCommissionNaira', { valueAsNumber: true })} />
-                </Field>
-                <Field label="Provider cost (₦)">
-                  <input type="number" step="0.01" className={inputClass(false)} {...serviceForm.register('providerCostNaira', { valueAsNumber: true })} />
-                </Field>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Sort order">
                   <input type="number" className={inputClass(false)} {...serviceForm.register('sortOrder', { valueAsNumber: true })} />
                 </Field>
-                <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 mt-6">
-                  <input type="checkbox" {...serviceForm.register('isActive')} />
-                  Service is active
-                </label>
               </div>
-
-              {/* Required fields */}
-              <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-semibold text-slate-900">Required fields</h3>
-                  <button type="button" onClick={() => requiredFieldsArray.append(createEmptyField())} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700">
-                    <Plus size={12} /> Add field
-                  </button>
-                </div>
-                {requiredFieldsArray.fields.length ? (
-                  <div className="space-y-3">
-                    {requiredFieldsArray.fields.map((field, idx) => {
-                      const currentType = requiredFieldValues?.[idx]?.type ?? 'text';
-                      return (
-                        <div key={field.id} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
-                          <div className="flex items-center justify-between">
-                            <p className="text-xs font-semibold text-slate-500">Field {idx + 1}</p>
-                            <button type="button" onClick={() => requiredFieldsArray.remove(idx)} className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700">Remove</button>
-                          </div>
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            <Field label="Field key"><input className={inputClass(false)} placeholder="fullName" {...serviceForm.register(`requiredFields.${idx}.name`)} /></Field>
-                            <Field label="Label"><input className={inputClass(false)} placeholder="Full name" {...serviceForm.register(`requiredFields.${idx}.label`)} /></Field>
-                          </div>
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            <Field label="Input type">
-                              <select className={inputClass(false)} {...serviceForm.register(`requiredFields.${idx}.type`)}>
-                                <option value="text">Text</option>
-                                <option value="textarea">Textarea</option>
-                                <option value="number">Number</option>
-                                <option value="email">Email</option>
-                                <option value="tel">Phone</option>
-                                <option value="select">Select</option>
-                              </select>
-                            </Field>
-                            <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 mt-6">
-                              <input type="checkbox" {...serviceForm.register(`requiredFields.${idx}.required`)} /> Required
-                            </label>
-                          </div>
-                          <Field label="Placeholder"><input className={inputClass(false)} {...serviceForm.register(`requiredFields.${idx}.placeholder`)} /></Field>
-                          <Field label="Help text"><input className={inputClass(false)} {...serviceForm.register(`requiredFields.${idx}.helpText`)} /></Field>
-                          {currentType === 'select' ? (
-                            <Field label="Options (one per line)"><textarea rows={3} className={inputClass(false)} {...serviceForm.register(`requiredFields.${idx}.optionsText`)} /></Field>
-                          ) : null}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-4 text-center text-sm text-slate-400">No custom fields. Add one if this service needs requester input.</p>
-                )}
-              </div>
-
-              {/* Required documents */}
-              <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-semibold text-slate-900">Required documents</h3>
-                  <button type="button" onClick={() => requiredDocumentsArray.append(createEmptyDocument())} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700">
-                    <Plus size={12} /> Add document
-                  </button>
-                </div>
-                {requiredDocumentsArray.fields.length ? (
-                  <div className="space-y-3">
-                    {requiredDocumentsArray.fields.map((doc, idx) => (
-                      <div key={doc.id} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs font-semibold text-slate-500">Document {idx + 1}</p>
-                          <button type="button" onClick={() => requiredDocumentsArray.remove(idx)} className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700">Remove</button>
-                        </div>
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <Field label="Key"><input className={inputClass(false)} placeholder="passportPhoto" {...serviceForm.register(`requiredDocuments.${idx}.name`)} /></Field>
-                          <Field label="Label"><input className={inputClass(false)} placeholder="Passport photograph" {...serviceForm.register(`requiredDocuments.${idx}.label`)} /></Field>
-                        </div>
-                        <Field label="Description"><input className={inputClass(false)} {...serviceForm.register(`requiredDocuments.${idx}.description`)} /></Field>
-                        <Field label="Accepted file types"><input className={inputClass(false)} placeholder="image/jpeg, image/png, application/pdf" {...serviceForm.register(`requiredDocuments.${idx}.acceptedTypesText`)} /></Field>
-                        <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700">
-                          <input type="checkbox" {...serviceForm.register(`requiredDocuments.${idx}.required`)} /> Required upload
-                        </label>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-4 text-center text-sm text-slate-400">No upload requirements yet.</p>
-                )}
-              </div>
+              <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700">
+                <input type="checkbox" {...serviceForm.register('isActive')} />
+                Service is active
+              </label>
 
               <div className="flex flex-wrap gap-2 pt-2">
                 <button type="submit" disabled={serviceMutation.isPending} className="inline-flex items-center gap-2 rounded-2xl bg-[#0D1B3E] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#132754] disabled:opacity-60">
@@ -1439,104 +1276,3 @@ function inputClass(hasError: boolean) {
   );
 }
 
-function koboToNairaNumber(value: string) {
-  return Number(value) / 100;
-}
-
-function createEmptyField(): ServiceFieldFormValue {
-  return {
-    name: '',
-    label: '',
-    type: 'text',
-    required: true,
-    placeholder: '',
-    helpText: '',
-    optionsText: '',
-  };
-}
-
-function createEmptyDocument(): ServiceDocumentFormValue {
-  return {
-    name: '',
-    label: '',
-    required: true,
-    description: '',
-    acceptedTypesText: '',
-  };
-}
-
-function mapFieldToFormValue(
-  field: AdminServiceItem['requiredFields'][number],
-): ServiceFieldFormValue {
-  return {
-    name: field.name,
-    label: field.label ?? '',
-    type: field.type ?? 'text',
-    required: field.required === true,
-    placeholder: field.placeholder ?? '',
-    helpText: field.helpText ?? '',
-    optionsText: (field.options ?? []).join('\n'),
-  };
-}
-
-function mapDocumentToFormValue(
-  document: AdminServiceItem['requiredDocuments'][number],
-): ServiceDocumentFormValue {
-  return {
-    name: document.name,
-    label: document.label ?? '',
-    required: document.required !== false,
-    description: document.description ?? '',
-    acceptedTypesText: (document.acceptedTypes ?? []).join(', '),
-  };
-}
-
-function serializeFieldDefinitions(fields: ServiceFieldFormValue[]) {
-  return fields.map((field, index) => {
-    const name = field.name.trim();
-
-    if (!name) {
-      throw new Error(`Field ${index + 1} needs a field key.`);
-    }
-
-    const options = field.optionsText
-      .split('\n')
-      .map((option) => option.trim())
-      .filter(Boolean);
-
-    if (field.type === 'select' && options.length === 0) {
-      throw new Error(`Field ${index + 1} needs at least one select option.`);
-    }
-
-    return {
-      name,
-      label: field.label.trim() || undefined,
-      type: field.type,
-      required: field.required,
-      placeholder: field.placeholder.trim() || undefined,
-      helpText: field.helpText.trim() || undefined,
-      options: field.type === 'select' ? options : undefined,
-    };
-  });
-}
-
-function serializeDocumentDefinitions(documents: ServiceDocumentFormValue[]) {
-  return documents.map((document, index) => {
-    const name = document.name.trim();
-
-    if (!name) {
-      throw new Error(`Document ${index + 1} needs a document key.`);
-    }
-
-    return {
-      name,
-      label: document.label.trim() || undefined,
-      required: document.required,
-      description: document.description.trim() || undefined,
-      acceptedTypes: document.acceptedTypesText
-        .split(',')
-        .map((value) => value.trim())
-        .filter(Boolean),
-    };
-  });
-}

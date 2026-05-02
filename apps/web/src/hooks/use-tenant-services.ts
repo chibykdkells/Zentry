@@ -44,8 +44,10 @@ interface TenantServiceCatalogResponse {
   };
 }
 
-interface TenantManageableServiceItem extends ServiceCatalogItem {
+export interface TenantManageableServiceItem extends ServiceCatalogItem {
   isSelected: boolean;
+  tenantCommission: string;
+  platformFeePercent: number;
 }
 
 interface TenantServiceManagementResponse {
@@ -190,6 +192,43 @@ export function useValidateTenantVtuProviderConfig() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: TENANT_PROVIDER_READINESS_QUERY_KEY });
+    },
+  });
+}
+
+export interface UpdateTenantServiceInput {
+  description?: string;
+  totalPriceNaira?: number;
+  cbtCommissionNaira?: number;
+  tenantCommissionNaira?: number;
+  requiredFields?: Record<string, unknown>[];
+  requiredDocuments?: Record<string, unknown>[];
+}
+
+export function useUpdateTenantService() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      serviceId,
+      payload,
+    }: {
+      serviceId: string;
+      payload: UpdateTenantServiceInput;
+    }) => {
+      const response = await apiClient.patch<{ message: string; data: unknown }>(
+        `/services/tenant/services/${serviceId}`,
+        payload,
+      );
+      return response.data;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: TENANT_SERVICE_MANAGEMENT_QUERY_KEY,
+      });
+      await queryClient.invalidateQueries({
+        queryKey: TENANT_SERVICE_CATALOG_QUERY_KEY,
+      });
     },
   });
 }

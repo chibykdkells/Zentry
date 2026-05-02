@@ -1,12 +1,12 @@
 import { Type } from 'class-transformer';
 import {
-  IsArray,
   IsBoolean,
   IsEnum,
   IsInt,
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
   Min,
   MinLength,
@@ -44,7 +44,8 @@ export class UpdateServiceDto {
   @Type(() => Number)
   @IsNumber()
   @Min(0)
-  platformFeeNaira?: number;
+  @Max(100)
+  platformFeePercent?: number;
 
   @IsOptional()
   @Type(() => Number)
@@ -84,11 +85,4 @@ export class UpdateServiceDto {
   @Min(0)
   sortOrder?: number;
 
-  @IsOptional()
-  @IsArray()
-  requiredFields?: Record<string, unknown>[];
-
-  @IsOptional()
-  @IsArray()
-  requiredDocuments?: Record<string, unknown>[];
 }
