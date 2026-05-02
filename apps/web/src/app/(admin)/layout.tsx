@@ -1,3 +1,5 @@
+'use client';
+
 import { BottomNav } from '@/components/layout/bottom-nav';
 import { Sidebar } from '@/components/layout/sidebar';
 import { TopBar } from '@/components/layout/top-bar';
