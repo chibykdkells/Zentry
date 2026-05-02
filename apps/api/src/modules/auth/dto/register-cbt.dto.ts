@@ -1,4 +1,10 @@
-import { IsString, MinLength, MaxLength } from 'class-validator';
+import {
+  ArrayMinSize,
+  IsArray,
+  IsString,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 import { RegisterCbtSchema } from '@zendocx/validators';
 import { RegisterIndividualDto } from './register-individual.dto';
 
@@ -25,4 +31,9 @@ export class RegisterCbtDto extends RegisterIndividualDto {
 
   @IsString()
   lga: string;
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsString({ each: true })
+  serviceCategoryIds: string[];
 }

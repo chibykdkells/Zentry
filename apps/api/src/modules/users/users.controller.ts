@@ -12,7 +12,7 @@ import { CbtApprovalStatus, UserRole, type JwtUser } from '@zendocx/types';
 import { Audit } from '../../common/decorators/audit.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { UpdateProfileDto } from './dto';
+import { UpdateCbtServiceCategoriesDto, UpdateProfileDto } from './dto';
 import { UsersService } from './users.service';
 
 @Controller('users')
@@ -68,6 +68,33 @@ export class UsersController {
     return this.usersService.approveCbtCenter(
       user.sub,
       cbtUserId,
+      user.tenantId ?? null,
+    );
+  }
+
+  @Get('admin/cbt/categories')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN)
+  getAssignableCbtServiceCategories(
+    @CurrentUser() user: JwtUser,
+    @Query('cbtUserId') cbtUserId?: string,
+  ) {
+    return this.usersService.getAssignableCbtServiceCategories(
+      user.tenantId ?? null,
+      cbtUserId,
+    );
+  }
+
+  @Patch('admin/cbt/:userId/categories')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN)
+  updateCbtServiceCategories(
+    @CurrentUser() user: JwtUser,
+    @Param('userId') cbtUserId: string,
+    @Body() dto: UpdateCbtServiceCategoriesDto,
+  ) {
+    return this.usersService.updateCbtServiceCategories(
+      user.sub,
+      cbtUserId,
+      dto.serviceCategoryIds,
       user.tenantId ?? null,
     );
   }

@@ -151,6 +151,17 @@ export class UsersService {
               approvedAt: true,
               rejectionReason: true,
               createdAt: true,
+              serviceCategoryAssignments: {
+                select: {
+                  serviceCategory: {
+                    select: {
+                      id: true,
+                      name: true,
+                      slug: true,
+                    },
+                  },
+                },
+              },
             },
           },
         },
@@ -160,7 +171,17 @@ export class UsersService {
     return {
       message: 'CBT applications retrieved',
       data: {
-        items: users,
+        items: users.map((user) => ({
+          ...user,
+          cbtProfile: user.cbtProfile
+            ? {
+                ...user.cbtProfile,
+                serviceCategories: user.cbtProfile.serviceCategoryAssignments.map(
+                  (assignment) => assignment.serviceCategory,
+                ),
+              }
+            : null,
+        })),
         total,
         page,
         limit,
@@ -183,7 +204,16 @@ export class UsersService {
         role: true,
         tenantId: true,
         cbtProfile: {
-          select: { id: true, centerName: true, approvalStatus: true },
+          select: {
+            id: true,
+            centerName: true,
+            approvalStatus: true,
+            serviceCategoryAssignments: {
+              select: {
+                serviceCategoryId: true,
+              },
+            },
+          },
         },
       },
     });
@@ -198,6 +228,12 @@ export class UsersService {
 
     if (!cbtUser.cbtProfile) {
       throw new NotFoundException('CBT profile not found');
+    }
+
+    if (!cbtUser.cbtProfile.serviceCategoryAssignments.length) {
+      throw new BadRequestException(
+        'Assign at least one supported service category before approving this CBT center.',
+      );
     }
 
     if (cbtUser.cbtProfile.approvalStatus === CbtApprovalStatus.APPROVED) {
@@ -242,6 +278,208 @@ export class UsersService {
     });
 
     return { message: 'CBT center approved successfully' };
+  }
+
+  async getAssignableCbtServiceCategories(
+    adminTenantId: string | null,
+    cbtUserId?: string,
+  ) {
+    let tenantContext = adminTenantId;
+
+    if (!tenantContext && cbtUserId) {
+      const cbtUser = await this.prisma.user.findUnique({
+        where: { id: cbtUserId },
+        select: {
+          id: true,
+          role: true,
+          tenantId: true,
+        },
+      });
+
+      if (!cbtUser || cbtUser.role !== UserRole.CBT_CENTER) {
+        throw new NotFoundException('CBT center not found');
+      }
+
+      tenantContext = cbtUser.tenantId ?? null;
+    }
+
+    const categories = await this.prisma.serviceCategoryModel.findMany({
+      where: {
+        isActive: true,
+        ...(tenantContext
+          ? {
+              OR: [{ tenantId: null }, { tenantId: tenantContext }],
+            }
+          : { tenantId: null }),
+        services: {
+          some: {
+            isActive: true,
+            fulfillmentType: 'MANUAL',
+            ...(tenantContext
+              ? {
+                  OR: [{ tenantId: null }, { tenantId: tenantContext }],
+                }
+              : { tenantId: null }),
+          },
+        },
+      },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      select: {
+        id: true,
+        tenantId: true,
+        name: true,
+        slug: true,
+      },
+    });
+
+    const dedupedCategories = Array.from(
+      categories.reduce(
+        (accumulator, category) => {
+          const existing = accumulator.get(category.slug);
+          if (!existing || (category.tenantId && !existing.tenantId)) {
+            accumulator.set(category.slug, category);
+          }
+          return accumulator;
+        },
+        new Map<string, (typeof categories)[number]>(),
+      ).values(),
+    ).map(({ tenantId: _tenantId, ...category }) => category);
+
+    return {
+      message: 'Assignable CBT categories retrieved',
+      data: dedupedCategories,
+    };
+  }
+
+  async updateCbtServiceCategories(
+    adminId: string,
+    cbtUserId: string,
+    serviceCategoryIds: string[],
+    adminTenantId: string | null,
+  ) {
+    const cbtUser = await this.prisma.user.findUnique({
+      where: { id: cbtUserId },
+      select: {
+        id: true,
+        role: true,
+        tenantId: true,
+        cbtProfile: {
+          select: {
+            id: true,
+            centerName: true,
+            serviceCategoryAssignments: {
+              select: {
+                serviceCategoryId: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!cbtUser || cbtUser.role !== UserRole.CBT_CENTER) {
+      throw new NotFoundException('CBT center not found');
+    }
+
+    if (adminTenantId && (cbtUser.tenantId ?? null) !== adminTenantId) {
+      throw new ForbiddenException('CBT center does not belong to your tenant');
+    }
+
+    if (!cbtUser.cbtProfile) {
+      throw new NotFoundException('CBT profile not found');
+    }
+
+    const normalizedCategoryIds = Array.from(
+      new Set(serviceCategoryIds.map((value) => value.trim()).filter(Boolean)),
+    );
+
+    if (!normalizedCategoryIds.length) {
+      throw new BadRequestException(
+        'Assign at least one supported service category to this CBT center.',
+      );
+    }
+
+    const assignableCategories = await this.getAssignableCbtServiceCategories(
+      adminTenantId ?? (cbtUser.tenantId ?? null),
+    );
+    const assignableCategoryIds = new Set(
+      assignableCategories.data.map((category) => category.id),
+    );
+    const invalidCategoryIds = normalizedCategoryIds.filter(
+      (categoryId) => !assignableCategoryIds.has(categoryId),
+    );
+
+    if (invalidCategoryIds.length) {
+      throw new BadRequestException(
+        'One or more selected categories are not available to this CBT center.',
+      );
+    }
+
+    const existingCategoryIds =
+      cbtUser.cbtProfile.serviceCategoryAssignments.map(
+        (assignment) => assignment.serviceCategoryId,
+      );
+
+    await this.prisma.$transaction([
+      this.prisma.cbtProfileServiceCategory.deleteMany({
+        where: {
+          cbtProfileId: cbtUser.cbtProfile.id,
+        },
+      }),
+      this.prisma.cbtProfileServiceCategory.createMany({
+        data: normalizedCategoryIds.map((serviceCategoryId) => ({
+          cbtProfileId: cbtUser.cbtProfile!.id,
+          serviceCategoryId,
+        })),
+      }),
+      this.prisma.auditLog.create({
+        data: {
+          userId: adminId,
+          action: 'CBT_SERVICE_CATEGORIES_UPDATED',
+          entity: 'CbtProfile',
+          entityId: cbtUser.cbtProfile.id,
+          oldValues: {
+            serviceCategoryIds: existingCategoryIds,
+          },
+          newValues: {
+            cbtUserId,
+            serviceCategoryIds: normalizedCategoryIds,
+          },
+        },
+      }),
+    ]);
+
+    const updatedProfile = await this.prisma.cbtProfile.findUnique({
+      where: { id: cbtUser.cbtProfile.id },
+      select: {
+        serviceCategoryAssignments: {
+          orderBy: {
+            serviceCategory: {
+              name: 'asc',
+            },
+          },
+          select: {
+            serviceCategory: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return {
+      message: 'CBT service categories updated successfully.',
+      data: {
+        items:
+          updatedProfile?.serviceCategoryAssignments.map(
+            (assignment) => assignment.serviceCategory,
+          ) ?? [],
+      },
+    };
   }
 
   async rejectCbtCenter(
@@ -346,6 +584,17 @@ export class UsersService {
             centerName: true,
             approvalStatus: true,
             isOnline: true,
+            serviceCategoryAssignments: {
+              select: {
+                serviceCategory: {
+                  select: {
+                    id: true,
+                    name: true,
+                    slug: true,
+                  },
+                },
+              },
+            },
           },
         },
       },
@@ -359,6 +608,15 @@ export class UsersService {
 
     return {
       ...safeUser,
+      cbtProfile: safeUser.cbtProfile
+        ? {
+            ...safeUser.cbtProfile,
+            serviceCategories:
+              safeUser.cbtProfile.serviceCategoryAssignments.map(
+                (assignment) => assignment.serviceCategory,
+              ),
+          }
+        : null,
       hasWalletPin: Boolean(walletPin),
     };
   }

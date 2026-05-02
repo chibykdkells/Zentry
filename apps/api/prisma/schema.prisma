@@ -120,6 +120,17 @@ enum ProviderConfigScope {
   TENANT
 }
 
+enum UploadedOrderFileState {
+  STAGED
+  ATTACHED
+  DELETED
+}
+
+enum UploadedOrderFileContext {
+  REQUESTER_DOCUMENT
+  DISPUTE_EVIDENCE
+}
+
 // ── Models ───────────────────────────────────────────────────────
 
 model Tenant {
@@ -194,6 +205,7 @@ model User {
   tenantAdminAccesses TenantAdminAccess[]
   cbtStaffProfile  CbtStaffMembership? @relation("CbtStaff_Member")
   cbtStaffMembers  CbtStaffMembership[] @relation("CbtCenter_Staff")
+  uploadedOrderFiles UploadedOrderFile[]
 
   @@index([email])
   @@index([phone])
@@ -271,6 +283,7 @@ model CbtProfile {
   lastSeenAt      DateTime?
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
+  serviceCategoryAssignments CbtProfileServiceCategory[]
 
   @@index([approvalStatus])
   @@index([licenseNumber])
@@ -290,11 +303,24 @@ model ServiceCategoryModel {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   services    Service[]
+  cbtProfileAssignments CbtProfileServiceCategory[]
 
   @@unique([slug, tenantId])
   @@unique([name, tenantId])
   @@index([tenantId])
   @@map("service_categories")
+}
+
+model CbtProfileServiceCategory {
+  cbtProfileId      String
+  serviceCategoryId String
+  cbtProfile        CbtProfile           @relation(fields: [cbtProfileId], references: [id], onDelete: Cascade)
+  serviceCategory   ServiceCategoryModel @relation(fields: [serviceCategoryId], references: [id], onDelete: Cascade)
+  createdAt         DateTime             @default(now())
+
+  @@id([cbtProfileId, serviceCategoryId])
+  @@index([serviceCategoryId])
+  @@map("cbt_profile_service_categories")
 }
 
 model Service {
@@ -423,6 +449,7 @@ model Order {
   transactions  Transaction[]
   dispute       Dispute?
   notifications Notification[]
+  uploadedOrderFiles UploadedOrderFile[]
 
   @@index([tenantId])
   @@index([requesterId])
@@ -455,6 +482,29 @@ model Dispute {
   @@index([tenantId])
   @@index([status])
   @@index([raisedById])
+}
+
+model UploadedOrderFile {
+  id         String                   @id @default(uuid())
+  userId     String
+  user       User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderId    String?
+  order      Order?                   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  publicId   String                   @unique
+  url        String
+  filename   String?
+  state      UploadedOrderFileState   @default(STAGED)
+  context    UploadedOrderFileContext?
+  attachedAt DateTime?
+  expiresAt  DateTime
+  deletedAt  DateTime?
+  createdAt  DateTime                 @default(now())
+  updatedAt  DateTime                 @updatedAt
+
+  @@index([userId, state, expiresAt])
+  @@index([orderId])
+  @@index([state, expiresAt])
+  @@map("uploaded_order_files")
 }
 
 model WithdrawalRequest {

@@ -16,6 +16,7 @@ import {
 import { UserRole } from '@zendocx/types';
 import { AuthShell } from '@/components/auth/auth-shell';
 import { FeedbackBanner } from '@/components/shared/feedback-banner';
+import { useServiceCatalog } from '@/hooks/use-service-catalog';
 import apiClient from '@/lib/api-client';
 import { getApiErrorMessage } from '@/lib/api-error';
 import {
@@ -40,6 +41,7 @@ type RegistrationFormValues = RegisterIndividualInput & {
   centerName?: string;
   licenseNumber?: string;
   lga?: string;
+  serviceCategoryIds?: string[];
 };
 
 const defaultValues: RegistrationFormValues = {
@@ -54,6 +56,7 @@ const defaultValues: RegistrationFormValues = {
   centerName: '',
   licenseNumber: '',
   lga: '',
+  serviceCategoryIds: [],
 };
 
 function buildPayload(
@@ -78,6 +81,7 @@ function buildPayload(
         address: values.address ?? '',
         state: values.state ?? '',
         lga: values.lga ?? '',
+        serviceCategoryIds: values.serviceCategoryIds ?? [],
       };
     case UserRole.INDIVIDUAL:
     default:
@@ -97,6 +101,21 @@ export function RegistrationForm({
   const [formError, setFormError] = useState<string | null>(null);
   const tenantReady = Boolean(tenant ?? resolveTenantSlugForRequest());
   const requiresTenant = true;
+  const {
+    categories: catalogCategories,
+    services: catalogServices,
+    loading: categoriesLoading,
+    error: categoriesError,
+  } = useServiceCatalog({});
+  const manualServiceCategories = useMemo(() => {
+    const manualCategoryIds = new Set(
+      catalogServices
+        .filter((service) => service.fulfillmentType === 'MANUAL')
+        .map((service) => service.category.id),
+    );
+
+    return catalogCategories.filter((category) => manualCategoryIds.has(category.id));
+  }, [catalogCategories, catalogServices]);
 
   const resolver = useMemo(() => {
     switch (role) {
@@ -233,6 +252,49 @@ export function RegistrationForm({
                 <input className={inputClass(errors.lga?.message)} {...register('lga')} />
               </Field>
             </div>
+            <Field
+              label="Supported service categories"
+              error={errors.serviceCategoryIds?.message}
+              hint="Choose the manual service categories this CBT center is licensed and prepared to fulfill."
+            >
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                {categoriesLoading ? (
+                  <p className="text-sm text-slate-500">Loading categories...</p>
+                ) : categoriesError ? (
+                  <p className="text-sm text-rose-600">{categoriesError}</p>
+                ) : manualServiceCategories.length ? (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {manualServiceCategories.map((category) => (
+                      <label
+                        key={category.id}
+                        className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700"
+                      >
+                        <input
+                          type="checkbox"
+                          value={category.id}
+                          {...register('serviceCategoryIds')}
+                          className="mt-1 h-4 w-4 rounded border-slate-300 text-[#0D1B3E] focus:ring-[#0D1B3E]/20"
+                        />
+                        <span>
+                          <span className="block font-semibold text-slate-900">
+                            {category.name}
+                          </span>
+                          {category.description ? (
+                            <span className="mt-1 block text-xs leading-5 text-slate-500">
+                              {category.description}
+                            </span>
+                          ) : null}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500">
+                    No manual service categories are available in this tenant yet.
+                  </p>
+                )}
+              </div>
+            </Field>
           </>
         ) : null}
 
@@ -274,10 +336,12 @@ function inputClass(error?: string) {
 function Field({
   label,
   error,
+  hint,
   children,
 }: {
   label: string;
   error?: string;
+  hint?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -285,6 +349,9 @@ function Field({
       <span className="mb-1.5 block text-sm font-medium text-slate-700">
         {label}
       </span>
+      {hint ? (
+        <span className="mb-2 block text-xs leading-5 text-slate-500">{hint}</span>
+      ) : null}
       {children}
       {error ? <span className="mt-1 block text-xs text-red-500">{error}</span> : null}
     </label>

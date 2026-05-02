@@ -64,6 +64,29 @@ export class AuthService {
       throw new BadRequestException('Passwords do not match');
     }
 
+    const assignableCategoryIds = await this.getAssignableCbtServiceCategoryIds(
+      tenantId,
+    );
+    const normalizedServiceCategoryIds = Array.from(
+      new Set(dto.serviceCategoryIds.map((value) => value.trim()).filter(Boolean)),
+    );
+
+    if (!normalizedServiceCategoryIds.length) {
+      throw new BadRequestException(
+        'Select at least one service category your CBT can handle.',
+      );
+    }
+
+    const invalidCategoryIds = normalizedServiceCategoryIds.filter(
+      (categoryId) => !assignableCategoryIds.has(categoryId),
+    );
+
+    if (invalidCategoryIds.length) {
+      throw new BadRequestException(
+        'One or more selected service categories are no longer available for CBT registration.',
+      );
+    }
+
     const existingLicense = await this.prisma.cbtProfile.findUnique({
       where: { licenseNumber: dto.licenseNumber },
     });
@@ -84,9 +107,43 @@ export class AuthService {
         address: dto.address,
         state: dto.state,
         lga: dto.lga,
+        serviceCategoryAssignments: {
+          create: normalizedServiceCategoryIds.map((serviceCategoryId) => ({
+            serviceCategoryId,
+          })),
+        },
       },
     });
     return result;
+  }
+
+  private async getAssignableCbtServiceCategoryIds(tenantId: string) {
+    const categories = await this.prisma.serviceCategoryModel.findMany({
+      where: {
+        isActive: true,
+        ...(tenantId
+          ? {
+              OR: [{ tenantId: null }, { tenantId }],
+            }
+          : { tenantId: null }),
+        services: {
+          some: {
+            isActive: true,
+            fulfillmentType: 'MANUAL',
+            ...(tenantId
+              ? {
+                  OR: [{ tenantId: null }, { tenantId }],
+                }
+              : { tenantId: null }),
+          },
+        },
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    return new Set(categories.map((category) => category.id));
   }
 
   private async createUser(

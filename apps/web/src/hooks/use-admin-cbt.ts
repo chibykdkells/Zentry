@@ -26,7 +26,18 @@ export interface AdminCbtApplication {
     approvedAt: string | null;
     rejectionReason: string | null;
     createdAt: string;
+    serviceCategories: Array<{
+      id: string;
+      name: string;
+      slug: string;
+    }>;
   } | null;
+}
+
+export interface AssignableCbtServiceCategory {
+  id: string;
+  name: string;
+  slug: string;
 }
 
 interface AdminCbtListResponse {
@@ -93,6 +104,54 @@ export function useRejectCbtCenter() {
   return useMutation({
     mutationFn: ({ userId, reason }: { userId: string; reason: string }) =>
       apiClient.post(`/users/admin/cbt/${userId}/reject`, { reason }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ADMIN_CBT_QUERY_KEY });
+    },
+  });
+}
+
+export function useAssignableCbtServiceCategories(cbtUserId: string | null) {
+  const query = useQuery({
+    queryKey: [...ADMIN_CBT_QUERY_KEY, 'categories', cbtUserId] as const,
+    enabled: Boolean(cbtUserId),
+    queryFn: async () => {
+      const response = await apiClient.get<{
+        data: AssignableCbtServiceCategory[];
+      }>(
+        cbtUserId
+          ? `/users/admin/cbt/categories?cbtUserId=${encodeURIComponent(cbtUserId)}`
+          : '/users/admin/cbt/categories',
+      );
+      return response.data.data;
+    },
+  });
+
+  return {
+    categories: query.data ?? [],
+    loading: query.isLoading,
+    error: query.isError
+      ? getApiErrorMessage(
+          query.error,
+          'Failed to load assignable CBT categories',
+        )
+      : null,
+    reload: query.refetch,
+  };
+}
+
+export function useUpdateCbtServiceCategories() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      userId,
+      serviceCategoryIds,
+    }: {
+      userId: string;
+      serviceCategoryIds: string[];
+    }) =>
+      apiClient.patch(`/users/admin/cbt/${userId}/categories`, {
+        serviceCategoryIds,
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ADMIN_CBT_QUERY_KEY });
     },

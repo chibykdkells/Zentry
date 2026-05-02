@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
   CheckCircle2,
@@ -17,6 +17,8 @@ import {
   useAdminCbtApplications,
   useApproveCbtCenter,
   useRejectCbtCenter,
+  useAssignableCbtServiceCategories,
+  useUpdateCbtServiceCategories,
   type AdminCbtApplication,
 } from '@/hooks/use-admin-cbt';
 import { useMediaQuery } from '@/hooks/use-media-query';
@@ -46,6 +48,7 @@ export default function AdminCbtPage() {
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectInput, setShowRejectInput] = useState(false);
   const [isMobileDetailOpen, setIsMobileDetailOpen] = useState(false);
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
   const usesMobileSheet = useMediaQuery('(max-width: 1279px)');
 
   const { applications, meta, loading, error, reload } = useAdminCbtApplications({
@@ -59,10 +62,23 @@ export default function AdminCbtPage() {
       ? selectedUserId
       : (applications[0]?.id ?? null);
 
+  const {
+    categories,
+    loading: categoriesLoading,
+    error: categoriesError,
+  } = useAssignableCbtServiceCategories(effectiveSelectedUserId);
+
   const selectedApp = applications.find((a) => a.id === effectiveSelectedUserId) ?? null;
 
   const approve = useApproveCbtCenter();
   const reject = useRejectCbtCenter();
+  const updateCategories = useUpdateCbtServiceCategories();
+
+  useEffect(() => {
+    setSelectedCategoryIds(
+      selectedApp?.cbtProfile?.serviceCategories.map((category) => category.id) ?? [],
+    );
+  }, [selectedApp?.id, selectedApp?.cbtProfile?.serviceCategories]);
 
   const handleSelectApp = (userId: string) => {
     setSelectedUserId(userId);
@@ -97,6 +113,25 @@ export default function AdminCbtPage() {
       setRejectReason('');
     } catch (err) {
       toast.error(getApiErrorMessage(err, 'Could not reject this center right now'));
+    }
+  };
+
+  const handleSaveCategories = async (app: AdminCbtApplication) => {
+    if (!selectedCategoryIds.length) {
+      toast.error('Select at least one supported category before saving.');
+      return;
+    }
+
+    try {
+      await updateCategories.mutateAsync({
+        userId: app.id,
+        serviceCategoryIds: selectedCategoryIds,
+      });
+      toast.success('Supported categories updated.');
+    } catch (err) {
+      toast.error(
+        getApiErrorMessage(err, 'Could not update supported categories right now'),
+      );
     }
   };
 
@@ -173,6 +208,72 @@ export default function AdminCbtPage() {
             </p>
           </div>
 
+          <div className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                  Supported categories
+                </p>
+                <p className="mt-1.5 text-sm text-slate-600">
+                  These categories now control which manual jobs this CBT center can see and claim.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={updateCategories.isPending || !selectedCategoryIds.length}
+                onClick={() => {
+                  void handleSaveCategories(selectedApp);
+                }}
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {updateCategories.isPending ? 'Saving…' : 'Save categories'}
+              </button>
+            </div>
+
+            {categoriesError ? (
+              <p className="mt-3 text-sm text-rose-600">{categoriesError}</p>
+            ) : categoriesLoading ? (
+              <p className="mt-3 text-sm text-slate-500">Loading categories...</p>
+            ) : categories.length ? (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {categories.map((category) => {
+                  const checked = selectedCategoryIds.includes(category.id);
+                  return (
+                    <label
+                      key={category.id}
+                      className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(event) => {
+                          setSelectedCategoryIds((current) =>
+                            event.target.checked
+                              ? Array.from(new Set([...current, category.id]))
+                              : current.filter((value) => value !== category.id),
+                          );
+                        }}
+                        className="mt-1 h-4 w-4 rounded border-slate-300 text-[#0D1B3E] focus:ring-[#0D1B3E]/20"
+                      />
+                      <span>
+                        <span className="block font-semibold text-slate-900">
+                          {category.name}
+                        </span>
+                        <span className="mt-1 block text-xs text-slate-500">
+                          {category.slug}
+                        </span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-slate-500">
+                No assignable manual-service categories are available.
+              </p>
+            )}
+          </div>
+
           {selectedApp.cbtProfile?.supportingDocUrl ? (
             <a
               href={selectedApp.cbtProfile.supportingDocUrl}
@@ -220,7 +321,9 @@ export default function AdminCbtPage() {
               disabled={
                 approve.isPending ||
                 reject.isPending ||
-                selectedApp.cbtProfile?.approvalStatus === CbtApprovalStatus.APPROVED
+                updateCategories.isPending ||
+                selectedApp.cbtProfile?.approvalStatus === CbtApprovalStatus.APPROVED ||
+                selectedCategoryIds.length === 0
               }
               onClick={() => handleApprove(selectedApp)}
               className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[#0D1B3E] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#132754] disabled:cursor-not-allowed disabled:opacity-60"
