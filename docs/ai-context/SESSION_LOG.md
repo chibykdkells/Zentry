@@ -16,6 +16,52 @@
 
 ---
 
+## Session 2026-05-02 (continued) — Migration unblocked, emails confirmed working
+
+**Phase:** Phase 10 — Admin Analytics, Security Audit & Launch
+**AI Assistant:** Claude Sonnet 4.6
+
+### What Was Done
+
+1. **Fixed failed production migration blocking all deploys** — Migration `20260501043000_add_tenant_admin_permissions_and_homepage_settings` had wrong SQL (`ALTER TABLE "users"` instead of `"User"`). It left a failed record in `_prisma_migrations`, blocking every subsequent `fly deploy`. Fix:
+   - Corrected SQL: `ALTER TABLE "users"` → `ALTER TABLE "User"` in the migration file.
+   - Modified `fly.toml` release_command to call `prisma migrate resolve --rolled-back` (with `timeout 120 ... || true`) before `prisma migrate deploy`. This clears the failed state once and redeploys cleanly.
+   - All 3 pending migrations applied successfully in production: `20260501043000`, `20260501160000`, `20260501193000`.
+
+2. **Email delivery confirmed** — After the successful deploy:
+   - `resend` package is now installed in the production container (was missing in old build).
+   - `RESEND_API_KEY` verified set. Direct Resend API test to `assistnghq@gmail.com` returned `{"id":"8388fe3f-ffd9-4fc3-aaac-80414a4de98a"}` — confirmed `noreply@zendocx.net` is a verified Resend domain.
+   - `forgot-password` endpoint returns `{"success":true}` and no Resend errors in logs.
+
+3. **Platform login routing fix** (carried over from previous context window) — Super admin accessing `/forgot-password` or `/reset-password` without a tenant slug now correctly links back to `/platform/login` instead of `/login`.
+
+### Files Created / Modified
+
+- `apps/api/prisma/migrations/20260501043000_add_tenant_admin_permissions_and_homepage_settings/migration.sql` — Fixed: `"users"` → `"User"`
+- `fly.toml` — release_command now resolves failed migration before deploying
+- `apps/web/src/app/(auth)/forgot-password/page.tsx` — "Back to login" link uses `/platform/login` when no tenant slug
+- `apps/web/src/app/(auth)/reset-password/page.tsx` — Post-reset redirect and footer link both use `/platform/login` when no tenant slug
+
+### Decisions Made
+
+- **release_command wraps resolve + deploy**: The `|| true` on `prisma migrate resolve --rolled-back` means future deploys will attempt to resolve a potentially-already-resolved migration and continue cleanly. This is safe and permanent — no need to revert.
+- **Migration SQL uses PascalCase**: Prisma uses double-quoted PascalCase for PostgreSQL table names (`"User"`, `"Tenant"`), NOT lowercase. All future hand-written migration SQL must follow this convention.
+
+### Phase Checklist Updates
+
+Phase 10:
+- [x] Email delivery working in production (Resend, `noreply@zendocx.net`)
+- [x] All pending migrations applied (including tenant admin permissions + file tracking)
+- [x] Platform login routing correct for super admin flow
+
+### Blockers / Notes for Next Session
+
+- **Upload janitor bug (carried forward)**: In `orders-upload-janitor.service.ts`, storage deletion happens before DB row is marked DELETED. Fix: treat "not found" storage errors as success, or flip order.
+- **Sentry Vercel env vars still needed**: `NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_ORG=zendocx`, `SENTRY_PROJECT=zendocx-web` must be added to Vercel env vars.
+- **OOM on old machine during rolling deploy**: The previous running container was killed with "Out of memory: Killed process" during the rolling deploy. Machine has 256MB RAM. If this becomes a pattern, consider upgrading to 512MB.
+
+---
+
 ## Session 2026-05-02 — Dashboard redesign, email system wired, platform login routing fix
 
 **Phase:** Phase 10 — Admin Analytics, Security Audit & Launch
