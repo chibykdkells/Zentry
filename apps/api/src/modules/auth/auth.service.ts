@@ -475,9 +475,6 @@ export class AuthService {
         },
       });
 
-      const frontendUrl =
-        this.config.get<string>('FRONTEND_URL') ?? 'https://app.zendocx.net';
-      const resetUrl = `${frontendUrl}/reset-password?token=${token}`;
       const sender = await this.resolveTenantSender(tenantId);
 
       await this.emailService
@@ -486,10 +483,10 @@ export class AuthService {
           subject: 'Reset your ZenDocx password',
           html: this.buildPasswordResetEmailHtml(
             user.firstName,
-            resetUrl,
+            token,
             expiryHours,
           ),
-          text: `Hi ${user.firstName},\n\nClick the link below to reset your password:\n${resetUrl}\n\nThis link expires in ${expiryHours} hour(s). If you didn't request this, ignore this email.`,
+          text: `Hi ${user.firstName},\n\nYour password reset token is:\n\n${token}\n\nPaste it into the reset form and choose a new password. This token expires in ${expiryHours} hour(s). If you didn't request this, ignore this email.`,
           ...sender,
         })
         .catch(() => undefined);
@@ -903,7 +900,7 @@ export class AuthService {
 
   private buildPasswordResetEmailHtml(
     firstName: string,
-    resetUrl: string,
+    token: string,
     expiryHours: number,
   ): string {
     return `<!DOCTYPE html>
@@ -918,12 +915,13 @@ export class AuthService {
         </td></tr>
         <tr><td style="padding:40px">
           <h1 style="margin:0 0 8px;font-size:22px;font-weight:800;color:#0f172a;letter-spacing:-0.3px">Reset your password</h1>
-          <p style="margin:0 0 24px;font-size:15px;color:#64748b;line-height:1.6">Hi ${firstName}, we received a request to reset the password for your ZenDocx account. Click the button below to choose a new password.</p>
-          <div style="text-align:center;margin-bottom:32px">
-            <a href="${resetUrl}" style="display:inline-block;background:#F5A623;color:#0D1B3E;text-decoration:none;font-weight:800;font-size:15px;padding:14px 32px;border-radius:16px">Reset password</a>
+          <p style="margin:0 0 24px;font-size:15px;color:#64748b;line-height:1.6">Hi ${firstName}, we received a request to reset the password for your ZenDocx account. Copy the token below and paste it into the reset form.</p>
+          <p style="margin:0 0 8px;font-size:13px;font-weight:700;color:#0f172a;text-transform:uppercase;letter-spacing:0.05em">Your reset token</p>
+          <div style="background:#f8fafc;border:1.5px dashed #cbd5e1;border-radius:12px;padding:18px 20px;margin-bottom:24px;text-align:center">
+            <code style="font-size:15px;font-weight:700;color:#0D1B3E;letter-spacing:0.03em;word-break:break-all">${token}</code>
           </div>
-          <p style="margin:0 0 16px;font-size:13px;color:#94a3b8;line-height:1.6">This link expires in <strong>${expiryHours} hour(s)</strong>. If you didn't request a password reset, you can safely ignore this email — your password will not change.</p>
-          <p style="margin:0;font-size:12px;color:#cbd5e1;word-break:break-all">If the button doesn't work, copy this link: ${resetUrl}</p>
+          <p style="margin:0 0 16px;font-size:13px;color:#94a3b8;line-height:1.6">Go to the <strong>Forgot Password → Step 2</strong> page, paste this token, and choose a new password. It expires in <strong>${expiryHours} hour(s)</strong>.</p>
+          <p style="margin:0;font-size:13px;color:#94a3b8;line-height:1.6">If you didn't request a password reset, you can safely ignore this email — your password will not change.</p>
         </td></tr>
         <tr><td style="padding:20px 40px 32px;border-top:1px solid #f1f5f9;text-align:center">
           <p style="margin:0;font-size:12px;color:#cbd5e1">Fast. Trusted. Government Services, Simplified.</p>
