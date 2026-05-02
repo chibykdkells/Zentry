@@ -1,8 +1,9 @@
 import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { TenantPortalHome } from '@/components/tenant/tenant-portal-home';
+import { LandingPage } from '@/components/marketing/landing-page';
 
-const RESERVED_SUBDOMAINS = new Set(['www', 'api', 'platform', 'admin']);
+const RESERVED_SUBDOMAINS = new Set(['www', 'api', 'platform', 'admin', 'app']);
 const RETURNING_TENANTS_COOKIE = 'zendocx-returning-tenants';
 
 function resolveTenantSlugFromHost(host: string): string | null {
@@ -38,7 +39,7 @@ export default async function Home({
   const tenantSlug = explicitTenantSlug ?? hostTenantSlug;
 
   if (!tenantSlug) {
-    redirect('/access-required');
+    return <LandingPage />;
   }
 
   const returningTenants = (cookieStore.get(RETURNING_TENANTS_COOKIE)?.value ?? '')

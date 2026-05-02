@@ -77,9 +77,8 @@ export function proxy(request: NextRequest) {
 
   if (pathname === '/') {
     if (!entryTenantSlug) {
-      return persistTenantCookie(
-        NextResponse.redirect(new URL('/access-required', request.url)),
-      );
+      // Root domain (zendocx.net / www.zendocx.net) — show SaaS landing page
+      return NextResponse.next();
     }
 
     if (role) {

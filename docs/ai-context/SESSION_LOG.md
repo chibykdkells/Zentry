@@ -16,6 +16,71 @@
 
 ---
 
+## Session 2026-05-01 (continued) — VAPID keys, Signed Cloudinary URLs, Sentry, UptimeRobot, SaaS Landing Page
+
+**Phase:** Phase 10 — Admin Analytics, Security Audit & Launch
+**AI Assistant:** Claude Sonnet 4.6
+
+### What Was Done
+
+Five production gaps closed in this session, plus an architectural decision about the root domain:
+
+1. **VAPID keys** — Set correct secret names (`WEB_PUSH_VAPID_PUBLIC_KEY`, `WEB_PUSH_VAPID_PRIVATE_KEY`, `WEB_PUSH_VAPID_SUBJECT`) on Fly.io after discovering the initial names were wrong. Push notifications are now enabled in production.
+
+2. **Signed Cloudinary URLs** — The Cloudinary storage provider was a mock (never actually uploaded files). Rewrote `cloudinary.provider.ts` using the real Cloudinary SDK v2 with `type: "authenticated"` so uploaded files are private by default. Added `getSignedUrl()` to `IStorageProvider` interface, `StorageService`, and `OrdersService.getResultFileRedirect()`. Result file `publicId` is now stored (not the permanent URL).
+
+3. **Sentry error monitoring** — Configured on both apps:
+   - API: `@sentry/nestjs` + `nodeProfilingIntegration` initialized in `main.ts` before bootstrap; `http-exception.filter.ts` captures unhandled exceptions to Sentry.
+   - Web: `sentry.client.config.ts`, `sentry.server.config.ts`, `sentry.edge.config.ts` created; `instrumentation.ts` (Next.js 15 register hook) added; `next.config.ts` wrapped with `withSentryConfig`.
+
+4. **UptimeRobot** — User confirmed configured (screenshot shown). Monitors `api.zendocx.net/health`.
+
+5. **SaaS marketing landing page** — Architectural decision: `zendocx.net` and `www.zendocx.net` are the B2B SaaS landing pages for businesses licensing the platform. End-users never access the root domain — they only use their tenant's subdomain (`tenant.zendocx.net`). Changes made:
+   - `proxy.ts`: root `/` with no tenant slug now passes through (`NextResponse.next()`) instead of redirecting to `/access-required`.
+   - `app/page.tsx`: renders `<LandingPage />` when no tenant slug is present.
+   - `components/marketing/landing-page.tsx`: NEW full landing page with navbar, hero (dark navy, 4 stats), how-it-works (3 steps), features (6 cards), pricing (2 plans — Starter + Growth, both custom), CTA, and footer. All CTAs point to `mailto:hello@zendocx.net`. "Platform Login" links to `/platform/login`.
+
+### Files Created / Modified
+
+- `apps/api/src/providers/storage/cloudinary.provider.ts` — Full rewrite: real Cloudinary SDK, `type: "authenticated"` uploads, `getSignedUrl()` with expiry
+- `apps/api/src/providers/interfaces/index.ts` — Added `getSignedUrl(publicId, expiresInSeconds): string` to `IStorageProvider`
+- `apps/api/src/providers/storage/storage.service.ts` — Exposed `getSignedUrl()` proxy method
+- `apps/api/src/modules/orders/orders.service.ts` — Stores `publicId` (not URL) for `resultFileUrl`; `getResultFileRedirect()` now returns signed URL
+- `apps/api/src/main.ts` — Sentry initialized before NestJS bootstrap
+- `apps/api/src/common/filters/http-exception.filter.ts` — `Sentry.captureException()` on unhandled exceptions
+- `apps/web/sentry.client.config.ts` — NEW
+- `apps/web/sentry.server.config.ts` — NEW
+- `apps/web/sentry.edge.config.ts` — NEW
+- `apps/web/src/instrumentation.ts` — NEW (Next.js 15 register hook)
+- `apps/web/next.config.ts` — Wrapped with `withSentryConfig`
+- `apps/web/src/proxy.ts` — Root `/` with no tenant slug: `NextResponse.next()` (was `/access-required`)
+- `apps/web/src/app/page.tsx` — Renders `<LandingPage />` when no tenant slug
+- `apps/web/src/components/marketing/landing-page.tsx` — NEW: full SaaS B2B landing page
+
+### Decisions Made
+
+- **`zendocx.net` = SaaS B2B landing page**: The root domain is now a marketing/sales surface for businesses wanting to license the platform. Tenant end-users are never expected to visit the root domain — they are always directed to `tenant.zendocx.net`. This is now enforced by `proxy.ts` and `page.tsx`.
+- **Cloudinary `type: "authenticated"`**: All uploaded result files are stored as private authenticated assets. Signed time-limited URLs are generated on-demand (not stored). This prevents unauthorized file access if a `publicId` leaks.
+- **Sentry `tracesSampleRate: 0.1` in production**: At full (1.0) sampling this would flood Sentry with traces at scale. 10% is standard for production.
+
+### Phase Checklist Updates
+
+Phase 10:
+- [x] VAPID keys set on Fly.io (correct names: WEB_PUSH_VAPID_PUBLIC_KEY/PRIVATE_KEY/SUBJECT)
+- [x] Signed Cloudinary URLs (real SDK, authenticated type, getSignedUrl)
+- [x] Sentry configured on both API and web apps
+- [x] UptimeRobot health monitoring (confirmed)
+- [x] SaaS landing page at zendocx.net / www.zendocx.net
+
+### Blockers / Notes for Next Session
+
+- **Sentry Vercel env vars still needed**: User must add `NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_ORG=zendocx`, `SENTRY_PROJECT=zendocx-web` to Vercel environment variables and trigger a redeploy for Sentry to work on the frontend.
+- **Upload janitor bug (carried forward)**: In `orders-upload-janitor.service.ts`, storage is deleted before the DB row is marked DELETED. Fix: treat "not found" storage errors as success, or flip the order.
+- **`app.zendocx.net` DNS** (low priority): Add CNAME `app` → `cname.vercel-dns.com` in Cloudflare if needed.
+- **Load test** (deferred): 500 concurrent users simulation not yet done.
+
+---
+
 ## Session 2026-05-01 — Production Deployment: API live on Fly.io, frontend live on Vercel
 
 **Phase:** Phase 10 — Admin Analytics, Security Audit & Launch

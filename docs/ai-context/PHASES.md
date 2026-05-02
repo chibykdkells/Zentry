@@ -12,8 +12,8 @@
 
 ```
 Active Phase  : Phase 10 — Admin Analytics, Security Audit & Launch (IN PROGRESS)
-Last Session  : 2026-04-12 (Phase 9 polish completed; Phase 10 closeout still pending)
-Next Action   : Close remaining verification and launch gaps across Phases 1, 3, 7, 9, and 10
+Last Session  : 2026-05-01 (Fly.io API live, Vercel live, Cloudinary signed URLs, VAPID, Sentry, SaaS landing page)
+Next Action   : Load test (500 concurrent users), complete Sentry Vercel env vars, upload janitor bug fix
 ```
 
 ---
@@ -694,11 +694,13 @@ optimized. Production deployed.
 - [x] Fly.io deployment (backend — live at api.zendocx.net, 43 secrets deployed)
 - [x] Cloudflare DNS + WAF configured (api → Fly, www/root → Vercel)
 - [x] All .env secrets moved to platform secret manager (fly secrets)
+- [x] VAPID keys set (WEB_PUSH_VAPID_PUBLIC_KEY + WEB_PUSH_VAPID_PRIVATE_KEY + WEB_PUSH_VAPID_SUBJECT set on Fly)
+- [x] Signed Cloudinary URLs for result files (Cloudinary provider rewired to type:"authenticated" + getSignedUrl)
+- [x] Sentry error monitoring configured (API: @sentry/nestjs in main.ts + http-exception.filter; Web: sentry.*.config.ts + instrumentation.ts + withSentryConfig)
+- [x] UptimeRobot health monitoring (confirmed set up via screenshot)
+- [x] SaaS marketing landing page at zendocx.net/www.zendocx.net (proxy.ts + page.tsx + landing-page.tsx)
+- [ ] Sentry Vercel env vars still needed: NEXT_PUBLIC_SENTRY_DSN, SENTRY_ORG=zendocx, SENTRY_PROJECT=zendocx-web
 - [ ] app.zendocx.net CNAME record in Cloudflare (add app → cname.vercel-dns.com)
-- [ ] VAPID keys set (VAPID_PUBLIC_KEY + VAPID_PRIVATE_KEY missing from Fly secrets)
-- [ ] Sentry error monitoring configured
-- [ ] UptimeRobot (or equivalent) health monitoring
-- [ ] Signed Cloudinary URLs for result files (security gap)
 - [ ] Load testing: simulate 500 concurrent users
 - [ ] Launch checklist signed off
 
