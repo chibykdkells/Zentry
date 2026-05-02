@@ -696,12 +696,14 @@ export default function AdminServicesPage() {
                               >
                                 <PencilLine size={14} />
                               </ActionButton>
-                              <ActionButton
-                                title="API integration config"
-                                onClick={() => setApiConfigService(service)}
-                              >
-                                <Settings2 size={14} />
-                              </ActionButton>
+                              {service.deliveryMode === ServiceDeliveryMode.API_AUTOMATED ? (
+                                <ActionButton
+                                  title="API integration config"
+                                  onClick={() => setApiConfigService(service)}
+                                >
+                                  <Settings2 size={14} />
+                                </ActionButton>
+                              ) : null}
                               <ActionButton
                                 title="Delete service"
                                 danger
@@ -1194,19 +1196,24 @@ function ActionButton({
   danger?: boolean;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={title}
-      className={cn(
-        'flex h-8 w-8 items-center justify-center rounded-xl border transition',
-        danger
-          ? 'border-rose-200 bg-rose-50 text-rose-500 hover:bg-rose-100'
-          : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700',
-      )}
-    >
-      {children}
-    </button>
+    <div className="group relative">
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn(
+          'flex h-8 w-8 items-center justify-center rounded-xl border transition',
+          danger
+            ? 'border-rose-200 bg-rose-50 text-rose-500 hover:bg-rose-100'
+            : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700',
+        )}
+      >
+        {children}
+      </button>
+      <div className="pointer-events-none absolute bottom-full left-1/2 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2.5 py-1 text-xs font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
+        {title}
+        <div className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
+      </div>
+    </div>
   );
 }
 
