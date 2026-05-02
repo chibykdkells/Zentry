@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowRight, CheckCircle2, FileStack, ShieldCheck } from 'lucide-react';
+import { ArrowRight, CheckCircle2, ChevronRight, ShieldCheck, Zap } from 'lucide-react';
 import { useTenantStore } from '@/stores/tenant.store';
 import { appendTenantContextToPath } from '@/lib/tenant-runtime';
 import { useServiceCatalog } from '@/hooks/use-service-catalog';
@@ -9,6 +9,17 @@ import { useServiceCatalog } from '@/hooks/use-service-catalog';
 interface TenantPortalHomeProps {
   tenantSlug: string;
 }
+
+const PASTEL_PALETTES = [
+  { bg: 'bg-blue-50', border: 'border-blue-100', dot: 'bg-blue-400', text: 'text-blue-700' },
+  { bg: 'bg-violet-50', border: 'border-violet-100', dot: 'bg-violet-400', text: 'text-violet-700' },
+  { bg: 'bg-emerald-50', border: 'border-emerald-100', dot: 'bg-emerald-400', text: 'text-emerald-700' },
+  { bg: 'bg-amber-50', border: 'border-amber-100', dot: 'bg-amber-400', text: 'text-amber-700' },
+  { bg: 'bg-rose-50', border: 'border-rose-100', dot: 'bg-rose-400', text: 'text-rose-700' },
+  { bg: 'bg-cyan-50', border: 'border-cyan-100', dot: 'bg-cyan-400', text: 'text-cyan-700' },
+  { bg: 'bg-orange-50', border: 'border-orange-100', dot: 'bg-orange-400', text: 'text-orange-700' },
+  { bg: 'bg-pink-50', border: 'border-pink-100', dot: 'bg-pink-400', text: 'text-pink-700' },
+];
 
 export function TenantPortalHome({ tenantSlug }: TenantPortalHomeProps) {
   const tenant = useTenantStore((state) => state.tenant);
@@ -20,26 +31,20 @@ export function TenantPortalHome({ tenantSlug }: TenantPortalHomeProps) {
   const subheading =
     tenant?.homepageSubheading ??
     'Review services, understand the process, and continue when you are ready.';
-  const about =
-    tenant?.homepageAbout ??
-    `${brandName} uses ZenDocx to manage customer requests, service operations, and manual document processing from one place.`;
   const steps = tenant?.homepageManualSteps?.length
     ? tenant.homepageManualSteps
     : [
         {
           title: 'Choose a service',
-          description:
-            'Review the available services and pick the request you need before continuing.',
+          description: 'Review the available services and pick the request you need.',
         },
         {
-          title: 'Create or use your account',
-          description:
-            'Sign in or get started so the request stays tied to your business portal account.',
+          title: 'Sign in or register',
+          description: 'Create an account so the request stays tied to your portal profile.',
         },
         {
-          title: 'Track progress',
-          description:
-            'Follow updates until the manual processing is complete and the result is ready.',
+          title: 'Track your progress',
+          description: 'Follow updates until manual processing is complete.',
         },
       ];
 
@@ -47,188 +52,182 @@ export function TenantPortalHome({ tenantSlug }: TenantPortalHomeProps) {
   const loginHref = appendTenantContextToPath('/login', tenantSlug);
   const registerHref = appendTenantContextToPath('/register', tenantSlug);
 
-  const template = tenant?.homepageTemplate ?? 'spotlight';
+  const brandInitial = brandName.charAt(0).toUpperCase();
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#eef3fb_0%,#f8fbff_46%,#ffffff_100%)] px-4 py-6 sm:px-6 sm:py-8">
-      <div className="mx-auto max-w-6xl space-y-6">
-        <section className="overflow-hidden rounded-[2.3rem] border border-white/60 bg-white/92 shadow-[0_30px_90px_rgba(15,23,42,0.08)] backdrop-blur">
-          <div className="grid gap-0 lg:grid-cols-[1.08fr_0.92fr]">
-            <div className="bg-[linear-gradient(160deg,var(--brand-navy)_0%,var(--brand-button)_52%,#10203c_100%)] px-6 py-8 text-white sm:px-8 sm:py-10">
-              <div className="inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-200">
-                <ShieldCheck size={14} className="text-brand-accent" />
-                {brandName}
-              </div>
-              <h1 className="mt-6 max-w-xl text-[2.6rem] font-black leading-[0.96] tracking-[-0.05em] sm:text-[3.3rem]">
-                {heading}
-              </h1>
-              <p className="mt-4 max-w-xl text-base leading-8 text-slate-200">
-                {subheading}
-              </p>
-              <div className="mt-8 flex flex-wrap gap-3">
-                <Link
-                  href={registerHref}
-                  className="inline-flex items-center rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-brand-navy transition hover:bg-slate-100"
-                >
-                  Get started
-                </Link>
-                <Link
-                  href={loginHref}
-                  className="inline-flex items-center gap-2 rounded-2xl border border-white/20 bg-white/10 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/16"
-                >
-                  Login
-                  <ArrowRight size={16} />
-                </Link>
-              </div>
-            </div>
+    <div className="min-h-screen bg-[#f7f8fc]">
 
-            <div className="px-6 py-8 sm:px-8 sm:py-10">
-              {template === 'guided-flow' ? (
-                <div className="space-y-4">
-                  <p className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
-                    Manual document process
-                  </p>
-                  {steps.map((step, index) => (
-                    <div
-                      key={`${step.title}-${index}`}
-                      className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-4"
-                    >
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-muted">
-                        Step {index + 1}
-                      </p>
-                      <p className="mt-2 text-lg font-semibold text-slate-900">
-                        {step.title}
-                      </p>
-                      <p className="mt-2 text-sm leading-7 text-slate-500">
-                        {step.description}
-                      </p>
-                    </div>
-                  ))}
-                </div>
+      {/* ── Hero ──────────────────────────────────────────────── */}
+      <div className="bg-[#0D1B3E] px-5 pt-8 pb-16 sm:px-8 sm:pt-12">
+        <div className="mx-auto max-w-5xl">
+
+          {/* Brand bar */}
+          <div className="mb-8 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {tenant?.logoUrl ? (
+                <img
+                  src={tenant.logoUrl}
+                  alt={brandName}
+                  className="h-10 w-10 rounded-2xl object-cover ring-1 ring-white/20"
+                />
               ) : (
-                <div className="space-y-4">
-                  <p className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
-                    About this business portal
-                  </p>
-                  <p className="text-base leading-8 text-slate-600">{about}</p>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {steps.map((step, index) => (
-                      <div
-                        key={`${step.title}-${index}`}
-                        className="rounded-[1.35rem] border border-slate-200 bg-slate-50/80 p-4"
-                      >
-                        <div className="flex items-center gap-2 text-brand-navy">
-                          <CheckCircle2 size={16} />
-                          <span className="text-sm font-semibold">
-                            {step.title}
-                          </span>
-                        </div>
-                        <p className="mt-2 text-sm leading-6 text-slate-500">
-                          {step.description}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/10">
+                  <span className="text-lg font-black text-[#F5A623]">{brandInitial}</span>
                 </div>
               )}
+              <span className="font-bold text-white">{brandName}</span>
             </div>
+            <Link
+              href={loginHref}
+              className="rounded-xl border border-white/20 bg-white/8 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/14"
+            >
+              Sign in
+            </Link>
+          </div>
+
+          {/* Heading */}
+          <div className="max-w-2xl">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/8 px-3 py-1.5 text-xs font-semibold uppercase tracking-widest text-white/60">
+              <ShieldCheck size={12} className="text-[#F5A623]" />
+              Secured portal
+            </div>
+            <h1 className="text-3xl font-black leading-tight tracking-tight text-white sm:text-4xl lg:text-5xl">
+              {heading}
+            </h1>
+            <p className="mt-4 text-base leading-7 text-white/60 sm:text-lg">
+              {subheading}
+            </p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link
+                href={registerHref}
+                className="inline-flex items-center gap-2 rounded-2xl bg-[#F5A623] px-5 py-3 text-sm font-bold text-[#0D1B3E] transition hover:bg-[#e8961a]"
+              >
+                Get started
+                <ArrowRight size={15} />
+              </Link>
+              <Link
+                href={loginHref}
+                className="inline-flex items-center gap-2 rounded-2xl border border-white/20 bg-white/10 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/16"
+              >
+                Sign in to my account
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Content cards pulled up over the hero ─────────────── */}
+      <div className="mx-auto -mt-8 max-w-5xl space-y-5 px-5 pb-10 sm:px-8">
+
+        {/* How it works */}
+        <section className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center gap-3 border-b border-slate-100 px-6 py-5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#0D1B3E]/6">
+              <Zap size={16} className="text-[#0D1B3E]" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Process</p>
+              <h2 className="text-base font-bold text-slate-900">How it works</h2>
+            </div>
+          </div>
+          <div className="grid gap-0 divide-y divide-slate-100 sm:divide-y-0 sm:divide-x sm:grid-cols-3">
+            {steps.map((step, i) => (
+              <div key={`${step.title}-${i}`} className="px-6 py-5">
+                <div className="mb-3 flex h-7 w-7 items-center justify-center rounded-full bg-[#F5A623] text-xs font-black text-[#0D1B3E]">
+                  {i + 1}
+                </div>
+                <p className="font-semibold text-slate-900">{step.title}</p>
+                <p className="mt-1.5 text-sm leading-6 text-slate-500">{step.description}</p>
+              </div>
+            ))}
           </div>
         </section>
 
-        <section className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
-          <article className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-navy/8 text-brand-navy">
-                <FileStack size={22} />
-              </div>
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
-                  How to use manual processing
-                </p>
-                <h2 className="mt-1 text-2xl font-bold tracking-tight text-slate-950">
-                  Clear first steps
-                </h2>
-              </div>
+        {/* Services grid */}
+        <section className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between gap-4 border-b border-slate-100 px-6 py-5">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Catalogue</p>
+              <h2 className="text-base font-bold text-slate-900">Available services</h2>
             </div>
-            <div className="mt-6 space-y-4">
-              {steps.map((step, index) => (
-                <div
-                  key={`${step.title}-${index}-detail`}
-                  className="rounded-[1.35rem] border border-slate-200 bg-slate-50/70 p-4"
-                >
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-muted">
-                    Step {index + 1}
-                  </p>
-                  <p className="mt-2 text-base font-semibold text-slate-900">
-                    {step.title}
-                  </p>
-                  <p className="mt-2 text-sm leading-7 text-slate-500">
-                    {step.description}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </article>
-
-          <article className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-end justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
-                  Available services
-                </p>
-                <h2 className="mt-1 text-2xl font-bold tracking-tight text-slate-950">
-                  What this business currently offers
-                </h2>
-              </div>
-              <Link
-                href={registerHref}
-                className="hidden rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 sm:inline-flex"
-              >
-                Get started
-              </Link>
-            </div>
-
-            <div
-              className={
-                template === 'service-grid'
-                  ? 'mt-6 grid gap-3 sm:grid-cols-2'
-                  : 'mt-6 space-y-3'
-              }
+            <Link
+              href={registerHref}
+              className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-white"
             >
-              {loading
-                ? Array.from({ length: 6 }).map((_, index) => (
-                    <div
-                      key={index}
-                      className="h-24 animate-pulse rounded-[1.35rem] bg-slate-100"
-                    />
-                  ))
-                : visibleServices.map((service) => (
+              Get started
+              <ChevronRight size={14} />
+            </Link>
+          </div>
+
+          <div className="p-5">
+            {loading ? (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="h-24 animate-pulse rounded-2xl bg-slate-100" />
+                ))}
+              </div>
+            ) : visibleServices.length ? (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {visibleServices.map((service, i) => {
+                  const palette = PASTEL_PALETTES[i % PASTEL_PALETTES.length]!;
+                  return (
                     <div
                       key={service.id}
-                      className="rounded-[1.35rem] border border-slate-200 bg-slate-50/60 p-4"
+                      className={`rounded-2xl border p-4 transition hover:shadow-sm ${palette.bg} ${palette.border}`}
                     >
                       <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-base font-semibold text-slate-900">
-                            {service.name}
-                          </p>
-                          <p className="mt-1 text-sm text-slate-500">
+                        <div className="min-w-0">
+                          <div className={`mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider ${palette.text}`}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${palette.dot}`} />
                             {service.category.name}
-                          </p>
+                          </div>
+                          <p className="font-semibold text-slate-900 truncate">{service.name}</p>
                         </div>
-                        <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+                        <span className="shrink-0 rounded-full bg-white/80 px-2.5 py-1 text-xs font-bold text-slate-700 shadow-sm">
                           {service.totalPrice}
                         </span>
                       </div>
-                      <p className="mt-3 text-sm leading-6 text-slate-500">
-                        {service.description ??
-                          'This service is available in the business portal and can be requested after sign-in.'}
-                      </p>
+                      {service.description ? (
+                        <p className="mt-2 text-xs leading-5 text-slate-500 line-clamp-2">
+                          {service.description}
+                        </p>
+                      ) : null}
                     </div>
-                  ))}
-            </div>
-          </article>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="py-10 text-center text-sm text-slate-400">
+                No services are published yet. Check back soon.
+              </div>
+            )}
+          </div>
         </section>
+
+        {/* Trust footer */}
+        <section className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="grid gap-4 sm:grid-cols-3">
+            {[
+              { icon: ShieldCheck, label: 'Escrow protection', note: 'Funds are held securely until the job is done.' },
+              { icon: CheckCircle2, label: 'Verified operators', note: 'Only approved CBT centers can fulfill your requests.' },
+              { icon: Zap, label: 'Real-time updates', note: 'Track every step of your request from submission to completion.' },
+            ].map(({ icon: Icon, label, note }) => (
+              <div key={label} className="flex items-start gap-3">
+                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#0D1B3E]/6 text-[#0D1B3E]">
+                  <Icon size={15} />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">{label}</p>
+                  <p className="mt-0.5 text-xs leading-5 text-slate-500">{note}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <p className="text-center text-xs text-slate-400">
+          Powered by ZenDocx · Fast. Trusted. Government Services, Simplified.
+        </p>
       </div>
     </div>
   );

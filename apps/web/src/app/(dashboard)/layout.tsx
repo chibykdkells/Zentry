@@ -21,8 +21,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <Sidebar
           brandLabel={mounted ? (tenant?.name ?? 'ZenDocx') : 'ZenDocx'}
           sectionLabel="Menu"
-          items={individualPrimaryNav.map(({ label, href }) => ({ label, href }))}
-          secondaryItems={individualSecondaryNav.map(({ label, href }) => ({ label, href }))}
+          items={individualPrimaryNav}
+          secondaryItems={individualSecondaryNav}
         />
         <main className="min-h-0 flex-1 overflow-y-auto pb-20 md:pb-0 md:h-full">
           <RouteGuard requiredRoles={[UserRole.INDIVIDUAL]}>

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LogOut } from 'lucide-react';
+import { LogOut, LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 import apiClient from '@/lib/api-client';
 import { useAuthStore } from '@/stores/auth.store';
@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 interface SidebarItem {
   label: string;
   href: string;
+  icon?: LucideIcon;
 }
 
 interface SidebarProps {
@@ -82,27 +83,37 @@ export function Sidebar({
         <div className="mb-3 px-2 text-xs uppercase tracking-wider text-slate-400">
           {sectionLabel}
         </div>
-        <div className="space-y-1">
+        <div className="space-y-0.5">
           {items.map((item) => {
+            const active = isActivePath(item.href);
+            const Icon = item.icon;
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 className={cn(
                   'group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
-                  isActivePath(item.href)
+                  active
                     ? 'bg-white/10 text-white'
-                    : 'text-slate-300 hover:bg-white/10 hover:text-white',
+                    : 'text-slate-400 hover:bg-white/8 hover:text-white',
                 )}
               >
-                <span
-                  className={cn(
-                    'h-2 w-2 rounded-full transition',
-                    isActivePath(item.href)
-                      ? 'bg-brand-accent'
-                      : 'bg-white/0 group-hover:bg-white/30',
-                  )}
-                />
+                {Icon ? (
+                  <Icon
+                    size={16}
+                    className={cn(
+                      'shrink-0 transition-colors',
+                      active ? 'text-[#F5A623]' : 'text-slate-500 group-hover:text-slate-300',
+                    )}
+                  />
+                ) : (
+                  <span
+                    className={cn(
+                      'h-1.5 w-1.5 rounded-full shrink-0 transition',
+                      active ? 'bg-[#F5A623]' : 'bg-white/20 group-hover:bg-white/40',
+                    )}
+                  />
+                )}
                 {item.label}
               </Link>
             );
@@ -111,32 +122,44 @@ export function Sidebar({
 
         {secondaryItems.length ? (
           <>
-            <div className="mb-3 mt-8 px-2 text-xs uppercase tracking-wider text-slate-400">
+            <div className="mb-2 mt-7 px-2 text-xs uppercase tracking-wider text-slate-500">
               Account
             </div>
-            <div className="space-y-1">
-              {secondaryItems.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={cn(
-                    'group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
-                    isActivePath(item.href)
-                      ? 'bg-white/10 text-white'
-                      : 'text-slate-300 hover:bg-white/10 hover:text-white',
-                  )}
-                >
-                  <span
+            <div className="space-y-0.5">
+              {secondaryItems.map((item) => {
+                const active = isActivePath(item.href);
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
                     className={cn(
-                      'h-2 w-2 rounded-full transition',
-                      isActivePath(item.href)
-                        ? 'bg-brand-accent'
-                        : 'bg-white/0 group-hover:bg-white/30',
+                      'group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
+                      active
+                        ? 'bg-white/10 text-white'
+                        : 'text-slate-400 hover:bg-white/8 hover:text-white',
                     )}
-                  />
-                  {item.label}
-                </Link>
-              ))}
+                  >
+                    {Icon ? (
+                      <Icon
+                        size={16}
+                        className={cn(
+                          'shrink-0 transition-colors',
+                          active ? 'text-[#F5A623]' : 'text-slate-500 group-hover:text-slate-300',
+                        )}
+                      />
+                    ) : (
+                      <span
+                        className={cn(
+                          'h-1.5 w-1.5 rounded-full shrink-0 transition',
+                          active ? 'bg-[#F5A623]' : 'bg-white/20 group-hover:bg-white/40',
+                        )}
+                      />
+                    )}
+                    {item.label}
+                  </Link>
+                );
+              })}
             </div>
           </>
         ) : null}

@@ -31,8 +31,8 @@ export default function CbtLayout({ children }: { children: React.ReactNode }) {
         <Sidebar
           brandLabel={brandLabel}
           sectionLabel="Fulfiller"
-          items={primaryNav.map(({ label, href }) => ({ label, href }))}
-          secondaryItems={cbtSecondaryNav.map(({ label, href }) => ({ label, href }))}
+          items={primaryNav}
+          secondaryItems={cbtSecondaryNav}
         />
         <main className="min-h-0 flex-1 overflow-y-auto pb-20 md:pb-0 md:h-full">
           <RouteGuard requiredRoles={[UserRole.CBT_CENTER, UserRole.CBT_STAFF]}>

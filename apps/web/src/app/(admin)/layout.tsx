@@ -13,8 +13,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <Sidebar
           brandLabel="ZenDocx Admin"
           sectionLabel="Oversight"
-          items={adminPrimaryNav.map(({ label, href }) => ({ label, href }))}
-          secondaryItems={adminSecondaryNav.map(({ label, href }) => ({ label, href }))}
+          items={adminPrimaryNav}
+          secondaryItems={adminSecondaryNav}
         />
         <main className="min-h-0 flex-1 overflow-y-auto pb-20 md:pb-0 md:h-full">
           <RouteGuard requiredRoles={[UserRole.SUPER_ADMIN]}>

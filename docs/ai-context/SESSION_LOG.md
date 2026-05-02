@@ -6719,3 +6719,55 @@ Multi-tenancy re-architecture Batch 4 (backend scoping) is fully complete. Batch
 - The broader web lint backlog still contains unrelated React hook/style
   findings outside the tenant settings page, but they are not the blocker that
   was breaking this route.
+
+---
+
+## Session 2026-05-02 — Dashboard & UI Redesign (Phase 1: Shared Components)
+
+**Phase:** Phase 10 — Admin Analytics, Security Audit & Launch
+**AI Assistant:** Claude Sonnet 4.6
+
+### What Was Done
+
+Implemented the first phase of the full app UI/UX redesign based on the modern minimalistic BuyCard.ng reference provided by the user.
+
+1. **StatCard redesign** — Each variant now uses a vivid solid-color background (orange-500, emerald-600, navy #0D1B3E, cyan-600, amber #F5A623) with white (or navy for amber) text and a translucent icon badge. Values are displayed as `text-3xl font-black` for strong visual hierarchy.
+
+2. **Sidebar icon support** — `SidebarItem` interface updated with `icon?: LucideIcon`. Nav links now render the icon in amber (#F5A623) when active, and slate when inactive. The old dot indicators are kept as fallback.
+
+3. **Layouts wired up** — All four layouts now pass full `AppNavItem[]` directly to Sidebar without stripping icons: `(dashboard)/layout.tsx`, `(cbt)/layout.tsx`, `(admin)/layout.tsx`, `(tenant-admin)/layout.tsx`.
+
+4. **Tenant portal home redesign** — Rebuilt `tenant-portal-home.tsx` with a dark navy hero section, amber CTA button, a "How it works" step card, and a pastel service grid (8 rotating pastel palettes: blue, violet, emerald, amber, rose, cyan, orange, pink) with category label chips, service names, and price badges. Added a trust footer with escrow/operator/realtime bullets.
+
+5. **Login form update (prior session)** — Auth shell redesigned: dark navy left panel with centered brand icon, feature pills, and emerald security badge. Login form submit button changed from navy to amber (#F5A623 / text-[#0D1B3E]).
+
+### Files Created / Modified
+
+- `apps/web/src/components/shared/stat-card.tsx` — vivid variant colors
+- `apps/web/src/components/layout/sidebar.tsx` — icon support in SidebarItem + nav render
+- `apps/web/src/app/(dashboard)/layout.tsx` — pass full nav (icons included)
+- `apps/web/src/app/(cbt)/layout.tsx` — pass full nav (icons included)
+- `apps/web/src/app/(admin)/layout.tsx` — pass full nav (icons included)
+- `apps/web/src/app/(tenant-admin)/layout.tsx` — pass full nav (icons included)
+- `apps/web/src/components/tenant/tenant-portal-home.tsx` — full redesign
+- `apps/web/src/components/auth/auth-shell.tsx` — two-panel redesign (prior session)
+- `apps/web/src/components/auth/login-form.tsx` — amber submit button (prior session)
+- `apps/web/src/components/marketing/landing-page.tsx` — phone mockup name fix + PWA feature card (prior session)
+
+### Decisions Made
+
+- StatCard variants use Tailwind color classes directly (not CSS variables) for vivid, unambiguous colors.
+- Amber variant uses dark (#0D1B3E) text instead of white for legibility on yellow backgrounds.
+- Sidebar icons are amber when active to match the brand accent color.
+- Tenant portal home uses a dark navy hero (matching brand) rather than a gradient, for cleaner mobile rendering.
+
+### Phase Checklist Updates
+
+No new phase items completed — this session was purely UI/UX polish.
+
+### Blockers / Notes for Next Session
+
+- Individual dashboard (`/home/page.tsx`) and CBT dashboard (`/cbt/dashboard/page.tsx`) pages would benefit from layout polish (hero section, wallet card) but the StatCards already look much better from the shared component update.
+- Admin dashboard pages (orders, CBT centers, disputes) could also use table/list view improvements.
+- No Vercel/Fly.io deployment done this session — changes should be built + deployed next session.
+- Sentry env vars (`NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_ORG`, `SENTRY_PROJECT`) still needed on Vercel.

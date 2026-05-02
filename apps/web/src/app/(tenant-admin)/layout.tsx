@@ -22,8 +22,8 @@ export default function TenantAdminLayout({ children }: { children: React.ReactN
         <Sidebar
           brandLabel={mounted ? (tenant?.name ?? 'Business Workspace') : 'Business Workspace'}
           sectionLabel="Business menu"
-          items={tenantPrimaryNav.map(({ label, href }) => ({ label, href }))}
-          secondaryItems={tenantSecondaryNav.map(({ label, href }) => ({ label, href }))}
+          items={tenantPrimaryNav}
+          secondaryItems={tenantSecondaryNav}
         />
         <main className="min-h-0 flex-1 overflow-y-auto pb-20 md:pb-0 md:h-full">
           <RouteGuard requiredRoles={[UserRole.TENANT_ADMIN]}>
