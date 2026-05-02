@@ -12,6 +12,7 @@ import * as bcrypt from 'bcryptjs';
 import { Prisma, Tenant } from '@prisma/client';
 import { ProviderCredentialsService } from '../../providers/provider-credentials.service';
 import { StorageService } from '../../providers/storage/storage.service';
+import { EmailService } from '../../providers/email/email.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -85,6 +86,7 @@ export class TenantService {
     private readonly config: ConfigService,
     private readonly providerCredentialsService: ProviderCredentialsService,
     private readonly storageService: StorageService,
+    private readonly emailService: EmailService,
   ) {}
 
   private generateTemporaryPassword() {
@@ -855,6 +857,43 @@ export class TenantService {
 
       return created;
     });
+
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { name: true, slug: true },
+    });
+
+    if (tenant) {
+      const frontendUrl =
+        this.config.get<string>('FRONTEND_URL') ?? 'https://app.zendocx.net';
+      const loginUrl = `${frontendUrl}/login`;
+
+      await this.emailService
+        .sendEmail({
+          to: user.email,
+          subject: `Your ${tenant.name} portal account is ready`,
+          html: this.buildTenantWelcomeEmailHtml({
+            firstName: user.firstName,
+            tenantName: tenant.name,
+            email: user.email,
+            tempPassword,
+            loginUrl,
+          }),
+          text: [
+            `Hi ${user.firstName},`,
+            '',
+            `Your admin account for ${tenant.name} on ZenDocx has been created.`,
+            '',
+            `Email: ${user.email}`,
+            `Temporary password: ${tempPassword}`,
+            '',
+            `Sign in at: ${loginUrl}`,
+            '',
+            'Please change your password immediately after your first login.',
+          ].join('\n'),
+        })
+        .catch(() => undefined);
+    }
 
     return {
       user: {
@@ -2172,5 +2211,45 @@ export class TenantService {
       default:
         return 'user';
     }
+  }
+
+  private buildTenantWelcomeEmailHtml(input: {
+    firstName: string;
+    tenantName: string;
+    email: string;
+    tempPassword: string;
+    loginUrl: string;
+  }): string {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f7f8fc;font-family:'Segoe UI',Arial,sans-serif">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f7f8fc;padding:40px 16px">
+    <tr><td align="center">
+      <table width="100%" style="max-width:520px;background:#ffffff;border-radius:24px;border:1px solid rgba(15,23,42,0.07);box-shadow:0 4px 24px rgba(15,23,42,0.06)">
+        <tr><td style="background:#0D1B3E;border-radius:24px 24px 0 0;padding:32px 40px;text-align:center">
+          <span style="color:#F5A623;font-size:28px;font-weight:900;letter-spacing:-0.5px">ZenDocx</span>
+        </td></tr>
+        <tr><td style="padding:40px">
+          <h1 style="margin:0 0 8px;font-size:22px;font-weight:800;color:#0f172a;letter-spacing:-0.3px">Welcome to ZenDocx, ${input.firstName}!</h1>
+          <p style="margin:0 0 24px;font-size:15px;color:#64748b;line-height:1.6">Your business workspace <strong>${input.tenantName}</strong> has been created. Use the credentials below to sign in and set up your portal.</p>
+          <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:16px;padding:20px 24px;margin-bottom:28px">
+            <p style="margin:0 0 8px;font-size:13px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Your login details</p>
+            <p style="margin:0 0 4px;font-size:14px;color:#0f172a"><strong>Email:</strong> ${input.email}</p>
+            <p style="margin:0;font-size:14px;color:#0f172a"><strong>Temporary password:</strong> <span style="font-family:monospace;background:#f1f5f9;padding:2px 8px;border-radius:6px">${input.tempPassword}</span></p>
+          </div>
+          <div style="text-align:center;margin-bottom:28px">
+            <a href="${input.loginUrl}" style="display:inline-block;background:#F5A623;color:#0D1B3E;text-decoration:none;font-weight:800;font-size:15px;padding:14px 32px;border-radius:16px">Sign in to your portal</a>
+          </div>
+          <p style="margin:0;font-size:13px;color:#94a3b8;line-height:1.6">For security, please change your password immediately after your first login. Do not share these credentials with anyone.</p>
+        </td></tr>
+        <tr><td style="padding:20px 40px 32px;border-top:1px solid #f1f5f9;text-align:center">
+          <p style="margin:0;font-size:12px;color:#cbd5e1">Fast. Trusted. Government Services, Simplified.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
   }
 }

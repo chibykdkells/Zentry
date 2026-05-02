@@ -211,7 +211,7 @@ export class AuthService {
     });
 
     // Send email OTP
-    await this.sendEmailOtp(user.id, user.email);
+    await this.sendEmailOtp(user.id, user.email, tenantId);
 
     return {
       message:
@@ -222,7 +222,11 @@ export class AuthService {
 
   // ── OTP ───────────────────────────────────────────────────────
 
-  private async sendEmailOtp(userId: string, email: string): Promise<void> {
+  private async sendEmailOtp(
+    userId: string,
+    email: string,
+    tenantId: string | null = null,
+  ): Promise<void> {
     // Invalidate existing OTPs
     await this.prisma.otpToken.updateMany({
       where: { userId, type: OtpType.EMAIL_VERIFY, usedAt: null },
@@ -243,12 +247,14 @@ export class AuthService {
       },
     });
 
+    const sender = await this.resolveTenantSender(tenantId);
     await this.emailService
       .sendEmail({
         to: email,
         subject: 'Verify your ZenDocx email address',
         html: this.buildOtpEmailHtml(otp, expiryMinutes),
         text: `Your ZenDocx verification code is: ${otp}\n\nThis code expires in ${expiryMinutes} minutes. Do not share it with anyone.`,
+        ...sender,
       })
       .catch(() => undefined);
   }
@@ -327,7 +333,7 @@ export class AuthService {
     const user = await this.findUserByScopedEmail(email, tenantId);
     // Always return success to prevent email enumeration
     if (user && !user.isEmailVerified) {
-      await this.sendEmailOtp(user.id, user.email);
+      await this.sendEmailOtp(user.id, user.email, tenantId);
     }
     return {
       message:
@@ -472,6 +478,7 @@ export class AuthService {
       const frontendUrl =
         this.config.get<string>('FRONTEND_URL') ?? 'https://app.zendocx.net';
       const resetUrl = `${frontendUrl}/reset-password?token=${token}`;
+      const sender = await this.resolveTenantSender(tenantId);
 
       await this.emailService
         .sendEmail({
@@ -483,6 +490,7 @@ export class AuthService {
             expiryHours,
           ),
           text: `Hi ${user.firstName},\n\nClick the link below to reset your password:\n${resetUrl}\n\nThis link expires in ${expiryHours} hour(s). If you didn't request this, ignore this email.`,
+          ...sender,
         })
         .catch(() => undefined);
     }
@@ -823,6 +831,23 @@ export class AuthService {
 
   private normalizeEmail(email: string) {
     return email.trim().toLowerCase();
+  }
+
+  private async resolveTenantSender(
+    tenantId: string | null,
+  ): Promise<{ fromEmail?: string; fromName?: string }> {
+    if (!tenantId) return {};
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { name: true, customDomain: true, customDomainVerified: true },
+    });
+    if (tenant?.customDomainVerified && tenant.customDomain) {
+      return {
+        fromEmail: `noreply@${tenant.customDomain}`,
+        fromName: tenant.name,
+      };
+    }
+    return {};
   }
 
   private buildTenantUserWhere(tenantId: string | null): Prisma.UserWhereInput {

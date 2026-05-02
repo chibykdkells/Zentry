@@ -147,6 +147,7 @@ describe('TenantService', () => {
       config as never,
       providerCredentialsService as never,
       storageService as never,
+      { sendEmail: jest.fn().mockResolvedValue({ messageId: 'mock', accepted: true }) } as never,
     );
   });
 

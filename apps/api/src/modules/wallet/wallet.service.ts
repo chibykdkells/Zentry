@@ -246,11 +246,30 @@ export class WalletService {
     private readonly emailService: EmailService,
   ) {}
 
+  private async resolveTenantSender(
+    tenantId: string | null,
+  ): Promise<{ fromEmail?: string; fromName?: string }> {
+    if (!tenantId) return {};
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { name: true, customDomain: true, customDomainVerified: true },
+    });
+    if (tenant?.customDomainVerified && tenant.customDomain) {
+      return {
+        fromEmail: `noreply@${tenant.customDomain}`,
+        fromName: tenant.name,
+      };
+    }
+    return {};
+  }
+
   private async sendEmailSafely(input: {
     to: string;
     subject: string;
     html: string;
     text: string;
+    fromEmail?: string;
+    fromName?: string;
   }) {
     await this.emailService.sendEmail(input).catch(() => undefined);
   }
@@ -1512,6 +1531,7 @@ export class WalletService {
           ? 'Your withdrawal request was rejected and the funds were restored to your wallet.'
           : 'Your withdrawal request has been approved and moved into payout review.',
     });
+    const withdrawalSender = await this.resolveTenantSender(tenantId);
     await this.sendEmailSafely({
       to: result.user.email,
       subject:
@@ -1535,6 +1555,7 @@ export class WalletService {
         }</p>
         <p><strong>Request ID:</strong> ${result.id}</p>
       `,
+      ...withdrawalSender,
     });
 
     // Auto-initiate bank transfer when admin approves

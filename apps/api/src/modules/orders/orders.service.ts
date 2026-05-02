@@ -533,11 +533,30 @@ export class OrdersService {
     });
   }
 
+  private async resolveTenantSender(
+    tenantId: string | null,
+  ): Promise<{ fromEmail?: string; fromName?: string }> {
+    if (!tenantId) return {};
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { name: true, customDomain: true, customDomainVerified: true },
+    });
+    if (tenant?.customDomainVerified && tenant.customDomain) {
+      return {
+        fromEmail: `noreply@${tenant.customDomain}`,
+        fromName: tenant.name,
+      };
+    }
+    return {};
+  }
+
   private async sendEmailSafely(input: {
     to: string;
     subject: string;
     html: string;
     text: string;
+    fromEmail?: string;
+    fromName?: string;
   }) {
     await this.emailService.sendEmail(input).catch(() => undefined);
   }
@@ -546,17 +565,19 @@ export class OrdersService {
     await this.smsService.sendSms(input).catch(() => undefined);
   }
 
-  private sendOrderPlacedEmail(input: {
+  private async sendOrderPlacedEmail(input: {
     email: string;
     firstName: string;
     serviceName: string;
     orderNumber: string;
+    tenantId?: string | null;
     automated?: boolean;
   }) {
     const greetingName = input.firstName || 'there';
     const statusLine = input.automated
       ? 'Your purchase was processed instantly and is now available in your order history.'
       : 'Your request has been received and is now waiting for fulfillment.';
+    const sender = await this.resolveTenantSender(input.tenantId ?? null);
 
     return this.sendEmailSafely({
       to: input.email,
@@ -574,6 +595,7 @@ export class OrdersService {
         <p><strong>Order number:</strong> ${input.orderNumber}</p>
         <p>${statusLine}</p>
       `,
+      ...sender,
     });
   }
 
@@ -593,12 +615,13 @@ export class OrdersService {
     });
   }
 
-  private sendOrderCompletedEmail(input: {
+  private async sendOrderCompletedEmail(input: {
     email: string;
     firstName: string;
     serviceName: string;
     orderNumber: string;
     disputeWindowExpiresAt?: Date | string | null;
+    tenantId?: string | null;
     automated?: boolean;
   }) {
     const greetingName = input.firstName || 'there';
@@ -608,6 +631,7 @@ export class OrdersService {
       : deadline
         ? `Your result is ready. Please review it before ${deadline}.`
         : 'Your result is ready and available in your dashboard.';
+    const sender = await this.resolveTenantSender(input.tenantId ?? null);
 
     return this.sendEmailSafely({
       to: input.email,
@@ -625,6 +649,7 @@ export class OrdersService {
         <p><strong>Order number:</strong> ${input.orderNumber}</p>
         <p>${bodyLine}</p>
       `,
+      ...sender,
     });
   }
 
@@ -648,15 +673,17 @@ export class OrdersService {
     });
   }
 
-  private sendDisputeUpdateEmail(input: {
+  private async sendDisputeUpdateEmail(input: {
     email: string;
     firstName: string;
     serviceName: string;
     orderNumber: string;
     subject: string;
     message: string;
+    tenantId?: string | null;
   }) {
     const greetingName = input.firstName || 'there';
+    const sender = await this.resolveTenantSender(input.tenantId ?? null);
 
     return this.sendEmailSafely({
       to: input.email,
@@ -672,6 +699,7 @@ export class OrdersService {
         <p><strong>${input.serviceName}</strong> (${input.orderNumber})</p>
         <p>${input.message}</p>
       `,
+      ...sender,
     });
   }
 
@@ -1995,6 +2023,7 @@ export class OrdersService {
           ? `${order.service.name} dispute moved into review`
           : `${order.service.name} dispute update`,
       message: outcome.requesterMessage,
+      tenantId,
     });
     await this.sendDisputeUpdateSms({
       phone: order.requester.phone,
@@ -2013,6 +2042,7 @@ export class OrdersService {
             ? `${order.service.name} dispute moved into review`
             : `${order.service.name} dispute update`,
         message: outcome.cbtMessage,
+        tenantId,
       });
       await this.sendDisputeUpdateSms({
         phone: order.assignedCbt.phone,
@@ -3105,6 +3135,7 @@ export class OrdersService {
         serviceName: order.service.name,
         orderNumber: order.orderNumber,
         disputeWindowExpiresAt,
+        tenantId,
       });
       await this.sendOrderCompletedSms({
         phone: order.requester.phone,
@@ -3368,6 +3399,7 @@ export class OrdersService {
       firstName: user.firstName,
       serviceName: service.name,
       orderNumber: order.orderNumber,
+      tenantId,
     }).catch(() => undefined);
     await this.sendOrderPlacedSms({
       phone: user.phone,
@@ -3839,6 +3871,7 @@ export class OrdersService {
       firstName: user.firstName,
       serviceName: service.name,
       orderNumber: order.orderNumber,
+      tenantId,
       automated: true,
     });
     await this.sendOrderPlacedSms({
@@ -3852,6 +3885,7 @@ export class OrdersService {
       firstName: user.firstName,
       serviceName: service.name,
       orderNumber: order.orderNumber,
+      tenantId,
       automated: true,
     });
     await this.sendOrderCompletedSms({

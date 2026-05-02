@@ -139,6 +139,7 @@ describe('AuthService', () => {
       redis as never,
       jwt as never,
       config as never,
+      { sendEmail: jest.fn().mockResolvedValue({ messageId: 'mock', accepted: true }) } as never,
     );
   });
 
