@@ -4,11 +4,13 @@ import { PassportModule } from '@nestjs/passport';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { ProvidersModule } from '../../providers/providers.module';
 
 @Module({
   imports: [
     PassportModule.register({ defaultStrategy: 'jwt' }),
-    JwtModule.register({}), // Secrets injected dynamically in AuthService
+    JwtModule.register({}),
+    ProvidersModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],

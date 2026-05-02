@@ -22,6 +22,7 @@ import {
 } from '@zendocx/types';
 import { generateTransactionRef } from '@zendocx/utils';
 import { RegisterIndividualDto, RegisterCbtDto } from './dto';
+import { EmailService } from '../../providers/email/email.service';
 
 @Injectable()
 export class AuthService {
@@ -32,6 +33,7 @@ export class AuthService {
     private readonly redisService: RedisService,
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
+    private readonly emailService: EmailService,
   ) {}
 
   private getEffectiveTenantAdminPermissions(
@@ -241,11 +243,14 @@ export class AuthService {
       },
     });
 
-    // TODO Phase 8: inject EmailService and send real email
-    // For now, log OTP in development only
-    if (this.config.get('NODE_ENV') === 'development') {
-      console.log(`[DEV OTP] ${email}: ${otp}`);
-    }
+    await this.emailService
+      .sendEmail({
+        to: email,
+        subject: 'Verify your ZenDocx email address',
+        html: this.buildOtpEmailHtml(otp, expiryMinutes),
+        text: `Your ZenDocx verification code is: ${otp}\n\nThis code expires in ${expiryMinutes} minutes. Do not share it with anyone.`,
+      })
+      .catch(() => undefined);
   }
 
   async verifyEmail(email: string, otp: string, tenantId: string | null) {
@@ -464,10 +469,22 @@ export class AuthService {
         },
       });
 
-      // TODO Phase 8: send reset email with token link
-      if (this.config.get('NODE_ENV') === 'development') {
-        console.log(`[DEV RESET TOKEN] ${email}: ${token}`);
-      }
+      const frontendUrl =
+        this.config.get<string>('FRONTEND_URL') ?? 'https://app.zendocx.net';
+      const resetUrl = `${frontendUrl}/reset-password?token=${token}`;
+
+      await this.emailService
+        .sendEmail({
+          to: email,
+          subject: 'Reset your ZenDocx password',
+          html: this.buildPasswordResetEmailHtml(
+            user.firstName,
+            resetUrl,
+            expiryHours,
+          ),
+          text: `Hi ${user.firstName},\n\nClick the link below to reset your password:\n${resetUrl}\n\nThis link expires in ${expiryHours} hour(s). If you didn't request this, ignore this email.`,
+        })
+        .catch(() => undefined);
     }
 
     return {
@@ -828,5 +845,68 @@ export class AuthService {
         ...this.buildTenantUserWhere(tenantId),
       },
     });
+  }
+
+  // ── Email templates ───────────────────────────────────────────
+
+  private buildOtpEmailHtml(otp: string, expiryMinutes: number): string {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f7f8fc;font-family:'Segoe UI',Arial,sans-serif">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f7f8fc;padding:40px 16px">
+    <tr><td align="center">
+      <table width="100%" style="max-width:520px;background:#ffffff;border-radius:24px;border:1px solid rgba(15,23,42,0.07);box-shadow:0 4px 24px rgba(15,23,42,0.06)">
+        <tr><td style="background:#0D1B3E;border-radius:24px 24px 0 0;padding:32px 40px;text-align:center">
+          <span style="color:#F5A623;font-size:28px;font-weight:900;letter-spacing:-0.5px">ZenDocx</span>
+        </td></tr>
+        <tr><td style="padding:40px">
+          <h1 style="margin:0 0 8px;font-size:22px;font-weight:800;color:#0f172a;letter-spacing:-0.3px">Verify your email address</h1>
+          <p style="margin:0 0 32px;font-size:15px;color:#64748b;line-height:1.6">Use the code below to complete your registration. It expires in <strong>${expiryMinutes} minutes</strong>.</p>
+          <div style="background:#f1f5f9;border-radius:16px;padding:24px;text-align:center;letter-spacing:12px;font-size:36px;font-weight:900;color:#0D1B3E;margin-bottom:32px">${otp}</div>
+          <p style="margin:0;font-size:13px;color:#94a3b8;line-height:1.6">If you didn't create a ZenDocx account, you can safely ignore this email. Never share this code with anyone.</p>
+        </td></tr>
+        <tr><td style="padding:20px 40px 32px;border-top:1px solid #f1f5f9;text-align:center">
+          <p style="margin:0;font-size:12px;color:#cbd5e1">Fast. Trusted. Government Services, Simplified.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+  }
+
+  private buildPasswordResetEmailHtml(
+    firstName: string,
+    resetUrl: string,
+    expiryHours: number,
+  ): string {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f7f8fc;font-family:'Segoe UI',Arial,sans-serif">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f7f8fc;padding:40px 16px">
+    <tr><td align="center">
+      <table width="100%" style="max-width:520px;background:#ffffff;border-radius:24px;border:1px solid rgba(15,23,42,0.07);box-shadow:0 4px 24px rgba(15,23,42,0.06)">
+        <tr><td style="background:#0D1B3E;border-radius:24px 24px 0 0;padding:32px 40px;text-align:center">
+          <span style="color:#F5A623;font-size:28px;font-weight:900;letter-spacing:-0.5px">ZenDocx</span>
+        </td></tr>
+        <tr><td style="padding:40px">
+          <h1 style="margin:0 0 8px;font-size:22px;font-weight:800;color:#0f172a;letter-spacing:-0.3px">Reset your password</h1>
+          <p style="margin:0 0 24px;font-size:15px;color:#64748b;line-height:1.6">Hi ${firstName}, we received a request to reset the password for your ZenDocx account. Click the button below to choose a new password.</p>
+          <div style="text-align:center;margin-bottom:32px">
+            <a href="${resetUrl}" style="display:inline-block;background:#F5A623;color:#0D1B3E;text-decoration:none;font-weight:800;font-size:15px;padding:14px 32px;border-radius:16px">Reset password</a>
+          </div>
+          <p style="margin:0 0 16px;font-size:13px;color:#94a3b8;line-height:1.6">This link expires in <strong>${expiryHours} hour(s)</strong>. If you didn't request a password reset, you can safely ignore this email — your password will not change.</p>
+          <p style="margin:0;font-size:12px;color:#cbd5e1;word-break:break-all">If the button doesn't work, copy this link: ${resetUrl}</p>
+        </td></tr>
+        <tr><td style="padding:20px 40px 32px;border-top:1px solid #f1f5f9;text-align:center">
+          <p style="margin:0;font-size:12px;color:#cbd5e1">Fast. Trusted. Government Services, Simplified.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
   }
 }
