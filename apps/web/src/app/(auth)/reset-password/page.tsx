@@ -3,7 +3,7 @@
 import { Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import toast from 'react-hot-toast';
@@ -16,6 +16,8 @@ import { getApiErrorMessage } from '@/lib/api-error';
 import { appendTenantContextToPath, resolveTenantSlugForRequest } from '@/lib/tenant-runtime';
 import { cn } from '@/lib/utils';
 import { SkeletonBlock, SkeletonLine } from '@/components/shared/skeleton-loader';
+
+const RESEND_COOLDOWN = 60;
 
 export default function ResetPasswordPage() {
   return (
@@ -31,6 +33,11 @@ function ResetPasswordContent() {
   const [loading, setLoading] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const token = searchParams.get('token') ?? '';
+  const email = searchParams.get('email') ?? '';
+
+  const [cooldown, setCooldown] = useState(RESEND_COOLDOWN);
+  const [resending, setResending] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const {
     register,
@@ -51,6 +58,28 @@ function ResetPasswordContent() {
       setValue('token', token);
     }
   }, [setValue, token]);
+
+  useEffect(() => {
+    startCooldown();
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function startCooldown() {
+    if (timerRef.current) clearInterval(timerRef.current);
+    setCooldown(RESEND_COOLDOWN);
+    timerRef.current = setInterval(() => {
+      setCooldown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timerRef.current!);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }
 
   const onSubmit = async (values: ResetPasswordInput) => {
     setLoading(true);
@@ -73,6 +102,24 @@ function ResetPasswordContent() {
     }
   };
 
+  const handleResend = async () => {
+    if (!email || cooldown > 0 || resending) return;
+    setResending(true);
+    try {
+      await apiClient.post('/auth/forgot-password', { email });
+      toast.success('A new reset token has been sent to your email.');
+      startCooldown();
+    } catch (error: unknown) {
+      toast.error(getApiErrorMessage(error, 'Could not resend the token.'));
+    } finally {
+      setResending(false);
+    }
+  };
+
+  const loginHref = resolveTenantSlugForRequest()
+    ? appendTenantContextToPath('/login', resolveTenantSlugForRequest())
+    : '/platform/login';
+
   return (
     <AuthShell
       title="Choose a new password"
@@ -80,14 +127,7 @@ function ResetPasswordContent() {
       footer={
         <>
           Back to{' '}
-          <Link
-            href={
-              resolveTenantSlugForRequest()
-                ? appendTenantContextToPath('/login', resolveTenantSlugForRequest())
-                : '/platform/login'
-            }
-            className="font-semibold text-amber-600 hover:text-amber-700"
-          >
+          <Link href={loginHref} className="font-semibold text-amber-600 hover:text-amber-700">
             login
           </Link>
         </>
@@ -109,7 +149,7 @@ function ResetPasswordContent() {
         <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-4">
           <p className="text-sm font-semibold text-slate-900">Recovery step two</p>
           <p className="mt-1 text-sm leading-6 text-slate-500">
-            Paste the reset token, choose a new password, and then return to sign in with the updated credentials.
+            Paste the reset token from your email, choose a new password, and then return to sign in.
           </p>
         </div>
 
@@ -144,6 +184,29 @@ function ResetPasswordContent() {
           {loading ? <Loader2 size={16} className="animate-spin" /> : null}
           {loading ? 'Resetting...' : 'Reset password'}
         </button>
+
+        {email ? (
+          <p className="text-center text-sm text-slate-500">
+            Didn&apos;t receive the email?{' '}
+            {cooldown > 0 ? (
+              <span className="text-slate-400">
+                Resend in{' '}
+                <span className="tabular-nums font-semibold text-slate-600">
+                  {cooldown}s
+                </span>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={handleResend}
+                disabled={resending}
+                className="font-semibold text-amber-600 hover:text-amber-700 disabled:opacity-50"
+              >
+                {resending ? 'Sending…' : 'Resend token'}
+              </button>
+            )}
+          </p>
+        ) : null}
       </form>
     </AuthShell>
   );
