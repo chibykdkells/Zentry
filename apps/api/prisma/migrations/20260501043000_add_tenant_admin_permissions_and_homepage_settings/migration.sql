@@ -1,4 +1,4 @@
-ALTER TABLE "users"
+ALTER TABLE "User"
 ADD COLUMN "adminPermissions" JSONB NOT NULL DEFAULT '[]';
 
 ALTER TABLE "tenants"

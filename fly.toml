@@ -13,7 +13,7 @@ primary_region = "lhr"
   PORT = "4000"
 
 [deploy]
-  release_command = "node_modules/.bin/prisma migrate deploy --schema=apps/api/prisma/schema.prisma"
+  release_command = "/bin/sh -c 'timeout 120 node_modules/.bin/prisma migrate resolve --rolled-back 20260501043000_add_tenant_admin_permissions_and_homepage_settings --schema=apps/api/prisma/schema.prisma || true; node_modules/.bin/prisma migrate deploy --schema=apps/api/prisma/schema.prisma'"
   release_command_timeout = "10m"
 
 [http_service]
