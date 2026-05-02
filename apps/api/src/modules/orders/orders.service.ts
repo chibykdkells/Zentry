@@ -2136,6 +2136,14 @@ export class OrdersService {
 
         refundReference = generateTransactionRef();
 
+        const refundBalanceAfter =
+          requesterWallet.availableBalance + order.totalAmount;
+
+        await tx.wallet.update({
+          where: { id: requesterWallet.id },
+          data: { availableBalance: refundBalanceAfter },
+        });
+
         await tx.transaction.create({
           data: {
             walletId: requesterWallet.id,
@@ -2145,7 +2153,7 @@ export class OrdersService {
             status: TransactionStatus.SUCCESS,
             amount: order.totalAmount,
             balanceBefore: requesterWallet.availableBalance,
-            balanceAfter: requesterWallet.availableBalance,
+            balanceAfter: refundBalanceAfter,
             reference: refundReference,
             description: `Manual refund reconciliation completed for ${order.orderNumber}`,
             metadata: {

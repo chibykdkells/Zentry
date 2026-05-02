@@ -96,21 +96,38 @@ export class PaystackProvider implements IPaymentProvider {
   async initiateTransfer(
     input: InitiateTransferInput,
   ): Promise<InitiateTransferResult> {
+    const headers = {
+      Authorization: `Bearer ${this.secretKey}`,
+      'Content-Type': 'application/json',
+    };
+
+    // Paystack requires creating a recipient before initiating a transfer
+    const recipientRes = await axios.post(
+      `${this.baseUrl}/transferrecipient`,
+      {
+        type: 'nuban',
+        name: input.accountName,
+        account_number: input.accountNumber,
+        bank_code: input.bankCode,
+        currency: 'NGN',
+      },
+      { headers },
+    );
+
+    const { data: recipientData } = recipientRes.data as {
+      data: { recipient_code: string };
+    };
+
     const response = await axios.post(
       `${this.baseUrl}/transfer`,
       {
         source: 'balance',
         amount: Number(input.amountKobo),
-        recipient: input.accountNumber,
+        recipient: recipientData.recipient_code,
         reason: input.narration,
         reference: input.reference,
       },
-      {
-        headers: {
-          Authorization: `Bearer ${this.secretKey}`,
-          'Content-Type': 'application/json',
-        },
-      },
+      { headers },
     );
 
     const { data } = response.data as {
