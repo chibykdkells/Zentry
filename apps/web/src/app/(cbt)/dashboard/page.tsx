@@ -1,25 +1,28 @@
 'use client';
 
+import { type ElementType, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Briefcase, Clock3, TrendingUp } from 'lucide-react';
-import { AccountPanel } from '@/components/shared/account-panel';
+import { ArrowRight, Briefcase, Clock3, ShieldCheck, TrendingUp } from 'lucide-react';
+import { DetailModal } from '@/components/shared/detail-modal';
 import { EmptyState } from '@/components/shared/empty-state';
 import { SkeletonBlock } from '@/components/shared/skeleton-loader';
-import { StatCard } from '@/components/shared/stat-card';
 import { useCbtDashboard } from '@/hooks/use-cbt-orders';
 import { formatDate, formatNaira } from '@/lib/format';
 
 export default function CbtDashboardPage() {
   const { dashboard, loading, error, reload } = useCbtDashboard();
 
+  const [openTile, setOpenTile] = useState<string | null>(null);
+
   if (loading) {
     return (
       <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-8">
         <SkeletonBlock className="h-44 rounded-[2rem]" />
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
           <SkeletonBlock className="h-32 rounded-[1.5rem]" />
           <SkeletonBlock className="h-32 rounded-[1.5rem]" />
-          <SkeletonBlock className="h-32 rounded-[1.5rem] col-span-2 md:col-span-1" />
+          <SkeletonBlock className="h-32 rounded-[1.5rem]" />
+          <SkeletonBlock className="h-32 rounded-[1.5rem] col-span-2 sm:col-span-1" />
         </div>
       </div>
     );
@@ -72,121 +75,182 @@ export default function CbtDashboardPage() {
         </div>
       </section>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-        <StatCard
-          title="Available Jobs"
-          value={String(dashboard.metrics.availableJobs)}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+        <DashTile
           icon={Briefcase}
-          variant="navy"
+          label="Job Pool"
+          value={`${dashboard.metrics.availableJobs} available`}
+          color="bg-[#0D1B3E] text-white"
+          onClick={() => setOpenTile('job-pool')}
         />
-        <StatCard
-          title="Active Jobs"
-          value={String(dashboard.metrics.activeJobs)}
+        <DashTile
           icon={Clock3}
-          variant="teal"
+          label="Active Jobs"
+          value={`${dashboard.metrics.activeJobs} in progress`}
+          color="bg-cyan-600 text-white"
+          onClick={() => setOpenTile('active-jobs')}
         />
-        <StatCard
-          title="Earnings"
-          value={formatNaira(dashboard.metrics.totalEarned)}
+        <DashTile
           icon={TrendingUp}
-          variant="green"
-          className="col-span-2 md:col-span-1"
+          label="Earnings"
+          value={formatNaira(dashboard.metrics.totalEarned)}
+          color="bg-emerald-600 text-white"
+          onClick={() => setOpenTile('earnings')}
+        />
+        <DashTile
+          icon={ShieldCheck}
+          label="Status"
+          value={dashboard.approvalStatus}
+          color="bg-amber-500 text-white"
+          onClick={() => setOpenTile('status')}
         />
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
-        <AccountPanel
-          title="Open work near you"
-          description="Available manual jobs your center can pick up next."
-        >
-          {dashboard.availableJobs.length ? (
-            <div className="space-y-3">
-              {dashboard.availableJobs.map((job) => (
-                <article
-                  key={job.id}
-                  className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4"
-                >
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <h2 className="text-sm font-semibold text-slate-900">
-                        {job.service.name}
-                      </h2>
-                      <p className="mt-1 text-sm text-slate-500">
-                        {job.orderNumber} • {job.service.category.name}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-semibold text-slate-900">
-                        {formatNaira(job.cbtCommission)}
-                      </p>
-                      <p className="mt-1 text-xs uppercase tracking-[0.14em] text-slate-400">
-                        Commission
-                      </p>
-                    </div>
+      {/* Job Pool modal */}
+      <DetailModal
+        open={openTile === 'job-pool'}
+        onClose={() => setOpenTile(null)}
+        title="Open job pool"
+        description="Available manual jobs your center can pick up next."
+      >
+        {dashboard.availableJobs.length ? (
+          <div className="space-y-3">
+            {dashboard.availableJobs.map((job) => (
+              <article
+                key={job.id}
+                className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4"
+              >
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <h2 className="text-sm font-semibold text-slate-900">
+                      {job.service.name}
+                    </h2>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {job.orderNumber} • {job.service.category.name}
+                    </p>
                   </div>
-                  <p className="mt-3 text-sm text-slate-500">
-                    Submitted {formatDate(job.createdAt)} • {job.requesterDocCount}{' '}
-                    supporting document{job.requesterDocCount === 1 ? '' : 's'}
-                  </p>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <EmptyState
-              title="No visible jobs right now"
-              message="When unassigned manual orders exist, they will appear here automatically."
-              icon={Briefcase}
-            />
-          )}
-        </AccountPanel>
-
-        <AccountPanel
-          title="Your active context"
-          description="Your current approval, balance, and recent job activity."
-        >
-          <div className="space-y-4">
-            <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                Approval status
-              </p>
-              <p className="mt-2 text-sm font-semibold text-slate-900">
-                {dashboard.approvalStatus}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                Available balance
-              </p>
-              <p className="mt-2 text-sm font-semibold text-slate-900">
-                {formatNaira(dashboard.metrics.availableBalance)}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                Recent assignments
-              </p>
-              {dashboard.myJobs.length ? (
-                <div className="mt-3 space-y-3">
-                  {dashboard.myJobs.map((job) => (
-                    <div key={job.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                      <p className="text-sm font-semibold text-slate-900">
-                        {job.service.name}
-                      </p>
-                      <p className="mt-1 text-sm text-slate-500">
-                        {job.orderNumber} • {job.status}
-                      </p>
-                    </div>
-                  ))}
+                  <div className="text-right">
+                    <p className="text-sm font-semibold text-slate-900">
+                      {formatNaira(job.cbtCommission)}
+                    </p>
+                    <p className="mt-1 text-xs uppercase tracking-[0.14em] text-slate-400">
+                      Commission
+                    </p>
+                  </div>
                 </div>
-              ) : (
-                <p className="mt-2 text-sm text-slate-500">
-                  No jobs are currently assigned to this center.
+                <p className="mt-3 text-sm text-slate-500">
+                  Submitted {formatDate(job.createdAt)} • {job.requesterDocCount}{' '}
+                  supporting document{job.requesterDocCount === 1 ? '' : 's'}
                 </p>
-              )}
-            </div>
+              </article>
+            ))}
           </div>
-        </AccountPanel>
-      </div>
+        ) : (
+          <EmptyState
+            title="No visible jobs right now"
+            message="When unassigned manual orders exist, they will appear here automatically."
+            icon={Briefcase}
+          />
+        )}
+      </DetailModal>
+
+      {/* Active Jobs modal */}
+      <DetailModal
+        open={openTile === 'active-jobs'}
+        onClose={() => setOpenTile(null)}
+        title="Active jobs"
+        description="Jobs currently assigned to your center."
+      >
+        {dashboard.myJobs.length ? (
+          <div className="space-y-3">
+            {dashboard.myJobs.map((job) => (
+              <div key={job.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <p className="text-sm font-semibold text-slate-900">
+                  {job.service.name}
+                </p>
+                <p className="mt-1 text-sm text-slate-500">
+                  {job.orderNumber} • {job.status}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            title="No active jobs"
+            message="No jobs are currently assigned to this center."
+            icon={Clock3}
+          />
+        )}
+      </DetailModal>
+
+      {/* Earnings modal */}
+      <DetailModal
+        open={openTile === 'earnings'}
+        onClose={() => setOpenTile(null)}
+        title="Earnings"
+      >
+        <dl className="space-y-3">
+          <div className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-4">
+            <dt className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Total earned</dt>
+            <dd className="mt-1 text-xl font-bold text-slate-900">{formatNaira(dashboard.metrics.totalEarned)}</dd>
+          </div>
+          <div className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-4">
+            <dt className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Available balance</dt>
+            <dd className="mt-1 text-xl font-bold text-slate-900">{formatNaira(dashboard.metrics.availableBalance)}</dd>
+          </div>
+        </dl>
+        <div className="mt-5">
+          <Link
+            href="/earnings"
+            className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700"
+          >
+            View earnings
+          </Link>
+        </div>
+      </DetailModal>
+
+      {/* Status modal */}
+      <DetailModal
+        open={openTile === 'status'}
+        onClose={() => setOpenTile(null)}
+        title="Center status"
+      >
+        <dl className="space-y-3">
+          <div className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-4">
+            <dt className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Approval status</dt>
+            <dd className="mt-1 text-lg font-bold text-slate-900">{dashboard.approvalStatus}</dd>
+          </div>
+          <div className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-4">
+            <dt className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Center name</dt>
+            <dd className="mt-1 text-lg font-bold text-slate-900">{dashboard.centerName}</dd>
+          </div>
+        </dl>
+        <div className="mt-5">
+          <Link
+            href="/earnings"
+            className="inline-flex items-center gap-2 rounded-2xl bg-amber-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-amber-600"
+          >
+            View earnings
+          </Link>
+        </div>
+      </DetailModal>
     </div>
+  );
+}
+
+function DashTile({ icon: Icon, label, value, color, onClick }: {
+  icon: ElementType; label: string; value: string; color: string; onClick: () => void;
+}) {
+  return (
+    <button type="button" onClick={onClick}
+      className="group flex flex-col gap-3 rounded-[1.5rem] border border-slate-200 bg-white p-5 text-left transition hover:border-slate-300 hover:shadow-sm active:scale-[0.98]">
+      <div className={`flex h-11 w-11 items-center justify-center rounded-2xl ${color}`}>
+        <Icon size={20} />
+      </div>
+      <div className="min-w-0">
+        <p className="truncate text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">{label}</p>
+        <p className="mt-1 truncate text-xl font-bold tracking-tight text-slate-900">{value}</p>
+      </div>
+    </button>
   );
 }

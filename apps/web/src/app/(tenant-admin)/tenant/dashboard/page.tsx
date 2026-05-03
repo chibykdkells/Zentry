@@ -1,9 +1,9 @@
 'use client';
 
+import { type ElementType, useState } from 'react';
 import Link from 'next/link';
-import { useState, type ElementType, type ReactNode } from 'react';
 import {
-  ArrowRight,
+  AlertCircle,
   Briefcase,
   Clock3,
   Settings2,
@@ -31,6 +31,7 @@ export default function TenantDashboardPage() {
   const { services, loading: servicesLoading } = useTenantServiceManagementCatalog({});
   const { readiness, loading: readinessLoading } = useTenantProviderReadiness();
   const [openUserId, setOpenUserId] = useState<string | null>(null);
+  const [openTile, setOpenTile] = useState<string | null>(null);
 
   if (loading) {
     return (
@@ -106,7 +107,6 @@ export default function TenantDashboardPage() {
               className="inline-flex items-center gap-2 rounded-2xl bg-brand-button px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand-button-strong"
             >
               Manage users
-              <ArrowRight size={16} />
             </Link>
             <Link
               href="/tenant/services"
@@ -158,100 +158,175 @@ export default function TenantDashboardPage() {
         />
       </div>
 
-      <section className="grid gap-4 lg:grid-cols-3">
-        <FocusCard
+      {/* Dashboard tile grid */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+        <DashTile
           icon={Wallet}
-          eyebrow="Money"
-          title="Wallet and payout state"
-          description="Keep the business balance, held funds, and payout queue visible without leaving the dashboard."
-          tone="from-slate-50 to-white"
-          highlights={[
-            { label: 'Available now', value: formatNaira(overview.metrics.availableBalance) },
-            { label: 'Held funds', value: formatNaira(overview.metrics.heldFunds) },
-            { label: 'Ready for payout', value: String(overview.metrics.readyReleaseCount) },
-          ]}
-          href="/wallet"
-          cta="Open wallet"
+          label="Wallet"
+          value={formatNaira(overview.metrics.availableBalance)}
+          color="bg-[#0D1B3E] text-white"
+          onClick={() => setOpenTile('wallet')}
         />
-        <FocusCard
+        <DashTile
           icon={Users}
-          eyebrow="People"
-          title="Users and operators"
-          description="See how many customers and CBT centers are inside this business, then jump straight into user management."
-          tone="from-amber-50/70 to-white"
-          highlights={[
-            { label: 'Customers', value: String(overview.metrics.individualUsers) },
-            { label: 'CBT centers', value: String(overview.metrics.cbtUsers) },
-            { label: 'Newest sign-ins', value: String(overview.recentUsers.length) },
-          ]}
-          href="/tenant/users"
-          cta="Manage users"
+          label="Customers"
+          value={`${overview.metrics.individualUsers + overview.metrics.cbtUsers} users`}
+          color="bg-amber-500 text-white"
+          onClick={() => setOpenTile('customers')}
         />
-        <FocusCard
+        <DashTile
           icon={Settings2}
-          eyebrow="Service setup"
-          title="Catalog and API routing"
-          description="This tenant uses the platform service catalog by default, with the option to hide services or switch automated calls to its own API."
-          tone="from-emerald-50/70 to-white"
-          highlights={[
-            { label: 'Visible services', value: visibleServices },
-            { label: 'Automated services', value: automatedServices },
-            { label: 'Connection', value: `${providerScope} · ${providerMode}` },
-          ]}
-          footer={
-            <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-600">
-              Provider health: <span className="font-semibold text-slate-900">{providerHealth}</span>
-            </div>
-          }
-          actions={
-            <>
-              <Link
-                href="/tenant/services"
-                className="inline-flex items-center justify-center rounded-2xl bg-brand-button px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand-button-strong"
-              >
-                Business services
-              </Link>
-              <Link
-                href="/tenant/providers"
-                className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-              >
-                API integrations
-              </Link>
-            </>
-          }
+          label="Services"
+          value={`${visibleServices} active`}
+          color="bg-emerald-600 text-white"
+          onClick={() => setOpenTile('services')}
         />
-      </section>
+        <DashTile
+          icon={AlertCircle}
+          label="Attention"
+          value={`${overview.metrics.activeOrders + overview.metrics.disputedOrders} open`}
+          color="bg-rose-500 text-white"
+          onClick={() => setOpenTile('attention')}
+        />
+      </div>
+
+      {/* Wallet modal */}
+      <DetailModal
+        open={openTile === 'wallet'}
+        onClose={() => setOpenTile(null)}
+        title="Wallet and payout"
+        width="md"
+        footer={
+          <Link
+            href="/wallet"
+            className="inline-flex items-center justify-center rounded-2xl bg-[#0D1B3E] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#132754]"
+          >
+            Open wallet
+          </Link>
+        }
+      >
+        <dl className="grid gap-y-3 text-sm">
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+            <dt className="text-slate-500">Available balance</dt>
+            <dd className="font-semibold text-slate-900">{formatNaira(overview.metrics.availableBalance)}</dd>
+          </div>
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+            <dt className="text-slate-500">Held customer funds</dt>
+            <dd className="font-semibold text-slate-900">{formatNaira(overview.metrics.heldFunds)}</dd>
+          </div>
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+            <dt className="text-slate-500">Ready for payout</dt>
+            <dd className="font-semibold text-slate-900">{overview.metrics.readyReleaseCount}</dd>
+          </div>
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+            <dt className="text-slate-500">Completed orders</dt>
+            <dd className="font-semibold text-slate-900">{overview.metrics.completedOrders}</dd>
+          </div>
+        </dl>
+      </DetailModal>
+
+      {/* Customers modal */}
+      <DetailModal
+        open={openTile === 'customers'}
+        onClose={() => setOpenTile(null)}
+        title="Users and operators"
+        width="md"
+        footer={
+          <Link
+            href="/tenant/users"
+            className="inline-flex items-center justify-center rounded-2xl bg-[#0D1B3E] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#132754]"
+          >
+            Manage users
+          </Link>
+        }
+      >
+        <dl className="grid gap-y-3 text-sm">
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+            <dt className="text-slate-500">Customers</dt>
+            <dd className="font-semibold text-slate-900">{overview.metrics.individualUsers}</dd>
+          </div>
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+            <dt className="text-slate-500">CBT centers</dt>
+            <dd className="font-semibold text-slate-900">{overview.metrics.cbtUsers}</dd>
+          </div>
+        </dl>
+      </DetailModal>
+
+      {/* Services modal */}
+      <DetailModal
+        open={openTile === 'services'}
+        onClose={() => setOpenTile(null)}
+        title="Catalog and API routing"
+        width="md"
+        footer={
+          <div className="flex flex-wrap gap-3">
+            <Link
+              href="/tenant/services"
+              className="inline-flex items-center justify-center rounded-2xl bg-[#0D1B3E] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#132754]"
+            >
+              Business services
+            </Link>
+            <Link
+              href="/tenant/providers"
+              className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              API integrations
+            </Link>
+          </div>
+        }
+      >
+        <dl className="grid gap-y-3 text-sm">
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+            <dt className="text-slate-500">Visible services</dt>
+            <dd className="font-semibold text-slate-900">{visibleServices}</dd>
+          </div>
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+            <dt className="text-slate-500">Automated services</dt>
+            <dd className="font-semibold text-slate-900">{automatedServices}</dd>
+          </div>
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+            <dt className="text-slate-500">Provider scope</dt>
+            <dd className="font-semibold text-slate-900">{providerScope}</dd>
+          </div>
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+            <dt className="text-slate-500">Provider mode</dt>
+            <dd className="font-semibold text-slate-900">{providerMode}</dd>
+          </div>
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+            <dt className="text-slate-500">Provider health</dt>
+            <dd className="font-semibold text-slate-900">{providerHealth}</dd>
+          </div>
+        </dl>
+      </DetailModal>
+
+      {/* Attention modal */}
+      <DetailModal
+        open={openTile === 'attention'}
+        onClose={() => setOpenTile(null)}
+        title="Needs attention"
+        width="md"
+      >
+        <dl className="grid gap-y-3 text-sm">
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+            <dt className="text-slate-500">Active orders</dt>
+            <dd className="font-semibold text-slate-900">{overview.metrics.activeOrders}</dd>
+          </div>
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+            <dt className="text-slate-500">Disputed orders</dt>
+            <dd className="font-semibold text-slate-900">{overview.metrics.disputedOrders}</dd>
+          </div>
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+            <dt className="text-slate-500">Ready for payout</dt>
+            <dd className="font-semibold text-slate-900">{overview.metrics.readyReleaseCount}</dd>
+          </div>
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+            <dt className="text-slate-500">Available balance</dt>
+            <dd className="font-semibold text-slate-900">{formatNaira(overview.metrics.availableBalance)}</dd>
+          </div>
+        </dl>
+      </DetailModal>
 
       <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-        <AccountPanel
-          title="Needs attention now"
-          description="The fastest way to understand what the business admin should check next."
-        >
-          <div className="grid gap-4 sm:grid-cols-2">
-            {[
-              { label: 'Requests still active', value: overview.metrics.activeOrders },
-              { label: 'Disputes already open', value: overview.metrics.disputedOrders },
-              { label: 'Ready for payout release', value: overview.metrics.readyReleaseCount },
-              { label: 'Business balance available', value: formatNaira(overview.metrics.availableBalance) },
-            ].map((item) => (
-              <div key={item.label} className="rounded-[1.5rem] border border-slate-100 bg-slate-50/70 p-4">
-                <p className="text-3xl font-bold tracking-tight text-slate-900">{item.value}</p>
-                <p className="mt-1 text-sm text-slate-500">{item.label}</p>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            <MiniFinanceTile label="Completed requests" value={String(overview.metrics.completedOrders)} />
-            <MiniFinanceTile label="Held customer funds" value={formatNaira(overview.metrics.heldFunds)} />
-            <MiniFinanceTile
-              label="Customers + CBT centers"
-              value={String(overview.metrics.individualUsers + overview.metrics.cbtUsers)}
-            />
-            <MiniFinanceTile label="Blocked by dispute" value={String(overview.metrics.blockedReleaseCount)} />
-          </div>
-        </AccountPanel>
-
         <AccountPanel
           title="Newest users in this business"
           description="The latest people who joined or were provisioned into this tenant. Click any row to view details."
@@ -289,56 +364,56 @@ export default function TenantDashboardPage() {
             />
           )}
         </AccountPanel>
-      </div>
 
-      <AccountPanel
-        title="Completed job queue"
-        description="Completed manual jobs still waiting on the payout cycle."
-      >
-        {overview.releaseQueue.length ? (
-          <div className="space-y-3">
-            {overview.releaseQueue.map((item) => (
-              <div
-                key={item.id}
-                className="rounded-[1.5rem] border border-slate-100 bg-gradient-to-br from-slate-50 to-white p-4 shadow-sm"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-slate-900">
-                      {item.orderNumber} · {item.service.name}
-                    </p>
-                    <p className="mt-1 truncate text-sm text-slate-500">
-                      {item.requester.name} · {item.requester.email}
-                    </p>
+        <AccountPanel
+          title="Completed job queue"
+          description="Completed manual jobs still waiting on the payout cycle."
+        >
+          {overview.releaseQueue.length ? (
+            <div className="space-y-3">
+              {overview.releaseQueue.map((item) => (
+                <div
+                  key={item.id}
+                  className="rounded-[1.5rem] border border-slate-100 bg-gradient-to-br from-slate-50 to-white p-4 shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900">
+                        {item.orderNumber} · {item.service.name}
+                      </p>
+                      <p className="mt-1 truncate text-sm text-slate-500">
+                        {item.requester.name} · {item.requester.email}
+                      </p>
+                    </div>
+                    <ReleaseBadge state={item.releaseState} />
                   </div>
-                  <ReleaseBadge state={item.releaseState} />
+                  <div className="mt-3 grid gap-1.5 text-sm text-slate-600 sm:grid-cols-2">
+                    <p>CBT payout: {formatNaira(item.cbtCommission)}</p>
+                    <p>CBT: {item.assignedCbt ? item.assignedCbt.name : 'Not assigned'}</p>
+                    <p>
+                      Window:{' '}
+                      {item.disputeWindowExpiresAt
+                        ? `${formatDate(item.disputeWindowExpiresAt)}${
+                            item.releaseState === 'AWAITING_WINDOW'
+                              ? ` · ${formatTimeUntil(item.disputeWindowExpiresAt)}`
+                              : ''
+                          }`
+                        : 'Not available'}
+                    </p>
+                    <p>Dispute: {item.dispute ? item.dispute.reason : 'None'}</p>
+                  </div>
                 </div>
-                <div className="mt-3 grid gap-1.5 text-sm text-slate-600 sm:grid-cols-2">
-                  <p>CBT payout: {formatNaira(item.cbtCommission)}</p>
-                  <p>CBT: {item.assignedCbt ? item.assignedCbt.name : 'Not assigned'}</p>
-                  <p>
-                    Window:{' '}
-                    {item.disputeWindowExpiresAt
-                      ? `${formatDate(item.disputeWindowExpiresAt)}${
-                          item.releaseState === 'AWAITING_WINDOW'
-                            ? ` · ${formatTimeUntil(item.disputeWindowExpiresAt)}`
-                            : ''
-                        }`
-                      : 'Not available'}
-                  </p>
-                  <p>Dispute: {item.dispute ? item.dispute.reason : 'None'}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <EmptyState
-            title="No completed jobs waiting"
-            message="When manual jobs complete and enter the payout cycle they will appear here."
-            icon={Clock3}
-          />
-        )}
-      </AccountPanel>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="No completed jobs waiting"
+              message="When manual jobs complete and enter the payout cycle they will appear here."
+              icon={Clock3}
+            />
+          )}
+        </AccountPanel>
+      </div>
 
       {openUser ? (
         <DetailModal
@@ -376,78 +451,6 @@ export default function TenantDashboardPage() {
   );
 }
 
-function FocusCard({
-  icon: Icon,
-  eyebrow,
-  title,
-  description,
-  tone,
-  highlights,
-  href,
-  cta,
-  footer,
-  actions,
-}: {
-  icon: ElementType;
-  eyebrow: string;
-  title: string;
-  description: string;
-  tone: string;
-  highlights: Array<{ label: string; value: string }>;
-  href?: string;
-  cta?: string;
-  footer?: ReactNode;
-  actions?: ReactNode;
-}) {
-  return (
-    <article className={`rounded-[1.5rem] border border-slate-200 bg-gradient-to-br ${tone} p-5 shadow-sm`}>
-      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-slate-700 shadow-sm">
-        <Icon size={18} />
-      </div>
-      <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-        {eyebrow}
-      </p>
-      <h2 className="mt-2 text-base font-semibold text-slate-900">{title}</h2>
-      <p className="mt-2 text-sm leading-6 text-slate-500">{description}</p>
-
-      <div className="mt-4 space-y-2.5">
-        {highlights.map((item) => (
-          <div
-            key={item.label}
-            className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white/80 px-4 py-3"
-          >
-            <span className="text-sm text-slate-500">{item.label}</span>
-            <span className="text-sm font-semibold text-slate-900">{item.value}</span>
-          </div>
-        ))}
-      </div>
-
-      {footer ? <div className="mt-4">{footer}</div> : null}
-
-      {actions ? (
-        <div className="mt-4 flex flex-wrap gap-3">{actions}</div>
-      ) : href && cta ? (
-        <Link
-          href={href}
-          className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
-        >
-          {cta}
-          <ArrowRight size={16} />
-        </Link>
-      ) : null}
-    </article>
-  );
-}
-
-function MiniFinanceTile({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-[1.25rem] border border-slate-200 bg-white px-4 py-3">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</p>
-      <p className="mt-2 text-sm font-semibold text-slate-900">{value}</p>
-    </div>
-  );
-}
-
 function ReleaseBadge({ state }: { state: 'AWAITING_WINDOW' | 'READY' | 'BLOCKED' }) {
   const classes =
     state === 'READY'
@@ -462,5 +465,22 @@ function ReleaseBadge({ state }: { state: 'AWAITING_WINDOW' | 'READY' | 'BLOCKED
       <Icon size={14} />
       {label}
     </span>
+  );
+}
+
+function DashTile({ icon: Icon, label, value, color, onClick }: {
+  icon: ElementType; label: string; value: string; color: string; onClick: () => void;
+}) {
+  return (
+    <button type="button" onClick={onClick}
+      className="group flex flex-col gap-3 rounded-[1.5rem] border border-slate-200 bg-white p-5 text-left transition hover:border-slate-300 hover:shadow-sm active:scale-[0.98]">
+      <div className={`flex h-11 w-11 items-center justify-center rounded-2xl ${color}`}>
+        <Icon size={20} />
+      </div>
+      <div className="min-w-0">
+        <p className="truncate text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">{label}</p>
+        <p className="mt-1 truncate text-xl font-bold tracking-tight text-slate-900">{value}</p>
+      </div>
+    </button>
   );
 }
