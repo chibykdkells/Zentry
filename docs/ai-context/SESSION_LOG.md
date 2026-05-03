@@ -7341,3 +7341,49 @@ Replaced the entire two-column `AccountPanel` layout with a **5-tile DashTile gr
 ### Verification
 
 - `npx tsc --noEmit -p apps/web/tsconfig.json` — clean
+
+---
+
+## Session 2026-05-03 — CBT dashboard error for pending centers
+
+**Phase:** Phase 10 — Admin Analytics, Security Audit & Launch
+**AI Assistant:** Claude Sonnet 4.6
+
+### What Was Done
+
+**Problem:** A newly registered CBT center (approval status = `PENDING`) navigated to `/dashboard` and saw "CBT dashboard unavailable — An unexpected error occurred." instead of a meaningful pending-approval state.
+
+**Root cause:** `OrdersService.getCbtDashboard` called `ensureApprovedCbtUser`, which throws `ForbiddenException` for any center that is not `APPROVED`. The frontend error boundary showed this as a generic failure.
+
+**Fix — backend (`orders.service.ts`):**
+- `getCbtDashboard` no longer delegates to `ensureApprovedCbtUser`
+- Directly queries the user + CBT profile (or parent CBT profile for `CBT_STAFF`) without an approval check
+- If `approvalStatus !== APPROVED` returns a valid response with zeroed metrics and empty job arrays instead of throwing
+- Full job/earnings queries still run only for `APPROVED` centers — no change to approved flow
+
+**Fix — frontend (`(cbt)/dashboard/page.tsx`):**
+- `!dashboard || error` condition split into two separate checks
+- `error` (true API/network failure) → shows existing error card + "Try again"
+- `dashboard.approvalStatus === 'PENDING'` → renders an amber "Awaiting approval" card with center name and explanation text
+- `dashboard.approvalStatus === 'REJECTED'` → renders a rose "Application rejected" card directing the user to support
+- Imported `Hourglass` and `XCircle` icons for the two new states
+
+### Files Modified
+
+- `apps/api/src/modules/orders/orders.service.ts` — `getCbtDashboard` rewritten to allow non-approved users
+- `apps/web/src/app/(cbt)/dashboard/page.tsx` — pending/rejected state cards added
+
+### Commit
+
+- `2390ae1` — pushed to `main`; deployed to `zentry-api-prod` via `fly deploy`
+
+### Verification
+
+- `pnpm --filter api exec tsc --noEmit` — clean
+- `pnpm --filter web exec tsc --noEmit` — clean
+- Machine `7849236f167d58` reached good state, health checks passing
+
+### Blockers / Notes for Next Session
+
+- Fly deploy CLI times out with "net/http: request canceled" when the machine is briefly stopped during rolling update; machine recovers and health checks pass regardless — this is a Fly.io proxy/lease timing issue, not an app error. Re-running `fly deploy` after the machine stabilises works cleanly.
+- No CI auto-deploy for Fly.io — every API change still requires a manual `fly deploy` after push.
