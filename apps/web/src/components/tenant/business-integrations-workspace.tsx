@@ -3,16 +3,13 @@
 import { startTransition, useDeferredValue, useMemo, useState } from 'react';
 import { ServiceDeliveryMode } from '@zendocx/types';
 import {
-  Activity,
   CheckCircle2,
   Eye,
   EyeOff,
-  Globe2,
   Loader2,
   Search,
   Settings2,
   ShieldCheck,
-  Sparkles,
   Unplug,
   X,
   Zap,
@@ -74,9 +71,9 @@ type ConfigFieldKey = (typeof CONFIG_FIELD_KEYS)[number];
 type NullableDraftKey = Exclude<ConfigFieldKey, 'apiKey'> | 'notes';
 
 const DELIVERY_LABELS: Record<ServiceDeliveryMode, string> = {
-  [ServiceDeliveryMode.CBT_MANUAL]: 'Handled by your team',
-  [ServiceDeliveryMode.API_AUTOMATED]: 'Runs through an API',
-  [ServiceDeliveryMode.PIN_STOCK]: 'Runs from stored stock',
+  [ServiceDeliveryMode.CBT_MANUAL]: 'Manual',
+  [ServiceDeliveryMode.API_AUTOMATED]: 'API',
+  [ServiceDeliveryMode.PIN_STOCK]: 'Stock',
 };
 
 const ROLLOUT_LABELS: Record<'AUTO' | 'MOCK' | 'LIVE', string> = {
@@ -291,7 +288,7 @@ function getServiceStatus({
 
   if (deliveryMode !== ServiceDeliveryMode.API_AUTOMATED) {
     return {
-      label: 'Live in business',
+      label: 'Visible in business',
       detail:
         deliveryMode === ServiceDeliveryMode.CBT_MANUAL
           ? 'Handled manually by your business team.'
@@ -373,11 +370,9 @@ function deliveryClasses(mode: ServiceDeliveryMode) {
   }
 }
 
-
 export function TenantBusinessIntegrationsWorkspace() {
   const [visibilityFilter, setVisibilityFilter] =
     useState<VisibilityFilter>('ALL');
-  const [categoryFilter, setCategoryFilter] = useState('all');
   const [searchInput, setSearchInput] = useState('');
   const [draft, setDraft] = useState<ProviderDraft>({});
   const [successMessage, setSuccessMessage] = useState('');
@@ -390,7 +385,7 @@ export function TenantBusinessIntegrationsWorkspace() {
   const { readiness, loading, error, reload } = useTenantProviderReadiness();
   const {
     selection,
-    categories,
+    categories: _categories,
     services,
     loading: servicesLoading,
     error: servicesError,
@@ -401,10 +396,6 @@ export function TenantBusinessIntegrationsWorkspace() {
 
   const filteredServices = useMemo(() => {
     return services.filter((service) => {
-      if (categoryFilter !== 'all' && service.category.slug !== categoryFilter) {
-        return false;
-      }
-
       if (visibilityFilter === 'OFFERED' && !service.isSelected) {
         return false;
       }
@@ -436,7 +427,7 @@ export function TenantBusinessIntegrationsWorkspace() {
 
       return haystack.includes(deferredSearch);
     });
-  }, [categoryFilter, deferredSearch, services, visibilityFilter]);
+  }, [deferredSearch, services, visibilityFilter]);
 
   const apiManagedServices = useMemo(
     () =>
@@ -448,10 +439,10 @@ export function TenantBusinessIntegrationsWorkspace() {
 
   if (loading || servicesLoading) {
     return (
-      <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-8">
-        <SkeletonBlock className="h-48 rounded-[2rem]" />
-        <SkeletonBlock className="h-[34rem] rounded-[2rem]" />
-        <SkeletonBlock className="h-64 rounded-[2rem]" />
+      <div className="mx-auto max-w-5xl space-y-4 p-4 md:p-8">
+        <SkeletonBlock className="h-20 rounded-2xl" />
+        <SkeletonBlock className="h-[30rem] rounded-[2rem]" />
+        <SkeletonBlock className="h-16 rounded-2xl" />
       </div>
     );
   }
@@ -489,30 +480,6 @@ export function TenantBusinessIntegrationsWorkspace() {
   const latestValidation = readiness.validationHistory[0] ?? null;
   const visibleServiceCount = services.filter((service) => service.isSelected).length;
   const hiddenServiceCount = Math.max(services.length - visibleServiceCount, 0);
-  const readyApiServices = apiManagedServices.filter((service) => {
-    const status = getServiceStatus({
-      deliveryMode: service.deliveryMode,
-      isSelected: service.isSelected,
-      isEnabled: effectiveIsEnabled,
-      probeStatus,
-      mode: readiness.vtu.mode,
-      missingConfigCount: readiness.vtu.missingConfig.length,
-    });
-
-    return status.label === 'Live' || status.label === 'Ready';
-  }).length;
-  const categoryChips = [
-    {
-      slug: 'all',
-      label: 'All services',
-      count: services.length,
-    },
-    ...categories.map((category) => ({
-      slug: category.slug,
-      label: category.name,
-      count: services.filter((service) => service.category.slug === category.slug).length,
-    })),
-  ];
   const hasDraftControls =
     typeof draft.isEnabled === 'boolean' ||
     Boolean(draft.rolloutMode);
@@ -640,55 +607,82 @@ export function TenantBusinessIntegrationsWorkspace() {
     );
   };
 
+  // Compact probe badge color
+  const probeTone =
+    probeStatus === 'healthy'
+      ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+      : probeStatus === 'unreachable' || probeStatus === 'error'
+        ? 'text-rose-700 bg-rose-50 border-rose-200'
+        : 'text-slate-600 bg-slate-50 border-slate-200';
+
   return (
     <>
-      <div className="mx-auto max-w-7xl space-y-6 p-4 pb-28 md:p-8 md:pb-12">
-        <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-100 bg-[radial-gradient(circle_at_top_left,_rgba(245,166,35,0.12),_transparent_30%),radial-gradient(circle_at_top_right,_rgba(13,27,62,0.08),_transparent_28%)] px-5 py-6 md:px-8 md:py-8">
-            <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-              <div className="max-w-3xl">
-                <p className="text-sm font-semibold uppercase tracking-[0.22em] text-amber-600">
-                  Service Connections
-                </p>
-                <h1 className="mt-3 max-w-2xl text-4xl font-black leading-[1.02] tracking-[-0.04em] text-slate-950">
-                  Control what this business offers and how automated services connect
-                </h1>
-                <p className="mt-4 max-w-3xl text-base leading-8 text-slate-600">
-                  This business starts on the Zendocx default connection. Use
-                  this page to decide which services stay visible, check whether
-                  automated requests are healthy, and switch to a business-owned
-                  API only when this tenant needs it.
-                </p>
-              </div>
+      <div className="mx-auto max-w-5xl space-y-4 p-4 pb-28 md:p-8 md:pb-12">
 
-              <div className="flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={() => openConfigModal()}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-[#0D1B3E] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#132754]"
-                >
-                  <Settings2 size={16} />
-                  Edit business API
-                </button>
-                <button
-                  type="button"
-                  onClick={handleValidateConnection}
-                  disabled={validateConfig.isPending}
-                  className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {validateConfig.isPending ? (
-                    <Loader2 size={16} className="animate-spin" />
-                  ) : (
-                    <ShieldCheck size={16} />
-                  )}
-                  Check connection
-                </button>
-              </div>
+        {/* ── Page header ───────────────────────────────────────── */}
+        <section className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm md:px-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h1 className="text-xl font-bold tracking-tight text-slate-950">
+              API Integrations
+            </h1>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => openConfigModal()}
+                className="inline-flex items-center gap-2 rounded-2xl bg-[#0D1B3E] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#132754]"
+              >
+                <Settings2 size={15} />
+                Edit API
+              </button>
+              <button
+                type="button"
+                onClick={handleValidateConnection}
+                disabled={validateConfig.isPending}
+                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {validateConfig.isPending ? (
+                  <Loader2 size={15} className="animate-spin" />
+                ) : (
+                  <ShieldCheck size={15} />
+                )}
+                Check connection
+              </button>
             </div>
           </div>
 
+          {/* Compact status row */}
+          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-slate-500">
+            <span className="font-medium text-slate-700">
+              {isTenantOverride ? 'Business API' : 'Zendocx default'}
+            </span>
+            <span className="text-slate-300">•</span>
+            <span className={cn('rounded-full border px-2 py-0.5 text-xs font-semibold', probeTone)}>
+              {probeLabel}
+            </span>
+            <span className="text-slate-300">•</span>
+            <span className="text-xs">
+              {latestValidation
+                ? `Last checked ${formatDate(latestValidation.createdAt)}`
+                : 'Not checked yet'}
+            </span>
+            {effectiveBaseUrl ? (
+              <>
+                <span className="text-slate-300">•</span>
+                <span className="truncate text-xs font-mono text-slate-400 max-w-[220px]">
+                  {effectiveBaseUrl}
+                </span>
+              </>
+            ) : null}
+            {effectiveNotes ? (
+              <>
+                <span className="text-slate-300">•</span>
+                <span className="text-xs text-slate-400 italic">{effectiveNotes}</span>
+              </>
+            ) : null}
+          </div>
         </section>
 
+        {/* ── Feedback banners ──────────────────────────────────── */}
         {successMessage ? (
           <FeedbackBanner tone="success" message={successMessage} />
         ) : null}
@@ -720,23 +714,11 @@ export function TenantBusinessIntegrationsWorkspace() {
           />
         ) : null}
 
+        {/* ── Service list ──────────────────────────────────────── */}
         <section className="rounded-[2rem] border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-100 px-5 py-5 md:px-8">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <div className="max-w-3xl">
-                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-400">
-                  Service list
-                </p>
-                <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
-                  Every service managed for this business
-                </h2>
-                <p className="mt-2 text-sm leading-7 text-slate-500">
-                  Show or hide services for this tenant, then see which ones use
-                  Zendocx by default and which ones would use a business-owned
-                  API connection.
-                </p>
-              </div>
-
+          {/* Filters bar */}
+          <div className="border-b border-slate-100 px-5 py-4 md:px-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex flex-wrap gap-2">
                 {(
                   [
@@ -753,7 +735,7 @@ export function TenantBusinessIntegrationsWorkspace() {
                       startTransition(() => setVisibilityFilter(value))
                     }
                     className={cn(
-                      'rounded-full border px-3 py-2 text-sm font-semibold transition',
+                      'rounded-full border px-3 py-1.5 text-sm font-semibold transition',
                       visibilityFilter === value
                         ? 'border-[#0D1B3E] bg-[#0D1B3E] text-white'
                         : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50',
@@ -763,34 +745,11 @@ export function TenantBusinessIntegrationsWorkspace() {
                   </button>
                 ))}
               </div>
-            </div>
 
-            <div className="mt-5 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-              <div className="flex flex-wrap gap-2">
-                {categoryChips.map((chip) => (
-                  <button
-                    key={chip.slug}
-                    type="button"
-                    onClick={() =>
-                      startTransition(() => setCategoryFilter(chip.slug))
-                    }
-                    className={cn(
-                      'rounded-full border px-3 py-2 text-sm font-medium transition',
-                      categoryFilter === chip.slug
-                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                        : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:bg-slate-50',
-                    )}
-                  >
-                    {chip.label}
-                    <span className="ml-2 text-xs text-inherit/80">{chip.count}</span>
-                  </button>
-                ))}
-              </div>
-
-              <div className="relative w-full xl:max-w-sm">
+              <div className="relative w-full sm:max-w-xs">
                 <Search
-                  size={16}
-                  className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                  size={15}
+                  className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
                 />
                 <input
                   value={searchInput}
@@ -798,51 +757,28 @@ export function TenantBusinessIntegrationsWorkspace() {
                     const value = event.target.value;
                     startTransition(() => setSearchInput(value));
                   }}
-                  placeholder="Search services or categories"
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-11 py-3 text-sm text-slate-700 outline-none transition focus:border-[#0D1B3E] focus:bg-white focus:ring-2 focus:ring-[#0D1B3E]/10"
+                  placeholder="Search services…"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-10 py-2.5 text-sm text-slate-700 outline-none transition focus:border-[#0D1B3E] focus:bg-white focus:ring-2 focus:ring-[#0D1B3E]/10"
                 />
-              </div>
-            </div>
-
-            <div className="mt-5 rounded-[1.5rem] border border-slate-200 bg-slate-50/70 px-4 py-4 text-sm text-slate-600">
-              <div className="flex items-start gap-3">
-                <Sparkles size={18} className="mt-0.5 shrink-0 text-amber-500" />
-                <div className="space-y-2 leading-7">
-                  <p>
-                    <span className="font-semibold text-slate-900">Zendocx default:</span>{' '}
-                    automated services use the Zendocx connection until you save
-                    a business-specific API.
-                  </p>
-                  <p>
-                    <span className="font-semibold text-slate-900">Hidden services:</span>{' '}
-                    hidden services disappear from this business, but you can
-                    turn them back on from the same table at any time.
-                  </p>
-                </div>
               </div>
             </div>
           </div>
 
+          {/* Table */}
           <div className="overflow-x-auto">
-            <table className="min-w-[1100px] w-full">
+            <table className="min-w-[640px] w-full">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/60 text-left">
-                  <th className="px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  <th className="px-6 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
                     Service
                   </th>
-                  <th className="px-4 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                    Customer price
+                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                    Fulfilled by
                   </th>
-                  <th className="px-4 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                    How it is fulfilled
+                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                    Status
                   </th>
-                  <th className="px-4 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                    Connection used
-                  </th>
-                  <th className="px-4 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                    Business status
-                  </th>
-                  <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
                     Actions
                   </th>
                 </tr>
@@ -858,105 +794,51 @@ export function TenantBusinessIntegrationsWorkspace() {
                       mode: readiness.vtu.mode,
                       missingConfigCount: readiness.vtu.missingConfig.length,
                     });
-                    const automationSource =
-                      service.deliveryMode === ServiceDeliveryMode.API_AUTOMATED
-                        ? isTenantOverride
-                          ? 'Business API'
-                          : 'Zendocx default'
-                        : 'No API needed';
 
                     return (
                       <tr
                         key={service.id}
                         className={cn(
-                          'border-b border-slate-100 align-top transition',
+                          'border-b border-slate-100 align-middle transition',
                           service.isSelected ? 'bg-white' : 'bg-slate-50/40',
                         )}
                       >
-                        <td className="px-6 py-5">
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-2">
-                              <p className="text-base font-semibold text-slate-950">
-                                {service.name}
-                              </p>
-                              <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                                {service.category.name}
-                              </span>
-                              {!service.isSelected ? (
-                                <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                                  Hidden
-                                </span>
-                              ) : null}
-                            </div>
-                            <p className="max-w-xl text-sm leading-6 text-slate-500">
-                              {service.description || 'No service description has been added yet.'}
-                            </p>
-                            <div className="flex flex-wrap gap-3 text-xs text-slate-400">
-                              <span>{service.requiredFieldsCount} form fields</span>
-                              <span>{service.requiredDocumentsCount} document checks</span>
-                              <span>{service.eta}</span>
-                            </div>
-                          </div>
+                        {/* Service name + price */}
+                        <td className="px-6 py-4">
+                          <p className="text-sm font-semibold text-slate-950">
+                            {service.name}
+                          </p>
+                          <p className="mt-0.5 text-xs text-slate-400">
+                            {formatNaira(service.totalPrice)}
+                          </p>
                         </td>
-                        <td className="px-4 py-5">
-                          <div className="space-y-2">
-                            <p className="text-lg font-bold tracking-tight text-slate-950">
-                              {formatNaira(service.totalPrice)}
-                            </p>
-                            <p className="text-sm text-slate-500">
-                              CBT commission {formatNaira(service.cbtCommission)}
-                            </p>
-                          </div>
+
+                        {/* Delivery mode badge */}
+                        <td className="px-4 py-4">
+                          <span
+                            className={cn(
+                              'inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold',
+                              deliveryClasses(service.deliveryMode),
+                            )}
+                          >
+                            {DELIVERY_LABELS[service.deliveryMode]}
+                          </span>
                         </td>
-                        <td className="px-4 py-5">
-                          <div className="space-y-3">
-                            <span
-                              className={cn(
-                                'inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold',
-                                deliveryClasses(service.deliveryMode),
-                              )}
-                            >
-                              {DELIVERY_LABELS[service.deliveryMode]}
-                            </span>
-                            <p className="text-sm leading-6 text-slate-500">
-                              {service.deliveryMode === ServiceDeliveryMode.API_AUTOMATED
-                                ? 'Handled automatically through the connection shown on this page.'
-                                : service.deliveryMode === ServiceDeliveryMode.CBT_MANUAL
-                                  ? 'Handled manually by people inside this business.'
-                                  : 'Delivered from stored inventory instead of a live provider connection.'}
-                            </p>
-                          </div>
+
+                        {/* Status badge */}
+                        <td className="px-4 py-4">
+                          <span
+                            className={cn(
+                              'inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold',
+                              toneClasses(status.tone),
+                            )}
+                          >
+                            {status.label}
+                          </span>
                         </td>
-                        <td className="px-4 py-5">
-                          <div className="space-y-3">
-                            <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700">
-                              {automationSource}
-                            </span>
-                            <p className="text-sm leading-6 text-slate-500">
-                              {service.deliveryMode === ServiceDeliveryMode.API_AUTOMATED
-                                ? isTenantOverride
-                                  ? 'This service will use the business-owned API connection.'
-                                  : 'This service will use the Zendocx shared connection.'
-                                : 'This service works without API credentials.'}
-                            </p>
-                          </div>
-                        </td>
-                        <td className="px-4 py-5">
-                          <div className="space-y-3">
-                            <span
-                              className={cn(
-                                'inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold',
-                                toneClasses(status.tone),
-                              )}
-                            >
-                              {status.label}
-                            </span>
-                            <p className="max-w-xs text-sm leading-6 text-slate-500">
-                              {status.detail}
-                            </p>
-                          </div>
-                        </td>
-                        <td className="px-6 py-5">
+
+                        {/* Actions */}
+                        <td className="px-6 py-4">
                           <div className="flex justify-end gap-2">
                             <button
                               type="button"
@@ -965,26 +847,26 @@ export function TenantBusinessIntegrationsWorkspace() {
                               }
                               disabled={updateSelection.isPending}
                               className={cn(
-                                'inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60',
+                                'inline-flex items-center gap-1.5 rounded-2xl border px-3 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60',
                                 service.isSelected
                                   ? 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
                                   : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100',
                               )}
                             >
                               {service.isSelected ? (
-                                <EyeOff size={15} />
+                                <EyeOff size={13} />
                               ) : (
-                                <Eye size={15} />
+                                <Eye size={13} />
                               )}
-                              {service.isSelected ? 'Hide service' : 'Show service'}
+                              {service.isSelected ? 'Hide' : 'Show'}
                             </button>
                             {service.deliveryMode === ServiceDeliveryMode.API_AUTOMATED ? (
                               <button
                                 type="button"
                                 onClick={() => openConfigModal(service.name)}
-                                className="inline-flex items-center gap-2 rounded-2xl bg-[#0D1B3E] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#132754]"
+                                className="inline-flex items-center gap-1.5 rounded-2xl bg-[#0D1B3E] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#132754]"
                               >
-                                <Settings2 size={15} />
+                                <Settings2 size={13} />
                                 Edit API
                               </button>
                             ) : null}
@@ -995,10 +877,10 @@ export function TenantBusinessIntegrationsWorkspace() {
                   })
                 ) : (
                   <tr>
-                    <td colSpan={6} className="px-6 py-12">
+                    <td colSpan={4} className="px-6 py-12">
                       <EmptyState
                         title="No services match these filters"
-                        message="Try another category, switch the current filter, or clear the search field."
+                        message="Try another filter or clear the search field."
                         icon={Zap}
                       />
                     </td>
@@ -1009,91 +891,59 @@ export function TenantBusinessIntegrationsWorkspace() {
           </div>
         </section>
 
-        <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-          <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-            <div className="flex items-start gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
-                <Activity size={18} />
-              </div>
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-400">
-                  Automated service controls
-                </p>
-                <h3 className="mt-2 text-xl font-bold tracking-tight text-slate-950">
-                  Decide how automated services behave for this business
-                </h3>
-                <p className="mt-2 text-sm leading-7 text-slate-500">
-                  These settings affect every service that depends on an API.
-                  Manual services and stock-based services stay available, but
-                  they do not use this connection.
-                </p>
-              </div>
-            </div>
+        {/* ── Automation controls ───────────────────────────────── */}
+        <section className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm md:px-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm font-semibold text-slate-700">Automation controls</p>
 
-            <div className="mt-6 grid gap-4 md:grid-cols-2">
-              <label className="rounded-[1.5rem] border border-slate-200 bg-slate-50/70 px-4 py-4">
-                <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                  API access
-                </span>
-                <div className="mt-3 flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-950">
-                      Allow automated requests
-                    </p>
-                    <p className="mt-1 text-sm text-slate-500">
-                      Turn this off if the business should temporarily stop using automated provider calls.
-                    </p>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={effectiveIsEnabled}
-                    onChange={(event) =>
-                      setDraft((current) => ({
-                        ...current,
-                        isEnabled: event.target.checked,
-                      }))
-                    }
-                    className="h-4 w-4 rounded border-slate-300 text-[#0D1B3E] focus:ring-[#0D1B3E]"
-                  />
-                </div>
-              </label>
-
-              <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/70 px-4 py-4">
-                <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                  API mode
-                </span>
-                <select
-                  value={effectiveRolloutMode}
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Enable toggle */}
+              <label className="inline-flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={effectiveIsEnabled}
                   onChange={(event) =>
                     setDraft((current) => ({
                       ...current,
-                      rolloutMode: event.target.value as 'AUTO' | 'MOCK' | 'LIVE',
+                      isEnabled: event.target.checked,
                     }))
                   }
-                  className="mt-3 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-[#0D1B3E] focus:ring-2 focus:ring-[#0D1B3E]/10"
-                >
-                  {Object.entries(ROLLOUT_LABELS).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
+                  className="h-4 w-4 rounded border-slate-300 text-[#0D1B3E] focus:ring-[#0D1B3E]"
+                />
+                Allow automated requests
+              </label>
 
-            <div className="mt-5 flex flex-wrap gap-3">
+              {/* Mode select */}
+              <select
+                value={effectiveRolloutMode}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    rolloutMode: event.target.value as 'AUTO' | 'MOCK' | 'LIVE',
+                  }))
+                }
+                className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 outline-none transition focus:border-[#0D1B3E] focus:ring-2 focus:ring-[#0D1B3E]/10"
+              >
+                {Object.entries(ROLLOUT_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+
+              {/* Save */}
               <button
                 type="button"
                 onClick={() => saveDraft()}
                 disabled={!hasDraftControls || updateConfig.isPending}
-                className="inline-flex items-center gap-2 rounded-2xl bg-[#0D1B3E] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#132754] disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-2xl bg-[#0D1B3E] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#132754] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {updateConfig.isPending ? (
-                  <Loader2 size={16} className="animate-spin" />
+                  <Loader2 size={14} className="animate-spin" />
                 ) : (
-                  <CheckCircle2 size={16} />
+                  <CheckCircle2 size={14} />
                 )}
-                Save automation controls
+                Save
               </button>
 
               {isTenantOverride ? (
@@ -1101,70 +951,18 @@ export function TenantBusinessIntegrationsWorkspace() {
                   type="button"
                   onClick={restorePlatformDefault}
                   disabled={updateConfig.isPending}
-                  className="inline-flex items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-700 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <Unplug size={16} />
-                  Switch back to Zendocx default
+                  <Unplug size={14} />
+                  Use Zendocx default
                 </button>
               ) : null}
             </div>
-          </section>
-
-          <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-            <div className="flex items-start gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
-                <Globe2 size={18} />
-              </div>
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-400">
-                  Current connection
-                </p>
-                <h3 className="mt-2 text-xl font-bold tracking-tight text-slate-950">
-                  {isTenantOverride ? 'Business-owned API connection' : 'Zendocx default connection'}
-                </h3>
-                <p className="mt-2 text-sm leading-7 text-slate-500">
-                  {isTenantOverride
-                    ? 'This business has its own saved endpoint and credentials for automated services.'
-                    : 'No business-specific connection is saved, so automated services fall back to the Zendocx shared provider.'}
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-6 grid gap-3">
-              <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/70 px-4 py-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                  Endpoint
-                </p>
-                <p className="mt-2 text-sm font-semibold text-slate-950">
-                  {effectiveBaseUrl || 'Using the Zendocx shared endpoint'}
-                </p>
-              </div>
-              <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/70 px-4 py-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                  Last validation
-                </p>
-                <p className="mt-2 text-sm font-semibold text-slate-950">
-                  {latestValidation
-                    ? `${probeLabel} · ${formatDate(latestValidation.createdAt)}`
-                    : 'No validation has been run from this business workspace yet'}
-                </p>
-                <p className="mt-2 text-sm leading-6 text-slate-500">
-                  {latestValidation?.probeMessage ?? readiness.vtu.probe.message}
-                </p>
-              </div>
-              <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/70 px-4 py-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                  Internal notes
-                </p>
-                <p className="mt-2 text-sm leading-6 text-slate-500">
-                  {effectiveNotes || 'No business-specific notes have been saved yet.'}
-                </p>
-              </div>
-            </div>
-          </section>
-        </div>
+          </div>
+        </section>
       </div>
 
+      {/* ── Config modal (unchanged) ──────────────────────────── */}
       {configModalOpen ? (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-[#0D1B3E]/55 p-3 backdrop-blur-sm sm:p-4">
           <div className="flex min-h-full items-start justify-center sm:items-center">

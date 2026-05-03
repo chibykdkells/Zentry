@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import type { ElementType, ReactNode } from 'react';
+import { useState, type ElementType, type ReactNode } from 'react';
 import {
   ArrowRight,
   Briefcase,
@@ -13,6 +13,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import { AccountPanel } from '@/components/shared/account-panel';
+import { DetailModal } from '@/components/shared/detail-modal';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PageHero } from '@/components/shared/page-hero';
 import { SkeletonBlock } from '@/components/shared/skeleton-loader';
@@ -23,11 +24,13 @@ import {
   useTenantServiceManagementCatalog,
 } from '@/hooks/use-tenant-services';
 import { formatDate, formatNaira, formatTimeUntil } from '@/lib/format';
+import { cn } from '@/lib/utils';
 
 export default function TenantDashboardPage() {
   const { overview, loading, error, reload } = useTenantOverview();
   const { services, loading: servicesLoading } = useTenantServiceManagementCatalog({});
   const { readiness, loading: readinessLoading } = useTenantProviderReadiness();
+  const [openUserId, setOpenUserId] = useState<string | null>(null);
 
   if (loading) {
     return (
@@ -64,12 +67,10 @@ export default function TenantDashboardPage() {
 
   const visibleServices = servicesLoading
     ? '...'
-    : String(services.filter((service) => service.isSelected).length);
+    : String(services.filter((s) => s.isSelected).length);
   const automatedServices = servicesLoading
     ? '...'
-    : String(
-        services.filter((service) => service.deliveryMode === 'API_AUTOMATED').length,
-      );
+    : String(services.filter((s) => s.deliveryMode === 'API_AUTOMATED').length);
   const providerMode = readinessLoading
     ? 'Checking'
     : readiness?.vtu.mode === 'live'
@@ -89,6 +90,8 @@ export default function TenantDashboardPage() {
         : readiness?.vtu.probe.status === 'error'
           ? 'Needs attention'
           : 'Not checked yet';
+
+  const openUser = overview.recentUsers.find((u) => u.id === openUserId) ?? null;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-8">
@@ -127,98 +130,8 @@ export default function TenantDashboardPage() {
         }
       />
 
-      <section className="grid gap-4 lg:grid-cols-3">
-        <FocusCard
-          icon={Wallet}
-          eyebrow="Money"
-          title="Wallet and payout state"
-          description="Keep the business balance, held funds, and payout queue visible without leaving the dashboard."
-          tone="from-slate-50 to-white"
-          highlights={[
-            {
-              label: 'Available now',
-              value: formatNaira(overview.metrics.availableBalance),
-            },
-            {
-              label: 'Held funds',
-              value: formatNaira(overview.metrics.heldFunds),
-            },
-            {
-              label: 'Ready for payout',
-              value: String(overview.metrics.readyReleaseCount),
-            },
-          ]}
-          href="/wallet"
-          cta="Open wallet"
-        />
-        <FocusCard
-          icon={Users}
-          eyebrow="People"
-          title="Users and operators"
-          description="See how many customers and CBT centers are inside this business, then jump straight into user management."
-          tone="from-amber-50/70 to-white"
-          highlights={[
-            {
-              label: 'Customers',
-              value: String(overview.metrics.individualUsers),
-            },
-            {
-              label: 'CBT centers',
-              value: String(overview.metrics.cbtUsers),
-            },
-            {
-              label: 'Newest sign-ins',
-              value: String(overview.recentUsers.length),
-            },
-          ]}
-          href="/tenant/users"
-          cta="Manage users"
-        />
-        <FocusCard
-          icon={Settings2}
-          eyebrow="Service setup"
-          title="Catalog and API routing"
-          description="This tenant uses the platform service catalog by default, with the option to hide services or switch automated calls to its own API."
-          tone="from-emerald-50/70 to-white"
-          highlights={[
-            {
-              label: 'Visible services',
-              value: visibleServices,
-            },
-            {
-              label: 'Automated services',
-              value: automatedServices,
-            },
-            {
-              label: 'Connection',
-              value: `${providerScope} • ${providerMode}`,
-            },
-          ]}
-          footer={
-            <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-600">
-              Provider health: <span className="font-semibold text-slate-900">{providerHealth}</span>
-            </div>
-          }
-          actions={
-            <>
-              <Link
-                href="/tenant/services"
-                className="inline-flex items-center justify-center rounded-2xl bg-brand-button px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand-button-strong"
-              >
-                Business services
-              </Link>
-              <Link
-                href="/tenant/providers"
-                className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-              >
-                API integrations
-              </Link>
-            </>
-          }
-        />
-      </section>
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      {/* Colorful stat cards — immediate numbers at a glance */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           title="Customers"
           value={String(overview.metrics.individualUsers)}
@@ -245,95 +158,127 @@ export default function TenantDashboardPage() {
         />
       </div>
 
+      <section className="grid gap-4 lg:grid-cols-3">
+        <FocusCard
+          icon={Wallet}
+          eyebrow="Money"
+          title="Wallet and payout state"
+          description="Keep the business balance, held funds, and payout queue visible without leaving the dashboard."
+          tone="from-slate-50 to-white"
+          highlights={[
+            { label: 'Available now', value: formatNaira(overview.metrics.availableBalance) },
+            { label: 'Held funds', value: formatNaira(overview.metrics.heldFunds) },
+            { label: 'Ready for payout', value: String(overview.metrics.readyReleaseCount) },
+          ]}
+          href="/wallet"
+          cta="Open wallet"
+        />
+        <FocusCard
+          icon={Users}
+          eyebrow="People"
+          title="Users and operators"
+          description="See how many customers and CBT centers are inside this business, then jump straight into user management."
+          tone="from-amber-50/70 to-white"
+          highlights={[
+            { label: 'Customers', value: String(overview.metrics.individualUsers) },
+            { label: 'CBT centers', value: String(overview.metrics.cbtUsers) },
+            { label: 'Newest sign-ins', value: String(overview.recentUsers.length) },
+          ]}
+          href="/tenant/users"
+          cta="Manage users"
+        />
+        <FocusCard
+          icon={Settings2}
+          eyebrow="Service setup"
+          title="Catalog and API routing"
+          description="This tenant uses the platform service catalog by default, with the option to hide services or switch automated calls to its own API."
+          tone="from-emerald-50/70 to-white"
+          highlights={[
+            { label: 'Visible services', value: visibleServices },
+            { label: 'Automated services', value: automatedServices },
+            { label: 'Connection', value: `${providerScope} · ${providerMode}` },
+          ]}
+          footer={
+            <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-600">
+              Provider health: <span className="font-semibold text-slate-900">{providerHealth}</span>
+            </div>
+          }
+          actions={
+            <>
+              <Link
+                href="/tenant/services"
+                className="inline-flex items-center justify-center rounded-2xl bg-brand-button px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand-button-strong"
+              >
+                Business services
+              </Link>
+              <Link
+                href="/tenant/providers"
+                className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                API integrations
+              </Link>
+            </>
+          }
+        />
+      </section>
+
       <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
         <AccountPanel
           title="Needs attention now"
           description="The fastest way to understand what the business admin should check next."
         >
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             {[
-              {
-                label: 'Requests still active',
-                value: overview.metrics.activeOrders,
-              },
-              {
-                label: 'Disputes already open',
-                value: overview.metrics.disputedOrders,
-              },
-              {
-                label: 'Ready for payout release',
-                value: overview.metrics.readyReleaseCount,
-              },
-              {
-                label: 'Business balance available',
-                value: formatNaira(overview.metrics.availableBalance),
-              },
+              { label: 'Requests still active', value: overview.metrics.activeOrders },
+              { label: 'Disputes already open', value: overview.metrics.disputedOrders },
+              { label: 'Ready for payout release', value: overview.metrics.readyReleaseCount },
+              { label: 'Business balance available', value: formatNaira(overview.metrics.availableBalance) },
             ].map((item) => (
-              <div
-                key={item.label}
-                className="rounded-[1.5rem] border border-slate-100 bg-slate-50/70 p-4"
-              >
-                <p className="text-3xl font-bold tracking-tight text-slate-900">
-                  {item.value}
-                </p>
+              <div key={item.label} className="rounded-[1.5rem] border border-slate-100 bg-slate-50/70 p-4">
+                <p className="text-3xl font-bold tracking-tight text-slate-900">{item.value}</p>
                 <p className="mt-1 text-sm text-slate-500">{item.label}</p>
               </div>
             ))}
           </div>
 
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            <MiniFinanceTile
-              label="Completed requests"
-              value={String(overview.metrics.completedOrders)}
-            />
-            <MiniFinanceTile
-              label="Held customer funds"
-              value={formatNaira(overview.metrics.heldFunds)}
-            />
+            <MiniFinanceTile label="Completed requests" value={String(overview.metrics.completedOrders)} />
+            <MiniFinanceTile label="Held customer funds" value={formatNaira(overview.metrics.heldFunds)} />
             <MiniFinanceTile
               label="Customers + CBT centers"
               value={String(overview.metrics.individualUsers + overview.metrics.cbtUsers)}
             />
-            <MiniFinanceTile
-              label="Blocked by dispute"
-              value={String(overview.metrics.blockedReleaseCount)}
-            />
+            <MiniFinanceTile label="Blocked by dispute" value={String(overview.metrics.blockedReleaseCount)} />
           </div>
         </AccountPanel>
 
         <AccountPanel
           title="Newest users in this business"
-          description="The latest people who joined or were provisioned into this tenant."
+          description="The latest people who joined or were provisioned into this tenant. Click any row to view details."
         >
           {overview.recentUsers.length ? (
-            <div className="space-y-3">
+            <div className="space-y-1">
               {overview.recentUsers.map((user) => (
-                <div
+                <button
                   key={user.id}
-                  className="rounded-[1.5rem] border border-slate-100 bg-gradient-to-br from-slate-50 to-white p-4 shadow-sm"
+                  type="button"
+                  onClick={() => setOpenUserId(user.id)}
+                  className="flex w-full items-center gap-3 rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left transition hover:border-slate-200 hover:bg-slate-50/60"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">
-                        {user.firstName} {user.lastName}
-                      </p>
-                      <p className="mt-1 text-sm text-slate-500">{user.email}</p>
-                    </div>
-                    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">
-                      {user.role === 'TENANT_ADMIN'
-                        ? 'Business admin'
-                        : user.role === 'CBT_CENTER'
-                          ? 'CBT center'
-                          : 'Customer'}
-                    </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-slate-900">
+                      {user.firstName} {user.lastName}
+                    </p>
+                    <p className="truncate text-sm text-slate-500">{user.email}</p>
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
-                    <span>Joined {formatDate(user.createdAt)}</span>
-                    <span>
-                      Last sign-in {user.lastLoginAt ? formatDate(user.lastLoginAt) : 'Not yet'}
-                    </span>
-                  </div>
-                </div>
+                  <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
+                    {user.role === 'TENANT_ADMIN'
+                      ? 'Business admin'
+                      : user.role === 'CBT_CENTER'
+                        ? 'CBT center'
+                        : 'Customer'}
+                  </span>
+                </button>
               ))}
             </div>
           ) : (
@@ -346,10 +291,10 @@ export default function TenantDashboardPage() {
         </AccountPanel>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+      <div className="grid gap-6 xl:grid-cols-2">
         <AccountPanel
           title="Money and payout posture"
-          description="Use this to understand what is waiting, what is ready, and what the business can already move."
+          description="Understand what is waiting, what is ready, and what the business can already move."
         >
           <div className="grid gap-3 sm:grid-cols-3">
             <MiniFinanceTile
@@ -365,19 +310,11 @@ export default function TenantDashboardPage() {
               value={String(overview.metrics.blockedReleaseCount)}
             />
           </div>
-
-          <div className="mt-5 rounded-[1.5rem] border border-slate-100 bg-slate-50/70 p-4">
-            <p className="text-sm font-semibold text-slate-900">How to read this</p>
-            <p className="mt-2 text-sm leading-6 text-slate-500">
-              Waiting means the dispute window is still open. Ready means the work is clear
-              for payout. Blocked means a dispute is holding the release back.
-            </p>
-          </div>
         </AccountPanel>
 
         <AccountPanel
           title="Completed job queue"
-          description="See which completed manual jobs are still waiting, ready, or blocked."
+          description="Completed manual jobs still waiting on the payout cycle."
         >
           {overview.releaseQueue.length ? (
             <div className="space-y-3">
@@ -387,50 +324,76 @@ export default function TenantDashboardPage() {
                   className="rounded-[1.5rem] border border-slate-100 bg-gradient-to-br from-slate-50 to-white p-4 shadow-sm"
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">
-                        {item.orderNumber} • {item.service.name}
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900">
+                        {item.orderNumber} · {item.service.name}
                       </p>
-                      <p className="mt-1 text-sm text-slate-500">
-                        {item.requester.name} • {item.requester.email}
+                      <p className="mt-1 truncate text-sm text-slate-500">
+                        {item.requester.name} · {item.requester.email}
                       </p>
                     </div>
                     <ReleaseBadge state={item.releaseState} />
                   </div>
-
-                  <div className="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-2">
+                  <div className="mt-3 grid gap-1.5 text-sm text-slate-600 sm:grid-cols-2">
                     <p>CBT payout: {formatNaira(item.cbtCommission)}</p>
+                    <p>CBT: {item.assignedCbt ? item.assignedCbt.name : 'Not assigned'}</p>
                     <p>
-                      Assigned CBT:{' '}
-                      {item.assignedCbt ? item.assignedCbt.name : 'Not assigned'}
-                    </p>
-                    <p>
-                      Dispute window:{' '}
+                      Window:{' '}
                       {item.disputeWindowExpiresAt
-                        ? `${formatDate(item.disputeWindowExpiresAt)} ${
+                        ? `${formatDate(item.disputeWindowExpiresAt)}${
                             item.releaseState === 'AWAITING_WINDOW'
-                              ? `• ${formatTimeUntil(item.disputeWindowExpiresAt)}`
+                              ? ` · ${formatTimeUntil(item.disputeWindowExpiresAt)}`
                               : ''
                           }`
                         : 'Not available'}
                     </p>
-                    <p>
-                      Dispute:{' '}
-                      {item.dispute ? item.dispute.reason : 'No active dispute'}
-                    </p>
+                    <p>Dispute: {item.dispute ? item.dispute.reason : 'None'}</p>
                   </div>
                 </div>
               ))}
             </div>
           ) : (
             <EmptyState
-              title="No completed manual jobs are waiting right now"
-              message="When this business has completed manual jobs still waiting on the payout cycle, they will appear here."
+              title="No completed jobs waiting"
+              message="When manual jobs complete and enter the payout cycle they will appear here."
               icon={Clock3}
             />
           )}
         </AccountPanel>
       </div>
+
+      {openUser ? (
+        <DetailModal
+          open
+          onClose={() => setOpenUserId(null)}
+          title={`${openUser.firstName} ${openUser.lastName}`}
+          description={openUser.email}
+          width="md"
+        >
+          <dl className="grid gap-y-3 text-sm sm:grid-cols-2 sm:gap-x-8">
+            <div className="flex items-center justify-between sm:contents">
+              <dt className="text-slate-500">Role</dt>
+              <dd className="font-medium text-slate-900">
+                {openUser.role === 'TENANT_ADMIN'
+                  ? 'Business admin'
+                  : openUser.role === 'CBT_CENTER'
+                    ? 'CBT center'
+                    : 'Customer'}
+              </dd>
+            </div>
+            <div className="flex items-center justify-between sm:contents">
+              <dt className="text-slate-500">Joined</dt>
+              <dd className="font-medium text-slate-900">{formatDate(openUser.createdAt)}</dd>
+            </div>
+            <div className="flex items-center justify-between sm:contents">
+              <dt className="text-slate-500">Last sign-in</dt>
+              <dd className="font-medium text-slate-900">
+                {openUser.lastLoginAt ? formatDate(openUser.lastLoginAt) : 'Never'}
+              </dd>
+            </div>
+          </dl>
+        </DetailModal>
+      ) : null}
     </div>
   );
 }
@@ -459,9 +422,7 @@ function FocusCard({
   actions?: ReactNode;
 }) {
   return (
-    <article
-      className={`rounded-[1.5rem] border border-slate-200 bg-gradient-to-br ${tone} p-5 shadow-sm`}
-    >
+    <article className={`rounded-[1.5rem] border border-slate-200 bg-gradient-to-br ${tone} p-5 shadow-sm`}>
       <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-slate-700 shadow-sm">
         <Icon size={18} />
       </div>
@@ -503,9 +464,7 @@ function FocusCard({
 function MiniFinanceTile({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-[1.25rem] border border-slate-200 bg-white px-4 py-3">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-        {label}
-      </p>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</p>
       <p className="mt-2 text-sm font-semibold text-slate-900">{value}</p>
     </div>
   );
@@ -518,21 +477,10 @@ function ReleaseBadge({ state }: { state: 'AWAITING_WINDOW' | 'READY' | 'BLOCKED
       : state === 'BLOCKED'
         ? 'bg-rose-50 text-rose-700'
         : 'bg-amber-50 text-amber-700';
-
-  const label =
-    state === 'READY'
-      ? 'Ready'
-      : state === 'BLOCKED'
-        ? 'Blocked'
-        : 'Waiting';
-
-  const Icon =
-    state === 'READY' ? UserRoundCheck : state === 'BLOCKED' ? ShieldAlert : Clock3;
-
+  const label = state === 'READY' ? 'Ready' : state === 'BLOCKED' ? 'Blocked' : 'Waiting';
+  const Icon = state === 'READY' ? UserRoundCheck : state === 'BLOCKED' ? ShieldAlert : Clock3;
   return (
-    <span
-      className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${classes}`}
-    >
+    <span className={cn('inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold', classes)}>
       <Icon size={14} />
       {label}
     </span>

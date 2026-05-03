@@ -257,7 +257,7 @@ export default function TenantSettingsPage() {
   const portalUrl =
     overview.tenant.customDomainVerified && overview.tenant.customDomain
       ? `https://${overview.tenant.customDomain}`
-      : `/${overview.tenant.slug}`;
+      : `/?tenant=${overview.tenant.slug}`;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-8">
@@ -938,7 +938,7 @@ export default function TenantSettingsPage() {
                 >
                   {overview.tenant.customDomainVerified && overview.tenant.customDomain
                     ? overview.tenant.customDomain
-                    : `${overview.tenant.slug} (slug-based)`}
+                    : `?tenant=${overview.tenant.slug}`}
                 </a>
               </p>
               <p className="mt-2">

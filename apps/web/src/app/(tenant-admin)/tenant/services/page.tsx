@@ -418,7 +418,7 @@ export default function TenantServicesPage() {
       ) : null}
 
       {hasDraftChanges ? (
-        <div className="fixed inset-x-0 bottom-4 z-30 flex justify-center px-4">
+        <div className="fixed inset-x-0 bottom-20 z-30 flex justify-center px-4 md:bottom-4">
           <div className="flex w-full max-w-3xl flex-col gap-3 rounded-[1.75rem] border border-slate-200 bg-white/95 p-4 shadow-2xl backdrop-blur md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-sm font-semibold text-slate-900">
