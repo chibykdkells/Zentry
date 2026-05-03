@@ -12,8 +12,8 @@
 
 ```
 Active Phase  : Phase 10 — Admin Analytics, Security Audit & Launch (IN PROGRESS)
-Last Session  : 2026-05-03 (Workspace verification pass completed — lint, typecheck, tests, and build all green after test/lint debt cleanup; remaining build warnings are Sentry App Router hardening and PWA precache size)
-Next Action   : Production-truth pass: verify live env/DNS/browser-only runtime items (Vercel Sentry env vars, app.zendocx.net CNAME, Paystack webhook secret, silent refresh, PWA install flow)
+Last Session  : 2026-05-03 (CBT registration, dashboard, and tenant admin CBT management fully fixed and deployed)
+Next Action   : Production-truth pass: Vercel Sentry env vars, app.zendocx.net CNAME, Paystack webhook secret, silent refresh, PWA install flow
 ```
 
 ---
@@ -712,6 +712,11 @@ optimized. Production deployed.
 - [x] Platform login routing fix — /forgot-password and /reset-password now return to /platform/login for super admin (no tenant slug context)
 - [x] Dashboard and pages redesigned (StatCard, Sidebar icons, TenantPortalHome, admin services 3-tab)
 - [x] Workspace verification pass green (`pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`)
+- [x] All dashboards redesigned — DashTile grid + DetailModal pattern (individual, CBT, tenant admin, super admin, wallet, business workspace)
+- [x] CBT registration fully operational — serviceCategoryIds removed from schema, deployed
+- [x] CBT dashboard fixed for PENDING/REJECTED centers — returns status data instead of 403
+- [x] Tenant admin CBT management page rewritten — uses useAdminCbtApplications, full approve/reject/category-assign workflow, approval status badges, PageHero
+- [x] Hydration refactor — shared useHydrated hook replaces repeated useState/useEffect mount guard across all layouts
 - [ ] Confirm password reset email delivery in production (run fly logs --app zentry-api-prod)
 - [ ] Sentry Vercel env vars still needed: NEXT_PUBLIC_SENTRY_DSN, SENTRY_ORG=zendocx, SENTRY_PROJECT=zendocx-web
 - [ ] app.zendocx.net CNAME record in Cloudflare (add app → cname.vercel-dns.com)

@@ -7440,3 +7440,79 @@ Replaced the entire two-column `AccountPanel` layout with a **5-tile DashTile gr
   - confirm `PAYSTACK_WEBHOOK_SECRET` and dashboard webhook endpoint
   - manually verify silent refresh in-browser and PWA install flow
 - Repo verification is green, but build hardening remains open around Sentry App Router instrumentation.
+
+---
+
+## Session 2026-05-03 (continued 2) — CBT end-to-end fix + tenant admin CBT management rewrite
+
+**Phase:** Phase 10 — Admin Analytics, Security Audit & Launch
+**AI Assistant:** Claude Sonnet 4.6
+
+### What Was Done
+
+#### 1. CBT Registration Fix — deployed
+- Previously deployed fix (`a7756c2` / `fly deploy`) removed `serviceCategoryIds` from `RegisterCbtSchema` so the registration form no longer throws "Required" for that field.
+- Confirmed working: user registered a new CBT center successfully this session.
+
+#### 2. CBT Dashboard — PENDING/REJECTED state (`2390ae1`)
+- **Root cause**: `getCbtDashboard` called `ensureApprovedCbtUser` which throws `ForbiddenException` for non-APPROVED centers. Newly registered `PENDING` centers saw a generic error screen.
+- **Backend fix** (`orders.service.ts`): Method now queries user + CBT profile directly without an approval guard. If `approvalStatus !== APPROVED`, returns zeroed metrics + empty arrays instead of throwing. Full job queries still only run for APPROVED centers.
+- **Frontend fix** (`(cbt)/dashboard/page.tsx`): Split error state from approval state. PENDING → amber "Awaiting approval" card. REJECTED → rose "Application rejected" card. True API errors show the retry card as before.
+- Deployed to `zentry-api-prod` via `fly deploy`.
+
+#### 3. Tenant Admin CBT Management Page rewrite (`71e4f96`)
+Full rewrite of `apps/web/src/app/(tenant-admin)/tenant/cbt-management/page.tsx`.
+
+**Root cause**: Page used `useTenantUsers` which returns basic user rows with no `cbtProfile` data. The backend already allows `TENANT_ADMIN` on all CBT admin endpoints (`GET /users/admin/cbt`, approve, reject, categories).
+
+**Changes:**
+- Hook swapped from `useTenantUsers` → `useAdminCbtApplications` (returns full `AdminCbtApplication` with `cbtProfile`)
+- Status filter pill tabs: All / Pending / Approved / Rejected
+- List rows now show `PENDING / APPROVED / REJECTED / SUSPENDED` approval status badge (was "Active/Paused")
+- Center name shown as primary row label (was owner's name)
+- Detail modal (width="lg") now shows: center name + approval badge, owner name + phone, license number, state, LGA, applied date, full address, supporting doc link (or "none"), rejection reason (if any)
+- Service category assignment: checkboxes with "Save" — required before Approve button is enabled (mirrors backend constraint)
+- Approve + Reject with inline reason textarea (matches super admin CBT page UX)
+- Added `PageHero` at top (was missing)
+- Removed `AccountPanel` (old pattern)
+
+#### 4. Hydration Refactor (`8452713`)
+- Extracted `apps/web/src/hooks/use-hydrated.ts` — a single shared hook replacing the repeated `useState`/`useEffect` mount-guard pattern used across all layout files.
+- Applied to: `(cbt)/layout`, `(dashboard)/layout`, `(tenant-admin)/layout`, `protected-shell`, `top-bar`, `auth-shell`, `install-prompt`.
+- `install-prompt` also fixed: dismissed state now uses key-indexed overrides (`Record<string, boolean>`) instead of a single boolean, preventing stale dismissed reads on tenant context change.
+
+### Files Created
+- `apps/web/src/hooks/use-hydrated.ts`
+
+### Files Modified
+- `apps/api/src/modules/orders/orders.service.ts` — CBT dashboard non-approved fix
+- `apps/web/src/app/(cbt)/dashboard/page.tsx` — pending/rejected state cards
+- `apps/web/src/app/(tenant-admin)/tenant/cbt-management/page.tsx` — full rewrite
+- `apps/web/src/app/(cbt)/layout.tsx` — useHydrated
+- `apps/web/src/app/(dashboard)/layout.tsx` — useHydrated
+- `apps/web/src/app/(tenant-admin)/layout.tsx` — useHydrated
+- `apps/web/src/components/layout/protected-shell.tsx` — useHydrated
+- `apps/web/src/components/layout/top-bar.tsx` — useHydrated
+- `apps/web/src/components/auth/auth-shell.tsx` — useHydrated
+- `apps/web/src/components/pwa/install-prompt.tsx` — useHydrated + key-indexed dismissed state
+- Various API files — formatting/lint cleanup only (no logic changes)
+- `docs/ai-context/PHASES.md`
+- `docs/ai-context/SESSION_LOG.md`
+
+### Commits
+
+- `2390ae1` — CBT dashboard fix + deployed
+- `71e4f96` — Tenant admin CBT management rewrite
+- `e456675` — Session log update (mid-session)
+- `8452713` — Hydration refactor + API lint cleanup + prior docs
+
+### Verification
+
+- `pnpm --filter web exec tsc --noEmit` — clean after each change
+- `fly deploy --app zentry-api-prod` — machine `7849236f167d58` reached good state
+
+### Blockers / Notes for Next Session
+
+- No CI auto-deploy for Fly.io — manual `fly deploy` required after each API push.
+- Fly deploy CLI sometimes times out with "net/http: request canceled" on rolling update; machine self-recovers and health checks pass. Re-run deploy once machine is stable.
+- Production-truth pass still pending: Sentry Vercel env vars, `app.zendocx.net` CNAME, Paystack webhook secret, silent refresh browser test, PWA install.
