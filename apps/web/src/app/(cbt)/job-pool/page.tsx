@@ -41,6 +41,7 @@ export default function JobPoolPage() {
     reload: reloadDetail,
   } = useCbtJobDetail(effectiveSelectedJobId);
   const claimJob = useClaimCbtJob();
+  const showInlineDetailActions = !usesMobileSheet;
 
   const handleClaimJob = async (orderId: string) => {
     try {
@@ -60,6 +61,28 @@ export default function JobPoolPage() {
       setIsMobileDetailOpen(true);
     }
   };
+
+  const detailActions = detail ? (
+    <div className="flex flex-col gap-3 sm:flex-row">
+      <Link
+        href="/my-jobs"
+        className="inline-flex flex-1 items-center justify-center rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+      >
+        Review my jobs
+      </Link>
+      <button
+        type="button"
+        disabled={
+          claimJob.isPending || detail.status !== 'PENDING' || Boolean(detail.assignedCbt)
+        }
+        onClick={() => handleClaimJob(detail.id)}
+        className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[#0D1B3E] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#132754] disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {claimJob.isPending ? <Loader2 size={16} className="animate-spin" /> : null}
+        {claimJob.isPending ? 'Claiming...' : 'Claim this job'}
+      </button>
+    </div>
+  ) : null;
 
   const detailContent = (
     <>
@@ -101,8 +124,8 @@ export default function JobPoolPage() {
           <div className="grid gap-3 sm:grid-cols-2">
             <MetricPill label="Requester" value={detail.requester.email} />
             <MetricPill label="Status" value={detail.status} />
-            <MetricPill label="Amount" value={formatNaira(detail.totalAmount)} />
-            <MetricPill label="Commission" value={formatNaira(detail.cbtCommission)} />
+            <MetricPill label="Order amount" value={formatNaira(detail.totalAmount)} />
+            <MetricPill label="Your commission" value={formatNaira(detail.cbtCommission)} />
           </div>
 
           <div className="rounded-3xl border border-slate-100 bg-slate-50/70 p-5">
@@ -134,27 +157,7 @@ export default function JobPoolPage() {
             </p>
           </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <Link
-              href="/my-jobs"
-              className="inline-flex flex-1 items-center justify-center rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-            >
-              Review my jobs
-            </Link>
-            <button
-              type="button"
-              disabled={
-                claimJob.isPending || detail.status !== 'PENDING' || Boolean(detail.assignedCbt)
-              }
-              onClick={() => handleClaimJob(detail.id)}
-              className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[#0D1B3E] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#132754] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {claimJob.isPending ? (
-                <Loader2 size={16} className="animate-spin" />
-              ) : null}
-              {claimJob.isPending ? 'Claiming...' : 'Claim this job'}
-            </button>
-          </div>
+          {showInlineDetailActions ? detailActions : null}
         </div>
       ) : (
         <div className="mt-6 rounded-[1.5rem] border border-slate-100 bg-slate-50">
@@ -318,33 +321,7 @@ export default function JobPoolPage() {
         description={
           detail ? `${detail.orderNumber} • ${detail.service.category.name}` : 'Review the selected request.'
         }
-        footer={
-          detail ? (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Link
-                href="/my-jobs"
-                className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-              >
-                Review my jobs
-              </Link>
-              <button
-                type="button"
-                disabled={
-                  claimJob.isPending ||
-                  detail.status !== 'PENDING' ||
-                  Boolean(detail.assignedCbt)
-                }
-                onClick={() => handleClaimJob(detail.id)}
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#0D1B3E] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#132754] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {claimJob.isPending ? (
-                  <Loader2 size={16} className="animate-spin" />
-                ) : null}
-                {claimJob.isPending ? 'Claiming...' : 'Claim this job'}
-              </button>
-            </div>
-          ) : null
-        }
+        footer={detailActions}
       >
         {detailContent}
       </MobileSheet>
