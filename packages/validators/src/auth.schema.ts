@@ -39,9 +39,6 @@ export const RegisterCbtSchema = RegisterIndividualSchema.innerType().extend({
   address: z.string().min(10, 'Please provide a full address').max(255),
   state: z.string().min(2).max(50),
   lga: z.string().min(2).max(50),
-  serviceCategoryIds: z
-    .array(z.string().min(1))
-    .min(1, 'Select at least one service category your CBT can handle'),
   confirmPassword: z.string(),
 }).refine((data) => data.password === data.confirmPassword, {
   message: 'Passwords do not match',
