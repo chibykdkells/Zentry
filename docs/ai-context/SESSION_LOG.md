@@ -7516,3 +7516,46 @@ Full rewrite of `apps/web/src/app/(tenant-admin)/tenant/cbt-management/page.tsx`
 - No CI auto-deploy for Fly.io — manual `fly deploy` required after each API push.
 - Fly deploy CLI sometimes times out with "net/http: request canceled" on rolling update; machine self-recovers and health checks pass. Re-run deploy once machine is stable.
 - Production-truth pass still pending: Sentry Vercel env vars, `app.zendocx.net` CNAME, Paystack webhook secret, silent refresh browser test, PWA install.
+
+---
+
+## Session 2026-05-03 (continued 3) — Admin CBT button fix + Paystack live payment redirect fix
+
+**Phase:** Phase 10 — Admin Analytics, Security Audit & Launch
+**AI Assistant:** Claude Sonnet 4.6
+
+### What Was Done
+
+#### 1. Admin CBT page — button layout fix
+Approve and Reject buttons in the super-admin CBT detail modal (`/admin/cbt`) both had `flex-1` applied, causing them to each stretch to half the modal footer width instead of sizing to their content. Removed `flex-1` from both buttons and bumped `px-4` → `px-6` to maintain comfortable padding.
+
+#### 2. Wallet page — Paystack live payment redirect fix
+The wallet page `useEffect` Paystack callback handler had the condition:
+```ts
+if (!reference || checkout !== 'sandbox') { return; }
+```
+This silently ignored all live Paystack redirects (which carry `?reference=xxx` but no `?checkout=sandbox`). Changed to:
+```ts
+if (!reference) { return; }
+```
+The effect now calls `POST /wallet/fund/confirm` with the reference regardless of whether it's a sandbox or live payment. The backend `confirmFundingReference` already handles both paths correctly — sandbox skips provider verification, live calls `paymentService.verifyPayment(reference)`.
+
+Cleaned up:
+- Removed unused `checkout` variable from `searchParams` read
+- Renamed `confirmingSandboxFunding` state → `confirmingFunding` (name was no longer accurate)
+- Updated loading indicator text from "Confirming sandbox funding..." → "Confirming payment..."
+- Updated error toast text to be payment-mode agnostic
+
+#### 3. Deployed
+Both frontend changes committed and pushed to `main` (Vercel auto-deploys). API deploy triggered via `fly deploy` — machine `7849236f167d58` reached good state.
+
+### Files Modified
+- `apps/web/src/app/(admin)/admin/cbt/page.tsx` — removed `flex-1` from Approve/Reject buttons
+- `apps/web/src/app/wallet/page.tsx` — fixed Paystack live redirect handler
+
+### Commits
+- `fb66a68` — Fix admin CBT button layout and wallet Paystack live payment redirect
+
+### Blockers / Notes for Next Session
+- **PAYSTACK_WEBHOOK_SECRET must be verified**: `PAYSTACK_WEBHOOK_SECRET=49bb8a67b557e235` is set on Fly.io. Confirm this exactly matches the secret shown in your Paystack dashboard under Settings → API Keys & Webhooks → Webhook Secret. If they don't match, the webhook signature check fails silently and wallet balances won't update on payment events. The redirect-based confirm (just fixed) is a fallback but webhooks are the reliable path.
+- Production-truth pass still pending: Sentry Vercel env vars, `app.zendocx.net` CNAME, silent refresh browser test, PWA install.

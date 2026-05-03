@@ -12,8 +12,8 @@
 
 ```
 Active Phase  : Phase 10 — Admin Analytics, Security Audit & Launch (IN PROGRESS)
-Last Session  : 2026-05-03 (CBT registration, dashboard, and tenant admin CBT management fully fixed and deployed)
-Next Action   : Production-truth pass: Vercel Sentry env vars, app.zendocx.net CNAME, Paystack webhook secret, silent refresh, PWA install flow
+Last Session  : 2026-05-03 (Admin CBT button layout fixed; wallet Paystack live-redirect handler fixed and deployed)
+Next Action   : Verify PAYSTACK_WEBHOOK_SECRET on Fly matches Paystack dashboard. Then: Sentry Vercel env vars, app.zendocx.net CNAME, silent refresh, PWA install flow
 ```
 
 ---
@@ -717,10 +717,12 @@ optimized. Production deployed.
 - [x] CBT dashboard fixed for PENDING/REJECTED centers — returns status data instead of 403
 - [x] Tenant admin CBT management page rewritten — uses useAdminCbtApplications, full approve/reject/category-assign workflow, approval status badges, PageHero
 - [x] Hydration refactor — shared useHydrated hook replaces repeated useState/useEffect mount guard across all layouts
+- [x] Admin CBT detail modal button layout fixed — removed flex-1 from Approve/Reject buttons
+- [x] Wallet Paystack live payment redirect fixed — removed checkout=sandbox guard; POST /wallet/fund/confirm now fires for both sandbox and live redirects
 - [ ] Confirm password reset email delivery in production (run fly logs --app zentry-api-prod)
 - [ ] Sentry Vercel env vars still needed: NEXT_PUBLIC_SENTRY_DSN, SENTRY_ORG=zendocx, SENTRY_PROJECT=zendocx-web
 - [ ] app.zendocx.net CNAME record in Cloudflare (add app → cname.vercel-dns.com)
-- [ ] Paystack webhook production truth pass (secret + dashboard webhook endpoint verification)
+- [ ] Paystack webhook production truth pass — verify PAYSTACK_WEBHOOK_SECRET on Fly matches Paystack dashboard secret exactly
 - [ ] Manual browser verification: silent refresh on 401 and PWA install flow
 - [ ] Load testing: simulate 500 concurrent users
 - [ ] Launch checklist signed off
