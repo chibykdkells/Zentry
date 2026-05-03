@@ -1,164 +1,225 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import toast from 'react-hot-toast';
-import { UserRole } from '@zendocx/types';
-import { ShieldCheck } from 'lucide-react';
-import { AccountPanel } from '@/components/shared/account-panel';
+import { CbtApprovalStatus } from '@zendocx/types';
+import { CheckCircle2, ExternalLink, Loader2, ShieldCheck, XCircle } from 'lucide-react';
 import { DetailModal } from '@/components/shared/detail-modal';
 import { EmptyState } from '@/components/shared/empty-state';
-import { FeedbackBanner } from '@/components/shared/feedback-banner';
+import { PageHero } from '@/components/shared/page-hero';
 import { SkeletonBlock } from '@/components/shared/skeleton-loader';
 import {
-  useDeleteTenantUser,
-  useTenantUsers,
-  useUpdateTenantUserRole,
-} from '@/hooks/use-tenant-admin';
+  useAdminCbtApplications,
+  useApproveCbtCenter,
+  useAssignableCbtServiceCategories,
+  useRejectCbtCenter,
+  useUpdateCbtServiceCategories,
+  type AdminCbtApplication,
+} from '@/hooks/use-admin-cbt';
 import { getApiErrorMessage } from '@/lib/api-error';
 import { formatDate } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
+const STATUS_OPTIONS: Array<{ label: string; value: CbtApprovalStatus | 'ALL' }> = [
+  { label: 'All', value: 'ALL' },
+  { label: 'Pending', value: CbtApprovalStatus.PENDING },
+  { label: 'Approved', value: CbtApprovalStatus.APPROVED },
+  { label: 'Rejected', value: CbtApprovalStatus.REJECTED },
+];
+
+const STATUS_STYLES: Record<CbtApprovalStatus, string> = {
+  [CbtApprovalStatus.PENDING]: 'bg-amber-50 text-amber-700 border-amber-200',
+  [CbtApprovalStatus.APPROVED]: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  [CbtApprovalStatus.REJECTED]: 'bg-rose-50 text-rose-700 border-rose-200',
+  [CbtApprovalStatus.SUSPENDED]: 'bg-slate-100 text-slate-600 border-slate-200',
+};
+
 export default function TenantCbtManagementPage() {
-  const [search, setSearch] = useState('');
-  const [searchInput, setSearchInput] = useState('');
+  const [statusFilter, setStatusFilter] = useState<CbtApprovalStatus | 'ALL'>('ALL');
   const [page, setPage] = useState(1);
   const [openUserId, setOpenUserId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [showRejectInput, setShowRejectInput] = useState(false);
+  const [categorySelection, setCategorySelection] = useState<{ userId: string | null; ids: string[] }>({
+    userId: null,
+    ids: [],
+  });
 
-  const filters = useMemo(
-    () => ({ page, limit: 12, search, role: UserRole.CBT_CENTER }),
-    [page, search],
-  );
+  const { applications, meta, loading, error, reload } = useAdminCbtApplications({
+    status: statusFilter,
+    page,
+    limit: 12,
+  });
 
-  const { users, pagination, loading, error, reload } = useTenantUsers(filters);
-  const updateTenantUserRole = useUpdateTenantUserRole();
-  const deleteTenantUser = useDeleteTenantUser();
-  const openUser = users.find((u) => u.id === openUserId) ?? null;
+  const approve = useApproveCbtCenter();
+  const reject = useRejectCbtCenter();
+  const updateCategories = useUpdateCbtServiceCategories();
+
+  const openApp = applications.find((a) => a.id === openUserId) ?? null;
+
+  const { categories, loading: categoriesLoading, error: categoriesError } =
+    useAssignableCbtServiceCategories(openUserId);
+
+  const selectedCategoryIds =
+    categorySelection.userId === openUserId
+      ? categorySelection.ids
+      : (openApp?.cbtProfile?.serviceCategories.map((c) => c.id) ?? []);
+
+  const handleOpen = (app: AdminCbtApplication) => {
+    setOpenUserId(app.id);
+    setCategorySelection({
+      userId: app.id,
+      ids: app.cbtProfile?.serviceCategories.map((c) => c.id) ?? [],
+    });
+    setShowRejectInput(false);
+    setRejectReason('');
+  };
+
+  const handleClose = () => {
+    setOpenUserId(null);
+    setShowRejectInput(false);
+    setRejectReason('');
+  };
+
+  const handleApprove = async () => {
+    if (!openApp) return;
+    try {
+      await approve.mutateAsync(openApp.id);
+      toast.success(`${openApp.cbtProfile?.centerName ?? 'CBT center'} approved`);
+      handleClose();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Could not approve this center right now'));
+    }
+  };
+
+  const handleReject = async () => {
+    if (!openApp) return;
+    if (!showRejectInput) { setShowRejectInput(true); return; }
+    if (rejectReason.trim().length < 5) {
+      toast.error('Please provide a rejection reason (at least 5 characters)');
+      return;
+    }
+    try {
+      await reject.mutateAsync({ userId: openApp.id, reason: rejectReason.trim() });
+      toast.success(`${openApp.cbtProfile?.centerName ?? 'CBT center'} rejected`);
+      handleClose();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Could not reject this center right now'));
+    }
+  };
+
+  const handleSaveCategories = async () => {
+    if (!openApp) return;
+    if (!selectedCategoryIds.length) {
+      toast.error('Select at least one supported category before saving.');
+      return;
+    }
+    try {
+      await updateCategories.mutateAsync({ userId: openApp.id, serviceCategoryIds: selectedCategoryIds });
+      toast.success('Supported categories updated.');
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Could not update categories right now'));
+    }
+  };
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-4 md:p-8">
-      <AccountPanel
-        title="CBT centers"
-        description="Licensed fulfillers registered in this business portal. Click any row to view details."
-        actions={
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <input
-              value={searchInput}
-              onChange={(event) => setSearchInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  setSearch(searchInput.trim());
-                  setPage(1);
-                }
-              }}
-              placeholder="Search name or email"
-              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-[#0D1B3E] focus:ring-2 focus:ring-[#0D1B3E]/10 sm:w-56"
-            />
-            <button
-              type="button"
-              onClick={() => {
-                setSearch(searchInput.trim());
-                setPage(1);
-              }}
-              className="rounded-2xl bg-brand-button px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-button-strong"
-            >
-              Search
-            </button>
-          </div>
-        }
-      >
-        {updateTenantUserRole.error ? (
-          <FeedbackBanner
-            tone="error"
-            message={getApiErrorMessage(
-              updateTenantUserRole.error,
-              'Could not update this CBT role right now.',
-            )}
-          />
-        ) : null}
+      <PageHero
+        eyebrow="CBT operator management"
+        title="Registered CBT centers"
+        description="Review applications, assign supported service categories, and approve or reject licensed fulfillers registered in this business portal."
+      />
 
-        {deleteTenantUser.error ? (
-          <FeedbackBanner
-            tone="error"
-            message={getApiErrorMessage(
-              deleteTenantUser.error,
-              'Could not remove this CBT user right now.',
+      {/* Status filter */}
+      <div className="flex flex-wrap gap-2">
+        {STATUS_OPTIONS.map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => { setStatusFilter(opt.value); setPage(1); }}
+            className={cn(
+              'rounded-full border px-4 py-2 text-sm font-semibold transition',
+              statusFilter === opt.value
+                ? 'border-[#0D1B3E] bg-[#0D1B3E] text-white'
+                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
             )}
-          />
-        ) : null}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
 
+      {/* List */}
+      <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
         {loading ? (
           <div className="space-y-2">
-            {Array.from({ length: 4 }).map((_, index) => (
-              <SkeletonBlock key={index} className="h-14 rounded-2xl" />
+            {Array.from({ length: 5 }).map((_, i) => (
+              <SkeletonBlock key={i} className="h-14 rounded-2xl" />
             ))}
           </div>
         ) : error ? (
           <EmptyState
-            title="CBT center list unavailable"
+            title="CBT centers unavailable"
             message={error}
             icon={ShieldCheck}
             action={
               <button
                 type="button"
-                onClick={reload}
+                onClick={() => { void reload(); }}
                 className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
               >
                 Try again
               </button>
             }
           />
-        ) : users.length ? (
+        ) : applications.length ? (
           <div className="space-y-1">
-            {users.map((user) => (
+            {applications.map((app) => (
               <button
-                key={user.id}
+                key={app.id}
                 type="button"
-                onClick={() => setOpenUserId(user.id)}
-                className="flex w-full items-center gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-left transition hover:border-slate-300 hover:bg-slate-50/60"
+                onClick={() => handleOpen(app)}
+                className="flex w-full items-center gap-4 rounded-2xl border border-slate-100 bg-white px-4 py-3.5 text-left transition hover:border-slate-200 hover:bg-slate-50/60"
               >
-                <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900">
-                  {user.firstName} {user.lastName}
-                </span>
-                <span className="hidden max-w-[200px] truncate text-sm text-slate-500 sm:block">
-                  {user.email}
-                </span>
-                <span
-                  className={cn(
-                    'shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold',
-                    user.isActive
-                      ? 'bg-emerald-50 text-emerald-700'
-                      : 'bg-rose-50 text-rose-700',
-                  )}
-                >
-                  {user.isActive ? 'Active' : 'Paused'}
-                </span>
-                <span className="hidden shrink-0 text-sm text-slate-400 sm:block">
-                  {formatDate(user.createdAt)}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-slate-900">
+                    {app.cbtProfile?.centerName ?? `${app.firstName} ${app.lastName}`}
+                  </p>
+                  <p className="truncate text-xs text-slate-500">{app.email}</p>
+                </div>
+                {app.cbtProfile ? (
+                  <span
+                    className={cn(
+                      'shrink-0 rounded-full border px-2.5 py-1 text-xs font-semibold',
+                      STATUS_STYLES[app.cbtProfile.approvalStatus],
+                    )}
+                  >
+                    {app.cbtProfile.approvalStatus}
+                  </span>
+                ) : null}
+                <span className="hidden shrink-0 text-xs text-slate-400 sm:block">
+                  {formatDate(app.createdAt)}
                 </span>
               </button>
             ))}
 
-            {pagination && pagination.totalPages > 1 ? (
+            {meta && meta.totalPages > 1 ? (
               <div className="flex items-center justify-between gap-3 border-t border-slate-100 pt-4 text-sm text-slate-500">
-                <p>
-                  Page {pagination.page} of {pagination.totalPages} · {pagination.total} CBT centers
-                </p>
+                <p>Page {meta.page} of {meta.totalPages} · {meta.total} centers</p>
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    disabled={pagination.page <= 1}
-                    onClick={() => setPage((current) => Math.max(current - 1, 1))}
-                    className="rounded-2xl border border-slate-200 bg-white px-4 py-2 font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={meta.page <= 1}
+                    onClick={() => setPage((p) => Math.max(p - 1, 1))}
+                    className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Previous
                   </button>
                   <button
                     type="button"
-                    disabled={pagination.page >= pagination.totalPages}
-                    onClick={() =>
-                      setPage((current) => Math.min(current + 1, pagination.totalPages))
-                    }
-                    className="rounded-2xl border border-slate-200 bg-white px-4 py-2 font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={meta.page >= meta.totalPages}
+                    onClick={() => setPage((p) => Math.min(p + 1, meta.totalPages))}
+                    className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Next
                   </button>
@@ -170,103 +231,196 @@ export default function TenantCbtManagementPage() {
           <EmptyState
             title="No CBT centers found"
             message={
-              search
-                ? 'No CBT centers matched your search. Try a different name or email.'
-                : 'CBT centers that register under this tenant portal will appear here.'
+              statusFilter !== 'ALL'
+                ? `No ${statusFilter.toLowerCase()} applications in this portal.`
+                : 'CBT centers that register under this portal will appear here.'
             }
             icon={ShieldCheck}
           />
         )}
-      </AccountPanel>
+      </div>
 
-      {openUser ? (
+      {/* Detail modal */}
+      {openApp ? (
         <DetailModal
           open
-          onClose={() => setOpenUserId(null)}
-          title={`${openUser.firstName} ${openUser.lastName}`}
-          description={openUser.email}
-          width="md"
+          onClose={handleClose}
+          title={openApp.cbtProfile?.centerName ?? `${openApp.firstName} ${openApp.lastName}`}
+          description={openApp.email}
+          width="lg"
           footer={
             <div className="space-y-3">
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <select
-                  defaultValue={openUser.role}
-                  onChange={(event) => {
-                    const nextRole = event.target.value as UserRole;
-                    if (nextRole === openUser.role) return;
-                    updateTenantUserRole.mutate(
-                      { userId: openUser.id, role: nextRole },
-                      {
-                        onSuccess: () => {
-                          toast.success(
-                            `${openUser.firstName} ${openUser.lastName} is now ${
-                              nextRole === UserRole.CBT_CENTER ? 'a CBT center' : 'an individual user'
-                            }.`,
-                          );
-                          setOpenUserId(null);
-                        },
-                      },
-                    );
-                  }}
-                  className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-brand-button focus:ring-2 focus:ring-brand-button/10"
-                >
-                  <option value={UserRole.CBT_CENTER}>CBT center</option>
-                  <option value={UserRole.INDIVIDUAL}>Individual user</option>
-                </select>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (
-                      !window.confirm(
-                        `Remove ${openUser.firstName} ${openUser.lastName} from this business?`,
-                      )
-                    )
-                      return;
-                    deleteTenantUser.mutate(openUser.id, {
-                      onSuccess: () => {
-                        toast.success(
-                          `${openUser.firstName} ${openUser.lastName} was removed.`,
-                        );
-                        setOpenUserId(null);
-                      },
-                    });
-                  }}
-                  className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
-                >
-                  Remove
-                </button>
+              {showRejectInput ? (
+                <textarea
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  placeholder="Provide a reason for rejection (required)..."
+                  rows={3}
+                  className="w-full rounded-2xl border border-rose-200 bg-rose-50/50 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-rose-400 focus:ring-2 focus:ring-rose-200"
+                />
+              ) : null}
+              <div className="flex flex-wrap gap-3">
+                {openApp.cbtProfile?.approvalStatus !== CbtApprovalStatus.APPROVED ? (
+                  <button
+                    type="button"
+                    disabled={
+                      approve.isPending || reject.isPending || updateCategories.isPending ||
+                      selectedCategoryIds.length === 0
+                    }
+                    onClick={() => { void handleApprove(); }}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-[#0D1B3E] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#132754] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {approve.isPending ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                    {approve.isPending ? 'Approving…' : 'Approve'}
+                  </button>
+                ) : null}
+                {openApp.cbtProfile?.approvalStatus !== CbtApprovalStatus.REJECTED ? (
+                  <button
+                    type="button"
+                    disabled={approve.isPending || reject.isPending || updateCategories.isPending}
+                    onClick={() => { void handleReject(); }}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-5 py-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {reject.isPending ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} />}
+                    {reject.isPending ? 'Rejecting…' : showRejectInput ? 'Confirm reject' : 'Reject'}
+                  </button>
+                ) : null}
+                {showRejectInput ? (
+                  <button
+                    type="button"
+                    onClick={() => { setShowRejectInput(false); setRejectReason(''); }}
+                    className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                ) : null}
               </div>
             </div>
           }
         >
-          <dl className="grid gap-y-3 text-sm sm:grid-cols-2 sm:gap-x-8">
-            <div className="flex items-center justify-between sm:contents">
-              <dt className="text-slate-500">Phone</dt>
-              <dd className="font-medium text-slate-900">{openUser.phone}</dd>
+          <div className="space-y-4">
+            {/* Profile header */}
+            <div className="flex items-start justify-between gap-4 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-4">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">
+                  {openApp.firstName} {openApp.lastName}
+                </p>
+                <p className="mt-0.5 text-sm text-slate-500">{openApp.phone}</p>
+              </div>
+              {openApp.cbtProfile ? (
+                <span
+                  className={cn(
+                    'shrink-0 rounded-full border px-2.5 py-1 text-xs font-semibold',
+                    STATUS_STYLES[openApp.cbtProfile.approvalStatus],
+                  )}
+                >
+                  {openApp.cbtProfile.approvalStatus}
+                </span>
+              ) : null}
             </div>
-            <div className="flex items-center justify-between sm:contents">
-              <dt className="text-slate-500">Status</dt>
-              <dd className={cn('font-medium', openUser.isActive ? 'text-emerald-600' : 'text-rose-600')}>
-                {openUser.isActive ? 'Active' : 'Paused'}
-              </dd>
+
+            {/* CBT profile fields */}
+            <div className="grid gap-3 sm:grid-cols-2">
+              {[
+                { label: 'License number', value: openApp.cbtProfile?.licenseNumber },
+                { label: 'State', value: openApp.cbtProfile?.state },
+                { label: 'LGA', value: openApp.cbtProfile?.lga },
+                { label: 'Applied', value: formatDate(openApp.cbtProfile?.createdAt ?? openApp.createdAt) },
+              ].map(({ label, value }) => (
+                <div key={label} className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">{label}</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-800">{value ?? '—'}</p>
+                </div>
+              ))}
             </div>
-            <div className="flex items-center justify-between sm:contents">
-              <dt className="text-slate-500">Email verified</dt>
-              <dd className="font-medium text-slate-900">
-                {openUser.isEmailVerified ? 'Yes' : 'Pending'}
-              </dd>
+
+            <div className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Address</p>
+              <p className="mt-1 text-sm text-slate-700">{openApp.cbtProfile?.address ?? '—'}</p>
             </div>
-            <div className="flex items-center justify-between sm:contents">
-              <dt className="text-slate-500">Joined</dt>
-              <dd className="font-medium text-slate-900">{formatDate(openUser.createdAt)}</dd>
+
+            {/* Supporting doc */}
+            {openApp.cbtProfile?.supportingDocUrl ? (
+              <a
+                href={openApp.cbtProfile.supportingDocUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#0D1B3E] transition hover:bg-slate-50"
+              >
+                <ExternalLink size={14} />
+                View supporting document
+              </a>
+            ) : (
+              <div className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+                <p className="text-sm italic text-slate-400">No supporting document uploaded</p>
+              </div>
+            )}
+
+            {/* Rejection reason (if any) */}
+            {openApp.cbtProfile?.rejectionReason ? (
+              <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-rose-600">Rejection reason</p>
+                <p className="mt-1 text-sm text-rose-700">{openApp.cbtProfile.rejectionReason}</p>
+              </div>
+            ) : null}
+
+            {/* Category assignment */}
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">Supported categories</p>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    Controls which manual jobs this center can see and claim.
+                    At least one is required before approving.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={updateCategories.isPending || !selectedCategoryIds.length}
+                  onClick={() => { void handleSaveCategories(); }}
+                  className="shrink-0 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {updateCategories.isPending ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+
+              {categoriesError ? (
+                <p className="mt-3 text-sm text-rose-600">{categoriesError}</p>
+              ) : categoriesLoading ? (
+                <p className="mt-3 text-sm text-slate-500">Loading categories…</p>
+              ) : categories.length ? (
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  {categories.map((cat) => {
+                    const checked = selectedCategoryIds.includes(cat.id);
+                    return (
+                      <label
+                        key={cat.id}
+                        className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm transition hover:bg-slate-50"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            const next = e.target.checked
+                              ? Array.from(new Set([...selectedCategoryIds, cat.id]))
+                              : selectedCategoryIds.filter((id) => id !== cat.id);
+                            setCategorySelection({ userId: openUserId, ids: next });
+                          }}
+                          className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#0D1B3E] focus:ring-[#0D1B3E]/20"
+                        />
+                        <span>
+                          <span className="block font-semibold text-slate-900">{cat.name}</span>
+                          <span className="mt-0.5 block text-xs text-slate-500">{cat.slug}</span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="mt-3 text-sm text-slate-500">No assignable categories available.</p>
+              )}
             </div>
-            <div className="flex items-center justify-between sm:contents">
-              <dt className="text-slate-500">Last sign-in</dt>
-              <dd className="font-medium text-slate-900">
-                {openUser.lastLoginAt ? formatDate(openUser.lastLoginAt) : 'Never'}
-              </dd>
-            </div>
-          </dl>
+          </div>
         </DetailModal>
       ) : null}
     </div>
