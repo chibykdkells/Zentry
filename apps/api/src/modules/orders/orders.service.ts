@@ -5300,6 +5300,11 @@ export class OrdersService {
   }
 
   private buildSupportedCbtCategoryWhere(categorySlugs: string[]) {
+    // Empty array in Prisma `in: []` matches nothing — skip the filter entirely
+    // so a center with no assigned categories still sees the full job pool.
+    if (categorySlugs.length === 0) {
+      return {} satisfies Prisma.OrderWhereInput;
+    }
     return {
       service: {
         category: {
