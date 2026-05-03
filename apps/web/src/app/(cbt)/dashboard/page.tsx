@@ -60,7 +60,7 @@ export default function CbtDashboardPage() {
           <h1 className="text-xl font-bold text-slate-900">Awaiting approval</h1>
           <p className="mt-2 text-sm leading-6 text-slate-600">
             <span className="font-semibold">{dashboard.centerName}</span> has been registered and is
-            pending review by the platform admin. You'll be notified once approved and can start
+            pending review by the platform admin. You&apos;ll be notified once approved and can start
             picking up jobs.
           </p>
         </div>

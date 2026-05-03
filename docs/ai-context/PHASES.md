@@ -1,6 +1,6 @@
 # PHASES.md — ZenDocx Build Phase Tracker
 
-> Last updated: 2026-04-12
+> Last updated: 2026-05-03
 > This file tracks exactly what has been built and what has not.
 > AI assistants MUST check this before writing any code to avoid
 > building things out of phase or duplicating completed work.
@@ -12,8 +12,8 @@
 
 ```
 Active Phase  : Phase 10 — Admin Analytics, Security Audit & Launch (IN PROGRESS)
-Last Session  : 2026-05-03 (Tenant admin UI overhaul — one-line rows + DetailModal, portal URL fix, noise removal, dashboard stat card reposition, Money/payout panel removed)
-Next Action   : Verify "Open portal" link shows public portal for authenticated admins, Sentry Vercel env vars, app.zendocx.net CNAME
+Last Session  : 2026-05-03 (Workspace verification pass completed — lint, typecheck, tests, and build all green after test/lint debt cleanup; remaining build warnings are Sentry App Router hardening and PWA precache size)
+Next Action   : Production-truth pass: verify live env/DNS/browser-only runtime items (Vercel Sentry env vars, app.zendocx.net CNAME, Paystack webhook secret, silent refresh, PWA install flow)
 ```
 
 ---
@@ -213,6 +213,11 @@ PWA installable, Provider Abstraction Layer interfaces defined.
   folders before `next typegen`, fixing cold-run failures under Turborepo, and
   the root workspace now has a `verify:phase1` script that runs lint,
   typecheck, test, and build as one closeout command.
+- Workspace verification re-confirmed on 2026-05-03:
+  `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build` all passed
+  after reconciling tenant-aware mocks, frontend hydration-safe lint fixes, and
+  current API lint/type debt. Remaining non-blocking build warnings are limited
+  to Sentry App Router hardening and a large PWA source-map precache skip.
 - Database closeout completed on 2026-04-06:
   the local Prisma migration history was reconciled with the already-applied
   `INDIVIDUAL` role rename, `pnpm db:migrate` and `pnpm db:seed` now pass
@@ -296,9 +301,7 @@ history, wallet dashboard UI.
 docs. Funds escrowed at order creation.
 
 ### Key Deliverables
-- [ ] ServiceCategory + Service CRUD (admin only)
-  Status note: category + service create/update/list are now live; delete and
-  deeper admin ergonomics can follow later.
+- [x] ServiceCategory + Service CRUD (admin only)
 - [ ] Dynamic form field system (admin defines fields, requester fills them)
 - [x] Order creation with escrow lock (atomic transaction)
 - [x] Document upload to storage provider for service requests
@@ -631,7 +634,7 @@ In-app notification center.
 - [x] Browser push subscription persistence (service worker + API)
 - [x] Push notification sent on key events (server-side)
 - [x] Email notifications: order confirmed, result ready, dispute update
-- [ ] SMS notifications: OTP (already done), key order updates
+- [x] SMS notifications: OTP and key order updates
 
 ### Notes
 - Phase 9 is no longer a future-only phase. The codebase already contains a
@@ -686,7 +689,7 @@ optimized. Production deployed.
 - [x] Security headers verified (CSP, HSTS, X-Frame-Options, Permissions-Policy all set)
 - [x] pnpm audit: zero critical vulnerabilities (9 remaining highs are transitive build-tool deps, not runtime-reachable)
 - [ ] Load testing: simulate 500 concurrent users
-- [ ] Sentry error monitoring configured (env vars documented in .env.example — needs DSN from sentry.io)
+- [ ] Sentry frontend App Router hardening (missing `global-error` handler, `onRequestError` hook, and `instrumentation-client` migration still produce build warnings)
 - [ ] UptimeRobot (or equivalent) health monitoring
 - [ ] Production PostgreSQL with daily backups
 - [ ] Production Redis with persistence configured
@@ -708,9 +711,12 @@ optimized. Production deployed.
 - [x] Tenant admin welcome email on account creation (TenantService)
 - [x] Platform login routing fix — /forgot-password and /reset-password now return to /platform/login for super admin (no tenant slug context)
 - [x] Dashboard and pages redesigned (StatCard, Sidebar icons, TenantPortalHome, admin services 3-tab)
+- [x] Workspace verification pass green (`pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`)
 - [ ] Confirm password reset email delivery in production (run fly logs --app zentry-api-prod)
 - [ ] Sentry Vercel env vars still needed: NEXT_PUBLIC_SENTRY_DSN, SENTRY_ORG=zendocx, SENTRY_PROJECT=zendocx-web
 - [ ] app.zendocx.net CNAME record in Cloudflare (add app → cname.vercel-dns.com)
+- [ ] Paystack webhook production truth pass (secret + dashboard webhook endpoint verification)
+- [ ] Manual browser verification: silent refresh on 401 and PWA install flow
 - [ ] Load testing: simulate 500 concurrent users
 - [ ] Launch checklist signed off
 

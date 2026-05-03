@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, type ElementType } from 'react';
+import { useMemo, useState } from 'react';
 import { ArrowRight, ChevronDown, Search, Zap, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { CreateOrderModal } from '@/components/orders/create-order-modal';

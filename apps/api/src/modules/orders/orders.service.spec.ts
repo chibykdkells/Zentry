@@ -1,7 +1,6 @@
-import {
-  ForbiddenException,
-  NotFoundException,
-} from '@nestjs/common';
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import {
   CbtApprovalStatus,
   DisputeStatus,
@@ -14,7 +13,9 @@ import {
 } from '@prisma/client';
 import { OrdersService } from './orders.service';
 
-const buildApprovedCbtUser = (categorySlugs: string[] = ['identity-services']) => ({
+const buildApprovedCbtUser = (
+  categorySlugs: string[] = ['identity-services'],
+) => ({
   id: 'cbt-1',
   role: UserRole.CBT_CENTER,
   cbtProfile: {
@@ -105,8 +106,11 @@ const buildOrderDetailRecord = (overrides: Record<string, unknown> = {}) => {
       ...(overrides.service as Record<string, unknown> | undefined),
       category: {
         ...base.service.category,
-        ...((overrides.service as { category?: Record<string, unknown> } | undefined)
-          ?.category ?? {}),
+        ...((
+          overrides.service as
+            | { category?: Record<string, unknown> }
+            | undefined
+        )?.category ?? {}),
       },
     },
     tenant:
@@ -128,8 +132,11 @@ const buildOrderDetailRecord = (overrides: Record<string, unknown> = {}) => {
             ...((overrides.assignedCbt as Record<string, unknown>) ?? {}),
             cbtProfile: {
               ...base.assignedCbt.cbtProfile,
-              ...((overrides.assignedCbt as { cbtProfile?: Record<string, unknown> } | undefined)
-                ?.cbtProfile ?? {}),
+              ...((
+                overrides.assignedCbt as
+                  | { cbtProfile?: Record<string, unknown> }
+                  | undefined
+              )?.cbtProfile ?? {}),
             },
           },
     dispute:
@@ -156,6 +163,9 @@ const buildOrderDetailRecord = (overrides: Record<string, unknown> = {}) => {
 
 describe('OrdersService', () => {
   let prisma: {
+    tenant: {
+      findUnique: jest.Mock;
+    };
     user: {
       findFirst: jest.Mock;
       findUnique: jest.Mock;
@@ -205,6 +215,9 @@ describe('OrdersService', () => {
 
   beforeEach(() => {
     prisma = {
+      tenant: {
+        findUnique: jest.fn().mockResolvedValue(null),
+      },
       user: {
         findFirst: jest.fn(),
         findUnique: jest.fn(),
@@ -281,11 +294,7 @@ describe('OrdersService', () => {
     prisma.order.count.mockResolvedValue(1);
     prisma.order.findMany.mockResolvedValue([]);
 
-    await service.getCbtJobPool(
-      'cbt-1',
-      { page: 1, limit: 10 },
-      'tenant-1',
-    );
+    await service.getCbtJobPool('cbt-1', { page: 1, limit: 10 }, 'tenant-1');
 
     expect(prisma.order.count).toHaveBeenCalledWith({
       where: expect.objectContaining({
@@ -388,7 +397,9 @@ describe('OrdersService', () => {
       name: 'Identity Validation',
       slug: 'identity-validation',
       totalPrice: 5000n,
+      providerCost: 3000n,
       platformFee: 1000n,
+      platformFeePercent: 20,
       cbtCommission: 2000n,
       providerKey: null,
       deliveryMode: ServiceDeliveryMode.CBT_MANUAL,
@@ -439,8 +450,8 @@ describe('OrdersService', () => {
       },
     };
 
-    prisma.$transaction.mockImplementation(async (callback: (client: typeof tx) => Promise<unknown>) =>
-      callback(tx),
+    prisma.$transaction.mockImplementation(
+      async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx),
     );
 
     const result = await service.createOrder(
@@ -549,8 +560,7 @@ describe('OrdersService', () => {
     };
 
     prisma.$transaction.mockImplementation(
-      async (callback: (client: typeof tx) => Promise<unknown>) =>
-        callback(tx),
+      async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx),
     );
     ordersReleaseQueueService.removeScheduledReleaseForOrder.mockResolvedValue({
       removed: true,
@@ -585,9 +595,9 @@ describe('OrdersService', () => {
         ],
       }),
     });
-    expect(ordersReleaseQueueService.removeScheduledReleaseForOrder).toHaveBeenCalledWith(
-      'order-1',
-    );
+    expect(
+      ordersReleaseQueueService.removeScheduledReleaseForOrder,
+    ).toHaveBeenCalledWith('order-1');
     expect(result.data.dispute?.evidenceFiles).toEqual([
       {
         url: 'https://files.example/evidence-1.pdf',
@@ -618,7 +628,9 @@ describe('OrdersService', () => {
       name: 'Identity Validation',
       slug: 'identity-validation',
       totalPrice: 5000n,
+      providerCost: 3000n,
       platformFee: 1000n,
+      platformFeePercent: 20,
       cbtCommission: 2000n,
       providerKey: null,
       deliveryMode: ServiceDeliveryMode.CBT_MANUAL,
@@ -631,7 +643,7 @@ describe('OrdersService', () => {
         slug: 'identity-services',
       },
     });
-    prisma.$transaction.mockImplementation(async () => {
+    prisma.$transaction.mockImplementation(() => {
       throw new Error('database write failed');
     });
     prisma.uploadedOrderFile.findMany.mockResolvedValue([
@@ -672,7 +684,7 @@ describe('OrdersService', () => {
       disputeWindowExpiresAt: new Date(Date.now() + 60 * 60 * 1000),
     });
     prisma.order.findFirst.mockResolvedValue(completedOrder);
-    prisma.$transaction.mockImplementation(async () => {
+    prisma.$transaction.mockImplementation(() => {
       throw new Error('dispute write failed');
     });
     prisma.uploadedOrderFile.findMany.mockResolvedValue([
@@ -745,8 +757,8 @@ describe('OrdersService', () => {
       },
     };
 
-    prisma.$transaction.mockImplementation(async (callback: (client: typeof tx) => Promise<unknown>) =>
-      callback(tx),
+    prisma.$transaction.mockImplementation(
+      async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx),
     );
     ordersReleaseQueueService.scheduleReleaseForOrder.mockResolvedValue({
       scheduled: true,
@@ -775,15 +787,15 @@ describe('OrdersService', () => {
         }),
         data: expect.objectContaining({
           status: OrderStatus.COMPLETED,
-          resultFileUrl: 'https://files.example/result.pdf',
+          resultFileUrl: 'result-public-id',
           cbtNotes: 'Completed successfully',
           disputeWindowExpiresAt: expect.any(Date),
         }),
       }),
     );
-    expect(ordersReleaseQueueService.scheduleReleaseForOrder).toHaveBeenCalledWith(
-      'order-1',
-    );
+    expect(
+      ordersReleaseQueueService.scheduleReleaseForOrder,
+    ).toHaveBeenCalledWith('order-1');
     expect(notificationsService.emitEventToUser).toHaveBeenCalledWith(
       'user-1',
       'order:completed',
@@ -842,8 +854,8 @@ describe('OrdersService', () => {
       },
     };
 
-    prisma.$transaction.mockImplementation(async (callback: (client: typeof tx) => Promise<unknown>) =>
-      callback(tx),
+    prisma.$transaction.mockImplementation(
+      async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx),
     );
     ordersReleaseQueueService.removeScheduledReleaseForOrder.mockResolvedValue({
       removed: true,
@@ -879,9 +891,9 @@ describe('OrdersService', () => {
         disputeWindowExpiresAt: null,
       },
     });
-    expect(ordersReleaseQueueService.removeScheduledReleaseForOrder).toHaveBeenCalledWith(
-      'order-1',
-    );
+    expect(
+      ordersReleaseQueueService.removeScheduledReleaseForOrder,
+    ).toHaveBeenCalledWith('order-1');
     expect(result.message).toBe('Redo requested successfully.');
   });
 
@@ -943,8 +955,8 @@ describe('OrdersService', () => {
       },
     };
 
-    prisma.$transaction.mockImplementation(async (callback: (client: typeof tx) => Promise<unknown>) =>
-      callback(tx),
+    prisma.$transaction.mockImplementation(
+      async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx),
     );
     ordersReleaseQueueService.removeScheduledReleaseForOrder.mockResolvedValue({
       removed: true,
@@ -976,9 +988,9 @@ describe('OrdersService', () => {
         }),
       }),
     );
-    expect(ordersReleaseQueueService.removeScheduledReleaseForOrder).toHaveBeenCalledWith(
-      'order-1',
-    );
+    expect(
+      ordersReleaseQueueService.removeScheduledReleaseForOrder,
+    ).toHaveBeenCalledWith('order-1');
     expect(result.message).toBe('Dispute resolved in favor of the requester.');
   });
 
@@ -1025,8 +1037,7 @@ describe('OrdersService', () => {
     };
 
     prisma.$transaction.mockImplementation(
-      async (callback: (client: typeof tx) => Promise<unknown>) =>
-        callback(tx),
+      async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx),
     );
     ordersReleaseQueueService.scheduleReleaseForOrder.mockResolvedValue({
       scheduled: true,
@@ -1062,9 +1073,9 @@ describe('OrdersService', () => {
         disputeWindowExpiresAt: new Date('2026-05-01T12:00:00.000Z'),
       },
     });
-    expect(ordersReleaseQueueService.scheduleReleaseForOrder).toHaveBeenCalledWith(
-      'order-1',
-    );
+    expect(
+      ordersReleaseQueueService.scheduleReleaseForOrder,
+    ).toHaveBeenCalledWith('order-1');
     expect(result.message).toBe('Dispute resolved in favor of the CBT center.');
   });
 });

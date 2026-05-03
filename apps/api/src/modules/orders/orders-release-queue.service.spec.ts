@@ -1,4 +1,11 @@
-import { OrderStatus, TransactionStatus, TransactionType, UserRole } from '@prisma/client';
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+
+import {
+  OrderStatus,
+  TransactionStatus,
+  TransactionType,
+  UserRole,
+} from '@prisma/client';
 import { OrdersReleaseQueueService } from './orders-release-queue.service';
 import {
   buildReleaseEscrowJobId,
@@ -150,8 +157,7 @@ describe('OrdersReleaseQueueService', () => {
     };
 
     prisma.$transaction.mockImplementation(
-      async (callback: (client: typeof tx) => Promise<unknown>) =>
-        callback(tx),
+      async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx),
     );
 
     const result = await service.processReleaseEscrow('order-1');

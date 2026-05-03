@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import toast from 'react-hot-toast';
 import {
   CheckCircle2,
@@ -48,7 +48,13 @@ export default function AdminCbtPage() {
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectInput, setShowRejectInput] = useState(false);
   const [isMobileDetailOpen, setIsMobileDetailOpen] = useState(false);
-  const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
+  const [categorySelection, setCategorySelection] = useState<{
+    userId: string | null;
+    ids: string[];
+  }>({
+    userId: null,
+    ids: [],
+  });
   const usesMobileSheet = useMediaQuery('(max-width: 1279px)');
 
   const { applications, meta, loading, error, reload } = useAdminCbtApplications({
@@ -73,15 +79,21 @@ export default function AdminCbtPage() {
   const approve = useApproveCbtCenter();
   const reject = useRejectCbtCenter();
   const updateCategories = useUpdateCbtServiceCategories();
-
-  useEffect(() => {
-    setSelectedCategoryIds(
-      selectedApp?.cbtProfile?.serviceCategories.map((category) => category.id) ?? [],
-    );
-  }, [selectedApp?.id, selectedApp?.cbtProfile?.serviceCategories]);
+  const selectedCategoryIds =
+    categorySelection.userId === effectiveSelectedUserId
+      ? categorySelection.ids
+      : (selectedApp?.cbtProfile?.serviceCategories.map((category) => category.id) ??
+        []);
 
   const handleSelectApp = (userId: string) => {
+    const nextSelectedApp = applications.find((application) => application.id === userId);
     setSelectedUserId(userId);
+    setCategorySelection({
+      userId,
+      ids:
+        nextSelectedApp?.cbtProfile?.serviceCategories.map((category) => category.id) ??
+        [],
+    });
     setShowRejectInput(false);
     setRejectReason('');
     if (usesMobileSheet) setIsMobileDetailOpen(true);
@@ -247,11 +259,16 @@ export default function AdminCbtPage() {
                         type="checkbox"
                         checked={checked}
                         onChange={(event) => {
-                          setSelectedCategoryIds((current) =>
-                            event.target.checked
-                              ? Array.from(new Set([...current, category.id]))
-                              : current.filter((value) => value !== category.id),
-                          );
+                          const nextIds = event.target.checked
+                            ? Array.from(new Set([...selectedCategoryIds, category.id]))
+                            : selectedCategoryIds.filter(
+                                (value) => value !== category.id,
+                              );
+
+                          setCategorySelection({
+                            userId: effectiveSelectedUserId,
+                            ids: nextIds,
+                          });
                         }}
                         className="mt-1 h-4 w-4 rounded border-slate-300 text-[#0D1B3E] focus:ring-[#0D1B3E]/20"
                       />

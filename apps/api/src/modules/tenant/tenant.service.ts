@@ -140,7 +140,9 @@ export class TenantService {
       };
     }
 
-    const jwtAccessSecret = this.config.get<string>('JWT_ACCESS_SECRET')?.trim();
+    const jwtAccessSecret = this.config
+      .get<string>('JWT_ACCESS_SECRET')
+      ?.trim();
     if (jwtAccessSecret) {
       return {
         value: jwtAccessSecret,
@@ -216,7 +218,10 @@ export class TenantService {
 
   private async resolveTxtRecords(hostname: string): Promise<string[]> {
     const records = await resolveTxt(hostname);
-    return records.flat().map((entry) => entry.trim()).filter(Boolean);
+    return records
+      .flat()
+      .map((entry) => entry.trim())
+      .filter(Boolean);
   }
 
   private async inspectDomainVerification(
@@ -235,8 +240,12 @@ export class TenantService {
     const checkedAt = new Date().toISOString();
 
     try {
-      const recordsFound = await this.resolveTxtRecords(verification.recordHost);
-      const expectedValueFound = recordsFound.includes(verification.recordValue);
+      const recordsFound = await this.resolveTxtRecords(
+        verification.recordHost,
+      );
+      const expectedValueFound = recordsFound.includes(
+        verification.recordValue,
+      );
 
       return {
         ...verification,
@@ -325,7 +334,9 @@ export class TenantService {
     ];
   }
 
-  private sanitizeHomepageManualSteps(value: Prisma.JsonValue | null | undefined) {
+  private sanitizeHomepageManualSteps(
+    value: Prisma.JsonValue | null | undefined,
+  ) {
     if (!Array.isArray(value)) {
       return this.getDefaultHomepageManualSteps();
     }
@@ -337,8 +348,12 @@ export class TenantService {
         }
 
         const record = item as Record<string, unknown>;
-        const title = String(record.title ?? '').trim();
-        const description = String(record.description ?? '').trim();
+        const title =
+          typeof record.title === 'string' ? record.title.trim() : '';
+        const description =
+          typeof record.description === 'string'
+            ? record.description.trim()
+            : '';
 
         if (!title || !description) {
           return null;
@@ -349,7 +364,9 @@ export class TenantService {
       .filter((item): item is TenantHomepageStep => Boolean(item))
       .slice(0, 4);
 
-    return normalized.length ? normalized : this.getDefaultHomepageManualSteps();
+    return normalized.length
+      ? normalized
+      : this.getDefaultHomepageManualSteps();
   }
 
   private normalizeTenantAdminPermissions(
@@ -361,7 +378,7 @@ export class TenantService {
     return Array.from(
       new Set(
         input
-          .map((item) => String(item).trim())
+          .map((item) => (typeof item === 'string' ? item.trim() : ''))
           .filter((item): item is TenantAdminPermission => allowed.has(item)),
       ),
     );
@@ -390,7 +407,7 @@ export class TenantService {
       throw new NotFoundException('User not found');
     }
 
-    if (membership.role !== UserRole.TENANT_ADMIN || !membership.tenantId) {
+    if (membership.role !== 'TENANT_ADMIN' || !membership.tenantId) {
       throw new ForbiddenException('Tenant admin access is required');
     }
 
@@ -452,8 +469,7 @@ export class TenantService {
         homepageHeading: `Access ${dto.name} from one business portal`,
         homepageSubheading:
           'Start with the public business homepage, review available services, then sign in or create your account when you are ready.',
-        homepageAbout:
-          `${dto.name} uses ZenDocx to manage service requests, customer onboarding, and manual document workflows from one tenant-owned workspace.`,
+        homepageAbout: `${dto.name} uses ZenDocx to manage service requests, customer onboarding, and manual document workflows from one tenant-owned workspace.`,
         homepageManualSteps:
           this.getDefaultHomepageManualSteps() as unknown as Prisma.InputJsonValue,
         tenantMarginRate: dto.tenantMarginRate ?? 0,
@@ -629,10 +645,7 @@ export class TenantService {
     const nextCustomDomain =
       customDomain === undefined ? tenant.customDomain : customDomain;
 
-    if (
-      customDomain !== undefined &&
-      customDomain !== tenant.customDomain
-    ) {
+    if (customDomain !== undefined && customDomain !== tenant.customDomain) {
       if (customDomain !== null) {
         const conflict = await this.prisma.tenant.findUnique({
           where: { customDomain },
@@ -724,13 +737,12 @@ export class TenantService {
       }
     }
 
-    const updatedTenant =
-      tenant.customDomainVerified
-        ? tenant
-        : await this.prisma.tenant.update({
-            where: { id: tenant.id },
-            data: { customDomainVerified: true },
-          });
+    const updatedTenant = tenant.customDomainVerified
+      ? tenant
+      : await this.prisma.tenant.update({
+          where: { id: tenant.id },
+          data: { customDomainVerified: true },
+        });
 
     await this.prisma.auditLog.create({
       data: {
@@ -740,8 +752,9 @@ export class TenantService {
         entity: 'Tenant',
         entityId: tenant.id,
         oldValues: this.toPublic(tenant) as unknown as Prisma.InputJsonValue,
-        newValues:
-          this.toPublic(updatedTenant) as unknown as Prisma.InputJsonValue,
+        newValues: this.toPublic(
+          updatedTenant,
+        ) as unknown as Prisma.InputJsonValue,
       },
     });
 
@@ -916,7 +929,11 @@ export class TenantService {
     createdById: string,
   ) {
     const tenant = await this.getTenantById(tenantId);
-    const created = await this.createTenantAdminAccount(tenantId, dto, createdById);
+    const created = await this.createTenantAdminAccount(
+      tenantId,
+      dto,
+      createdById,
+    );
 
     return {
       message: `Tenant admin created for "${tenant.name}". Share the temporary password securely and remove the saved access when handoff is complete.`,
@@ -1148,8 +1165,7 @@ export class TenantService {
     const updated = await this.prisma.user.update({
       where: { id: targetUser.id },
       data: {
-        adminPermissions:
-          nextPermissions as unknown as Prisma.InputJsonValue,
+        adminPermissions: nextPermissions as unknown as Prisma.InputJsonValue,
         isActive: nextIsActive,
       },
       select: {
@@ -1581,7 +1597,7 @@ export class TenantService {
         users: users.map((user) => ({
           ...user,
           adminPermissions:
-            user.role === UserRole.TENANT_ADMIN
+            user.role === 'TENANT_ADMIN'
               ? this.getEffectiveTenantAdminPermissions(user.adminPermissions)
               : undefined,
           createdAt: user.createdAt.toISOString(),
@@ -1664,7 +1680,7 @@ export class TenantService {
         users: users.map((user) => ({
           ...user,
           adminPermissions:
-            user.role === UserRole.TENANT_ADMIN
+            user.role === 'TENANT_ADMIN'
               ? this.getEffectiveTenantAdminPermissions(user.adminPermissions)
               : undefined,
           createdAt: user.createdAt.toISOString(),
@@ -1858,11 +1874,10 @@ export class TenantService {
             : (dto.homepageAbout ?? null),
         homepageManualSteps:
           dto.homepageManualSteps === undefined
-          ? (tenant.homepageManualSteps as Prisma.InputJsonValue)
-          : (dto.homepageManualSteps as unknown as Prisma.InputJsonValue),
+            ? (tenant.homepageManualSteps as Prisma.InputJsonValue)
+            : (dto.homepageManualSteps as unknown as Prisma.InputJsonValue),
         customDomain: nextCustomDomain,
-        ...(customDomain !== undefined &&
-        customDomain !== tenant.customDomain
+        ...(customDomain !== undefined && customDomain !== tenant.customDomain
           ? { customDomainVerified: false }
           : {}),
       },
@@ -1936,13 +1951,11 @@ export class TenantService {
       fontStyle: tenant.fontStyle,
       customDomain: tenant.customDomain,
       customDomainVerified: tenant.customDomainVerified,
-      homepageTemplate: (
-        TENANT_HOMEPAGE_TEMPLATES.includes(
-          tenant.homepageTemplate as (typeof TENANT_HOMEPAGE_TEMPLATES)[number],
-        )
-          ? tenant.homepageTemplate
-          : TENANT_HOMEPAGE_TEMPLATES[0]
-      ) as TenantPublic['homepageTemplate'],
+      homepageTemplate: (TENANT_HOMEPAGE_TEMPLATES.includes(
+        tenant.homepageTemplate as (typeof TENANT_HOMEPAGE_TEMPLATES)[number],
+      )
+        ? tenant.homepageTemplate
+        : TENANT_HOMEPAGE_TEMPLATES[0]) as TenantPublic['homepageTemplate'],
       homepageHeading:
         tenant.homepageHeading ??
         `Access ${tenant.name} from one business portal`,

@@ -26,10 +26,7 @@ export class CbtController {
   /** Delete a staff account (CBT center must own the account; no active orders) */
   @Delete('staff/:staffId')
   @Roles(UserRole.CBT_CENTER)
-  deleteStaff(
-    @CurrentUser() user: JwtUser,
-    @Param('staffId') staffId: string,
-  ) {
+  deleteStaff(@CurrentUser() user: JwtUser, @Param('staffId') staffId: string) {
     return this.cbtService.deleteStaff(user.sub, staffId);
   }
 }

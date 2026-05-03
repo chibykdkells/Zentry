@@ -24,13 +24,7 @@ export const UpdateOwnTenantSettingsSchema = z.object({
   customDomain: z.string().trim().min(4).nullable().optional(),
   homepageTemplate: z.enum(TENANT_HOMEPAGE_TEMPLATES).optional(),
   homepageHeading: z.string().trim().min(8).max(120).nullable().optional(),
-  homepageSubheading: z
-    .string()
-    .trim()
-    .min(12)
-    .max(220)
-    .nullable()
-    .optional(),
+  homepageSubheading: z.string().trim().min(12).max(220).nullable().optional(),
   homepageAbout: z.string().trim().min(24).max(900).nullable().optional(),
   homepageManualSteps: z
     .array(

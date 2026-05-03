@@ -1,6 +1,5 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { Sidebar } from '@/components/layout/sidebar';
 import { BottomNav } from '@/components/layout/bottom-nav';
 import { TopBar } from '@/components/layout/top-bar';
@@ -9,6 +8,7 @@ import { getNavigationForRole } from '@/lib/navigation';
 import { appendTenantContextToPath } from '@/lib/tenant-runtime';
 import { hasTenantAdminPermission } from '@/lib/tenant-admin-permissions';
 import { useTenantStore } from '@/stores/tenant.store';
+import { useHydrated } from '@/hooks/use-hydrated';
 import { UserRole } from '@zendocx/types';
 
 interface ProtectedShellProps {
@@ -47,14 +47,10 @@ function getSidebarTitle(role: UserRole | undefined, tenantName: string | null |
 export function ProtectedShell({ title, children }: ProtectedShellProps) {
   const user = useAuthStore((state) => state.user);
   const tenant = useTenantStore((state) => state.tenant);
-  // Defer tenant reads until after hydration — server has no localStorage,
-  // so tenant is null server-side but populated on the client. Using the raw
-  // value without this guard causes a React hydration mismatch warning.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const hydrated = useHydrated();
 
   const role = user?.role;
-  const tenantSlug = mounted ? tenant?.slug ?? null : null;
+  const tenantSlug = hydrated ? tenant?.slug ?? null : null;
 
   const { primary, secondary } = getNavigationForRole(role);
   const visiblePrimary =
@@ -103,7 +99,7 @@ export function ProtectedShell({ title, children }: ProtectedShellProps) {
 
       <div className="flex flex-1 min-h-0">
         <Sidebar
-          brandLabel={getSidebarTitle(role, mounted ? tenant?.name : null)}
+          brandLabel={getSidebarTitle(role, hydrated ? tenant?.name : null)}
           sectionLabel={sectionLabel}
           items={visiblePrimary.map(({ label, href }) => ({
             label,

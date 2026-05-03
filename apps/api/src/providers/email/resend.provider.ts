@@ -33,9 +33,7 @@ export class ResendEmailProvider implements IEmailProvider {
     const from = `${fromName} <${fromEmail}>`;
 
     if (!this.client) {
-      this.logger.log(
-        `[DEV EMAIL] to=${input.to} subject="${input.subject}"`,
-      );
+      this.logger.log(`[DEV EMAIL] to=${input.to} subject="${input.subject}"`);
       return { messageId: `dev-${Date.now()}`, accepted: true };
     }
 

@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { BottomNav } from '@/components/layout/bottom-nav';
 import { Sidebar } from '@/components/layout/sidebar';
 import { TopBar } from '@/components/layout/top-bar';
 import { RouteGuard } from '@/components/auth/route-guard';
+import { useHydrated } from '@/hooks/use-hydrated';
 import { cbtPrimaryNav, cbtStaffPrimaryNav, cbtSecondaryNav } from '@/lib/navigation';
 import { useTenantStore } from '@/stores/tenant.store';
 import { useAuthStore } from '@/stores/auth.store';
@@ -13,10 +13,9 @@ import { UserRole } from '@zendocx/types';
 export default function CbtLayout({ children }: { children: React.ReactNode }) {
   const tenant = useTenantStore((state) => state.tenant);
   const user = useAuthStore((state) => state.user);
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const hydrated = useHydrated();
 
-  const brandLabel = mounted
+  const brandLabel = hydrated
     ? tenant
       ? `${tenant.name} CBT`
       : 'ZenDocx CBT'

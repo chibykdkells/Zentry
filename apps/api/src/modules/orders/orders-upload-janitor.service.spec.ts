@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+
 import { OrdersUploadJanitorService } from './orders-upload-janitor.service';
 
 describe('OrdersUploadJanitorService', () => {

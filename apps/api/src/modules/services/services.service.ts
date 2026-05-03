@@ -840,7 +840,8 @@ export class ServicesService {
 
     await this.prisma.providerValidationEvent.create({
       data: {
-        providerConfigId: effectiveConfig?.id ?? existingScopedConfig?.id ?? null,
+        providerConfigId:
+          effectiveConfig?.id ?? existingScopedConfig?.id ?? null,
         providerType: 'VTU',
         providerKey: 'PROVIDER_ONE',
         scopeType: scope.scopeType,
@@ -1400,7 +1401,9 @@ export class ServicesService {
       data.requiredFields = this.toRequiredFieldsJson(dto.requiredFields);
     }
     if (dto.requiredDocuments !== undefined) {
-      data.requiredDocuments = this.toRequiredDocumentsJson(dto.requiredDocuments);
+      data.requiredDocuments = this.toRequiredDocumentsJson(
+        dto.requiredDocuments,
+      );
     }
 
     const service = await this.prisma.service.upsert({

@@ -43,7 +43,7 @@ export class AuthService {
     const normalized = Array.from(
       new Set(
         input
-          .map((item) => String(item).trim())
+          .map((item) => (typeof item === 'string' ? item.trim() : ''))
           .filter((item): item is TenantAdminPermission => allowed.has(item)),
       ),
     );
@@ -343,7 +343,7 @@ export class AuthService {
           tenantId: user.tenantId ?? null,
           isEmailVerified: user.isEmailVerified,
           adminPermissions:
-            user.role === UserRole.TENANT_ADMIN
+            user.role === 'TENANT_ADMIN'
               ? this.getEffectiveTenantAdminPermissions(user.adminPermissions)
               : undefined,
         },
@@ -403,8 +403,9 @@ export class AuthService {
     // Always return the same message — prevents email enumeration
     if (user) {
       const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-      const token = Array.from({ length: 6 }, () =>
-        chars[randomInt(0, chars.length)],
+      const token = Array.from(
+        { length: 6 },
+        () => chars[randomInt(0, chars.length)],
       ).join('');
       const rounds = Number(this.config.get('PIN_BCRYPT_ROUNDS', '10'));
       const hashed = await bcrypt.hash(token, rounds);

@@ -1,8 +1,10 @@
+/* eslint-disable @next/next/no-img-element */
+
 'use client';
 
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ShieldCheck } from 'lucide-react';
+import { useHydrated } from '@/hooks/use-hydrated';
 import { useTenantStore } from '@/stores/tenant.store';
 import { appendTenantContextToPath } from '@/lib/tenant-runtime';
 
@@ -28,10 +30,9 @@ export function AuthShell({
   variant = 'default',
 }: AuthShellProps) {
   const tenant = useTenantStore((state) => state.tenant);
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const hydrated = useHydrated();
 
-  const resolvedTenant = mounted ? tenant : null;
+  const resolvedTenant = hydrated ? tenant : null;
   const brandName = resolvedTenant?.name ?? 'ZenDocx';
   const brandInitial = brandName.charAt(0).toUpperCase();
   const isPlatformVariant = variant === 'platform';

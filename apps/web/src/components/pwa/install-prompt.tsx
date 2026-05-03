@@ -1,7 +1,10 @@
+/* eslint-disable @next/next/no-img-element */
+
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
 import { Download, Share2, Smartphone, X } from 'lucide-react';
+import { useHydrated } from '@/hooks/use-hydrated';
 import { useTenantStore } from '@/stores/tenant.store';
 
 interface BeforeInstallPromptEvent extends Event {
@@ -93,12 +96,13 @@ function buildTenantIconUrl(tenant: {
 
 export function InstallPrompt() {
   const tenant = useTenantStore((state) => state.tenant);
+  const hydrated = useHydrated();
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(getInitialInstalledState);
-  const [isDismissed, setIsDismissed] = useState(() =>
-    getDismissedState(tenant?.slug),
-  );
+  const [dismissedOverrides, setDismissedOverrides] = useState<
+    Record<string, boolean>
+  >({});
   const [isIos] = useState(() => /iPhone|iPad|iPod/i.test(getUserAgent()));
   const [isSafari] = useState(
     () =>
@@ -106,6 +110,11 @@ export function InstallPrompt() {
       !/Chrome|CriOS|Edg|FxiOS/i.test(getUserAgent()),
   );
 
+  const tenantSlug = tenant?.slug ?? null;
+  const dismissKey = getDismissKey(tenantSlug);
+  const isDismissed =
+    dismissedOverrides[dismissKey] ??
+    (hydrated ? getDismissedState(tenantSlug) : false);
   const appName = tenant?.name?.trim() || 'ZenDocx';
   const appInitial = appName.charAt(0).toUpperCase() || 'Z';
   const tenantLogoUrl = tenant?.logoUrl?.trim() || null;
@@ -114,18 +123,14 @@ export function InstallPrompt() {
     : `On iPhone or iPad, use Safari's Share menu and choose "Add to Home Screen" for ${appName}.`;
 
   function dismissPrompt(persist = true) {
-    setIsDismissed(true);
+    setDismissedOverrides((current) => ({
+      ...current,
+      [dismissKey]: true,
+    }));
     if (persist && typeof window !== 'undefined') {
-      window.localStorage.setItem(
-        getDismissKey(tenant?.slug),
-        Date.now().toString(),
-      );
+      window.localStorage.setItem(dismissKey, Date.now().toString());
     }
   }
-
-  useEffect(() => {
-    setIsDismissed(getDismissedState(tenant?.slug));
-  }, [tenant?.slug]);
 
   useEffect(() => {
     if (typeof document === 'undefined') {
@@ -228,7 +233,10 @@ export function InstallPrompt() {
     const handleAppInstalled = () => {
       setIsInstalled(true);
       setDeferredPrompt(null);
-      dismissPrompt(false);
+      setDismissedOverrides((current) => ({
+        ...current,
+        [dismissKey]: true,
+      }));
     };
 
     window.addEventListener(
@@ -244,7 +252,7 @@ export function InstallPrompt() {
       );
       window.removeEventListener('appinstalled', handleAppInstalled);
     };
-  }, []);
+  }, [dismissKey]);
 
   const showInstallPrompt = useMemo(() => {
     if (isInstalled || isDismissed) {

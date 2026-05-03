@@ -269,7 +269,11 @@ export class OrdersReleaseQueueService implements OnModuleInit {
       // Commission recipient: if the fulfiller is CBT_STAFF, credit the parent
       // CBT center's wallet. The staff earns on behalf of the center.
       let earnerUserId: string;
-      let earnerWallet: { id: string; availableBalance: bigint; totalEarned: bigint };
+      let earnerWallet: {
+        id: string;
+        availableBalance: bigint;
+        totalEarned: bigint;
+      };
 
       if (
         order.assignedCbt?.role === UserRole.CBT_STAFF &&
@@ -319,7 +323,8 @@ export class OrdersReleaseQueueService implements OnModuleInit {
       const requesterEscrowAfter = requesterEscrowBefore - order.totalAmount;
       const cbtBalanceBefore = earnerWallet.availableBalance;
       const cbtBalanceAfter = cbtBalanceBefore + order.cbtCommission;
-      const cbtTotalEarnedAfter = earnerWallet.totalEarned + order.cbtCommission;
+      const cbtTotalEarnedAfter =
+        earnerWallet.totalEarned + order.cbtCommission;
       const platformNet = order.totalAmount - order.cbtCommission;
       const platformBalanceBefore = platformWallet.availableBalance;
       const platformBalanceAfter = platformBalanceBefore + platformNet;

@@ -20,7 +20,11 @@ export class CloudinaryStorageProvider implements IStorageProvider {
     this.cloudName = config.get<string>('CLOUDINARY_CLOUD_NAME', 'demo');
     this.apiKey = config.get<string>('CLOUDINARY_API_KEY', '');
     this.apiSecret = config.get<string>('CLOUDINARY_API_SECRET', '');
-    this.configured = !!(this.apiKey && this.apiSecret && this.cloudName !== 'demo');
+    this.configured = !!(
+      this.apiKey &&
+      this.apiSecret &&
+      this.cloudName !== 'demo'
+    );
 
     if (this.configured) {
       cloudinary.config({
@@ -64,7 +68,9 @@ export class CloudinaryStorageProvider implements IStorageProvider {
 
   async deleteFile(publicId: string): Promise<void> {
     if (!this.configured) {
-      this.logger.warn(`Cloudinary not configured — mocked delete for ${publicId}`);
+      this.logger.warn(
+        `Cloudinary not configured — mocked delete for ${publicId}`,
+      );
       return;
     }
 

@@ -176,9 +176,10 @@ export class UsersService {
           cbtProfile: user.cbtProfile
             ? {
                 ...user.cbtProfile,
-                serviceCategories: user.cbtProfile.serviceCategoryAssignments.map(
-                  (assignment) => assignment.serviceCategory,
-                ),
+                serviceCategories:
+                  user.cbtProfile.serviceCategoryAssignments.map(
+                    (assignment) => assignment.serviceCategory,
+                  ),
               }
             : null,
         })),
@@ -333,17 +334,19 @@ export class UsersService {
     });
 
     const dedupedCategories = Array.from(
-      categories.reduce(
-        (accumulator, category) => {
+      categories
+        .reduce((accumulator, category) => {
           const existing = accumulator.get(category.slug);
           if (!existing || (category.tenantId && !existing.tenantId)) {
             accumulator.set(category.slug, category);
           }
           return accumulator;
-        },
-        new Map<string, (typeof categories)[number]>(),
-      ).values(),
-    ).map(({ tenantId: _tenantId, ...category }) => category);
+        }, new Map<string, (typeof categories)[number]>())
+        .values(),
+    ).map(({ tenantId, ...category }) => {
+      void tenantId;
+      return category;
+    });
 
     return {
       message: 'Assignable CBT categories retrieved',
@@ -400,7 +403,7 @@ export class UsersService {
     }
 
     const assignableCategories = await this.getAssignableCbtServiceCategories(
-      adminTenantId ?? (cbtUser.tenantId ?? null),
+      adminTenantId ?? cbtUser.tenantId ?? null,
     );
     const assignableCategoryIds = new Set(
       assignableCategories.data.map((category) => category.id),

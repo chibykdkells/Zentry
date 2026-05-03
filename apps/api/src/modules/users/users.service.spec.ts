@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+
 import { BadRequestException } from '@nestjs/common';
 import { CbtApprovalStatus, UserRole } from '@prisma/client';
 import { UsersService } from './users.service';
@@ -66,10 +68,7 @@ describe('UsersService', () => {
       pushNotificationToUser: jest.fn(),
     };
 
-    service = new UsersService(
-      prisma as never,
-      notificationsService as never,
-    );
+    service = new UsersService(prisma as never, notificationsService as never);
   });
 
   it('requires supported categories before approving a CBT center', async () => {

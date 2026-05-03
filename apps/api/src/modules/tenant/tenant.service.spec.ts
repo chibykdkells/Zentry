@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { Tenant } from '@prisma/client';
 import { UserRole } from '@zendocx/types';
@@ -118,9 +120,9 @@ describe('TenantService', () => {
       auditLog: {
         create: jest.fn(),
       },
-      $transaction: jest.fn().mockImplementation(async (ops: unknown[]) =>
-        Promise.all(ops),
-      ),
+      $transaction: jest
+        .fn()
+        .mockImplementation(async (ops: unknown[]) => Promise.all(ops)),
     };
 
     resolver = {
@@ -147,7 +149,11 @@ describe('TenantService', () => {
       config as never,
       providerCredentialsService as never,
       storageService as never,
-      { sendEmail: jest.fn().mockResolvedValue({ messageId: 'mock', accepted: true }) } as never,
+      {
+        sendEmail: jest
+          .fn()
+          .mockResolvedValue({ messageId: 'mock', accepted: true }),
+      } as never,
     );
   });
 
@@ -287,9 +293,12 @@ describe('TenantService', () => {
       .spyOn(service as never, 'resolveTxtRecords')
       .mockResolvedValue(['zendocx-site-verification=other-token'] as never);
 
-    const result = await service.getOwnTenantDomainVerification('tenant-admin-1');
+    const result =
+      await service.getOwnTenantDomainVerification('tenant-admin-1');
 
-    expect(result.message).toBe('Custom domain verification details retrieved.');
+    expect(result.message).toBe(
+      'Custom domain verification details retrieved.',
+    );
     expect(result.data).toEqual(
       expect.objectContaining({
         customDomain: 'portal.testbiz.com',
@@ -346,9 +355,7 @@ describe('TenantService', () => {
       .spyOn(service as never, 'resolveTxtRecords')
       .mockResolvedValue([expectedRecordValue] as never);
 
-    const verification = await service.getOwnTenantDomainVerification(
-      'tenant-admin-1',
-    );
+    await service.getOwnTenantDomainVerification('tenant-admin-1');
 
     const result = await service.verifyOwnTenantCustomDomain('tenant-admin-1');
 
@@ -446,9 +453,7 @@ describe('TenantService', () => {
       email: 'ada.byron@test.com',
       role: UserRole.INDIVIDUAL,
     });
-    prisma.order.count
-      .mockResolvedValueOnce(1)
-      .mockResolvedValueOnce(0);
+    prisma.order.count.mockResolvedValueOnce(1).mockResolvedValueOnce(0);
     prisma.transaction.count.mockResolvedValue(0);
     prisma.withdrawalRequest.count.mockResolvedValue(0);
     prisma.dispute.count.mockResolvedValue(0);

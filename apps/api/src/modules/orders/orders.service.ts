@@ -79,9 +79,7 @@ type DisputeEvidenceAttachment = {
   publicId: string | null;
 };
 
-type UploadedOrderFileContextValue =
-  | 'REQUESTER_DOCUMENT'
-  | 'DISPUTE_EVIDENCE';
+type UploadedOrderFileContextValue = 'REQUESTER_DOCUMENT' | 'DISPUTE_EVIDENCE';
 
 type OrderRequesterWithWallet = {
   id: string;
@@ -729,7 +727,10 @@ export class OrdersService {
       .digest('hex');
   }
 
-  private buildResultFileAccessUrl(orderId: string, resultFileUrl: string | null) {
+  private buildResultFileAccessUrl(
+    orderId: string,
+    resultFileUrl: string | null,
+  ) {
     if (!resultFileUrl) {
       return null;
     }
@@ -824,7 +825,11 @@ export class OrdersService {
     };
   }
 
-  async getResultFileRedirect(orderId: string, signature: string, expires: string) {
+  async getResultFileRedirect(
+    orderId: string,
+    signature: string,
+    expires: string,
+  ) {
     this.assertValidResultFileSignature(orderId, signature, expires);
 
     const order = await this.prisma.order.findUnique({
@@ -936,175 +941,175 @@ export class OrdersService {
     let disputePersisted = false;
 
     try {
-    const now = new Date();
-    const reason = dto.reason.trim();
-    const evidenceFiles = this.normalizeDisputeEvidenceFiles(
-      dto.evidenceFiles,
-      dto.evidenceUrls,
-    );
-
-    const order = await this.prisma.order.findFirst({
-      where: {
-        id: orderId,
-        requesterId: userId,
-        ...(tenantId ? { tenantId } : {}),
-      },
-      select: orderDetailSelect,
-    });
-
-    if (!order) {
-      throw new NotFoundException('Order not found');
-    }
-
-    if (order.fulfillmentType !== 'MANUAL' || !order.assignedCbt) {
-      throw new BadRequestException(
-        'Only CBT-fulfilled completed orders can enter dispute review right now.',
+      const now = new Date();
+      const reason = dto.reason.trim();
+      const evidenceFiles = this.normalizeDisputeEvidenceFiles(
+        dto.evidenceFiles,
+        dto.evidenceUrls,
       );
-    }
 
-    if (order.status !== OrderStatus.COMPLETED) {
-      throw new ConflictException(
-        'Only completed orders can be moved into dispute review.',
-      );
-    }
-
-    if (!order.resultFileUrl) {
-      throw new ConflictException(
-        'A dispute can only be raised after a result has been submitted.',
-      );
-    }
-
-    if (order.escrowReleasedAt) {
-      throw new ConflictException(
-        'This order has already been finalized, so a new dispute cannot be opened.',
-      );
-    }
-
-    if (
-      !order.disputeWindowExpiresAt ||
-      order.disputeWindowExpiresAt.getTime() <= now.getTime()
-    ) {
-      throw new ConflictException(
-        'The dispute window has closed for this order.',
-      );
-    }
-
-    if (order.dispute) {
-      throw new ConflictException(
-        'A dispute has already been opened for this order.',
-      );
-    }
-
-    const assignedCbt = order.assignedCbt;
-
-    const updatedOrder = await this.prisma.$transaction(async (tx) => {
-      await tx.dispute.create({
-        data: {
-          orderId: order.id,
-          raisedById: userId,
-          tenantId,
-          reason,
-          evidenceUrls: evidenceFiles as Prisma.InputJsonValue,
-          status: DisputeStatus.OPEN,
+      const order = await this.prisma.order.findFirst({
+        where: {
+          id: orderId,
+          requesterId: userId,
+          ...(tenantId ? { tenantId } : {}),
         },
-      });
-
-      if (uploadedEvidencePublicIds.length > 0) {
-        await this.markUploadedOrderFilesAttached(
-          tx,
-          userId,
-          uploadedEvidencePublicIds,
-          order.id,
-          'DISPUTE_EVIDENCE',
-        );
-      }
-
-      await tx.order.update({
-        where: { id: order.id },
-        data: {
-          status: OrderStatus.DISPUTED,
-        },
-      });
-
-      await tx.notification.createMany({
-        data: [
-          {
-            userId,
-            orderId: order.id,
-            type: NotificationType.DISPUTE_RAISED,
-            title: 'Dispute submitted',
-            message: `Your dispute for ${order.orderNumber} has been opened and is awaiting review.`,
-            metadata: {
-              orderNumber: order.orderNumber,
-            },
-          },
-          {
-            userId: assignedCbt.id,
-            orderId: order.id,
-            type: NotificationType.DISPUTE_RAISED,
-            title: 'A dispute was raised on your job',
-            message: `${order.orderNumber} is now under dispute review.`,
-            metadata: {
-              orderNumber: order.orderNumber,
-            },
-          },
-        ],
-      });
-
-      await tx.auditLog.create({
-        data: {
-          userId,
-          action: 'ORDER_DISPUTE_RAISED',
-          entity: 'Order',
-          entityId: order.id,
-          oldValues: {
-            status: order.status,
-          },
-          newValues: {
-            orderNumber: order.orderNumber,
-            status: OrderStatus.DISPUTED,
-            disputeStatus: DisputeStatus.OPEN,
-            evidenceUrls: evidenceFiles.map((file) => file.url),
-            evidenceFileCount: evidenceFiles.length,
-          },
-        },
-      });
-
-      const refreshedOrder = await tx.order.findUnique({
-        where: { id: order.id },
         select: orderDetailSelect,
       });
 
-      if (!refreshedOrder) {
+      if (!order) {
         throw new NotFoundException('Order not found');
       }
 
-      return refreshedOrder;
-    });
-    disputePersisted = true;
+      if (order.fulfillmentType !== 'MANUAL' || !order.assignedCbt) {
+        throw new BadRequestException(
+          'Only CBT-fulfilled completed orders can enter dispute review right now.',
+        );
+      }
 
-    await this.ordersReleaseQueueService
-      .removeScheduledReleaseForOrder(order.id)
-      .catch(() => undefined);
+      if (order.status !== OrderStatus.COMPLETED) {
+        throw new ConflictException(
+          'Only completed orders can be moved into dispute review.',
+        );
+      }
 
-    // Real-time: notify both parties
-    this.notificationsService.pushNotificationToUser(userId, {
-      type: 'DISPUTE_RAISED',
-      title: 'Dispute submitted',
-      message: `Your dispute for ${order.orderNumber} has been opened and is awaiting review.`,
-      orderId: order.id,
-    });
-    this.notificationsService.pushNotificationToUser(assignedCbt.id, {
-      type: 'DISPUTE_RAISED',
-      title: 'A dispute was raised on your job',
-      message: `${order.orderNumber} is now under dispute review.`,
-      orderId: order.id,
-    });
+      if (!order.resultFileUrl) {
+        throw new ConflictException(
+          'A dispute can only be raised after a result has been submitted.',
+        );
+      }
 
-    return {
-      message: 'Dispute created successfully.',
-      data: this.serializeOrderDetail(updatedOrder),
-    };
+      if (order.escrowReleasedAt) {
+        throw new ConflictException(
+          'This order has already been finalized, so a new dispute cannot be opened.',
+        );
+      }
+
+      if (
+        !order.disputeWindowExpiresAt ||
+        order.disputeWindowExpiresAt.getTime() <= now.getTime()
+      ) {
+        throw new ConflictException(
+          'The dispute window has closed for this order.',
+        );
+      }
+
+      if (order.dispute) {
+        throw new ConflictException(
+          'A dispute has already been opened for this order.',
+        );
+      }
+
+      const assignedCbt = order.assignedCbt;
+
+      const updatedOrder = await this.prisma.$transaction(async (tx) => {
+        await tx.dispute.create({
+          data: {
+            orderId: order.id,
+            raisedById: userId,
+            tenantId,
+            reason,
+            evidenceUrls: evidenceFiles as Prisma.InputJsonValue,
+            status: DisputeStatus.OPEN,
+          },
+        });
+
+        if (uploadedEvidencePublicIds.length > 0) {
+          await this.markUploadedOrderFilesAttached(
+            tx,
+            userId,
+            uploadedEvidencePublicIds,
+            order.id,
+            'DISPUTE_EVIDENCE',
+          );
+        }
+
+        await tx.order.update({
+          where: { id: order.id },
+          data: {
+            status: OrderStatus.DISPUTED,
+          },
+        });
+
+        await tx.notification.createMany({
+          data: [
+            {
+              userId,
+              orderId: order.id,
+              type: NotificationType.DISPUTE_RAISED,
+              title: 'Dispute submitted',
+              message: `Your dispute for ${order.orderNumber} has been opened and is awaiting review.`,
+              metadata: {
+                orderNumber: order.orderNumber,
+              },
+            },
+            {
+              userId: assignedCbt.id,
+              orderId: order.id,
+              type: NotificationType.DISPUTE_RAISED,
+              title: 'A dispute was raised on your job',
+              message: `${order.orderNumber} is now under dispute review.`,
+              metadata: {
+                orderNumber: order.orderNumber,
+              },
+            },
+          ],
+        });
+
+        await tx.auditLog.create({
+          data: {
+            userId,
+            action: 'ORDER_DISPUTE_RAISED',
+            entity: 'Order',
+            entityId: order.id,
+            oldValues: {
+              status: order.status,
+            },
+            newValues: {
+              orderNumber: order.orderNumber,
+              status: OrderStatus.DISPUTED,
+              disputeStatus: DisputeStatus.OPEN,
+              evidenceUrls: evidenceFiles.map((file) => file.url),
+              evidenceFileCount: evidenceFiles.length,
+            },
+          },
+        });
+
+        const refreshedOrder = await tx.order.findUnique({
+          where: { id: order.id },
+          select: orderDetailSelect,
+        });
+
+        if (!refreshedOrder) {
+          throw new NotFoundException('Order not found');
+        }
+
+        return refreshedOrder;
+      });
+      disputePersisted = true;
+
+      await this.ordersReleaseQueueService
+        .removeScheduledReleaseForOrder(order.id)
+        .catch(() => undefined);
+
+      // Real-time: notify both parties
+      this.notificationsService.pushNotificationToUser(userId, {
+        type: 'DISPUTE_RAISED',
+        title: 'Dispute submitted',
+        message: `Your dispute for ${order.orderNumber} has been opened and is awaiting review.`,
+        orderId: order.id,
+      });
+      this.notificationsService.pushNotificationToUser(assignedCbt.id, {
+        type: 'DISPUTE_RAISED',
+        title: 'A dispute was raised on your job',
+        message: `${order.orderNumber} is now under dispute review.`,
+        orderId: order.id,
+      });
+
+      return {
+        message: 'Dispute created successfully.',
+        data: this.serializeOrderDetail(updatedOrder),
+      };
     } catch (error) {
       if (!disputePersisted && uploadedEvidencePublicIds.length > 0) {
         await this.cleanupUploadedOrderFiles(userId, uploadedEvidencePublicIds);
@@ -2398,7 +2403,11 @@ export class OrdersService {
             centerName: true,
             approvalStatus: true,
             serviceCategoryAssignments: {
-              select: { serviceCategory: { select: { id: true, name: true, slug: true } } },
+              select: {
+                serviceCategory: {
+                  select: { id: true, name: true, slug: true },
+                },
+              },
             },
           },
         },
@@ -2411,7 +2420,11 @@ export class OrdersService {
                     centerName: true,
                     approvalStatus: true,
                     serviceCategoryAssignments: {
-                      select: { serviceCategory: { select: { id: true, name: true, slug: true } } },
+                      select: {
+                        serviceCategory: {
+                          select: { id: true, name: true, slug: true },
+                        },
+                      },
                     },
                   },
                 },
@@ -2426,7 +2439,7 @@ export class OrdersService {
 
     const profile =
       user.role === UserRole.CBT_STAFF
-        ? user.cbtStaffProfile?.cbt?.cbtProfile ?? null
+        ? (user.cbtStaffProfile?.cbt?.cbtProfile ?? null)
         : user.cbtProfile;
 
     if (!profile) throw new NotFoundException('CBT profile not found');
@@ -3244,273 +3257,275 @@ export class OrdersService {
     let orderPersisted = false;
 
     try {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        phone: true,
-        wallet: {
-          select: {
-            id: true,
-            availableBalance: true,
-            escrowBalance: true,
-          },
-        },
-      },
-    });
-
-    if (!user?.wallet) {
-      throw new NotFoundException('Wallet not found');
-    }
-
-    const service = await this.prisma.service.findFirst({
-      where: {
-        id: dto.serviceId,
-        ...(tenantId
-          ? { OR: [{ tenantId: null }, { tenantId }] }
-          : { tenantId: null }),
-      },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        totalPrice: true,
-        platformFee: true,
-        platformFeePercent: true,
-        cbtCommission: true,
-        providerCost: true,
-        providerKey: true,
-        deliveryMode: true,
-        fulfillmentType: true,
-        isActive: true,
-        requiredFields: true,
-        requiredDocuments: true,
-        category: {
-          select: {
-            name: true,
-            slug: true,
-          },
-        },
-      },
-    });
-
-    if (!service || !service.isActive) {
-      throw new NotFoundException('Service not found');
-    }
-
-    const requiredFields = Array.isArray(service.requiredFields)
-      ? (service.requiredFields as RequiredFieldDefinition[])
-      : [];
-    const requiredDocuments = Array.isArray(service.requiredDocuments)
-      ? (service.requiredDocuments as RequiredDocumentDefinition[])
-      : [];
-    const normalizedSubmittedData = this.normalizeSubmittedData(
-      dto.submittedData,
-    );
-    const normalizedRequesterDocuments = this.normalizeRequesterDocuments(
-      dto.requesterDocuments,
-      dto.requesterDocUrls,
-      requiredDocuments,
-    );
-
-    this.validateRequiredFields(requiredFields, normalizedSubmittedData);
-    this.validateRequiredDocuments(
-      requiredDocuments,
-      normalizedRequesterDocuments,
-    );
-
-    if (
-      service.fulfillmentType === 'AUTOMATED' &&
-      service.deliveryMode === 'API_AUTOMATED'
-    ) {
-      return this.createAutomatedOrder(
-        {
-          ...user,
-          wallet: user.wallet,
-        },
-        service,
-        normalizedSubmittedData,
-        tenantId,
-      );
-    }
-
-    if (user.wallet.availableBalance < service.totalPrice) {
-      throw new BadRequestException(
-        'Your wallet balance is not enough for this request.',
-      );
-    }
-
-    const balanceBefore = user.wallet.availableBalance;
-    const balanceAfter = balanceBefore - service.totalPrice;
-    const escrowAfter = user.wallet.escrowBalance + service.totalPrice;
-    const orderNumber = generateOrderNumber();
-    const transactionReference = generateTransactionRef();
-
-    const order = await this.prisma.$transaction(async (tx) => {
-      const createdOrder = await tx.order.create({
-        data: {
-          orderNumber,
-          requesterId: user.id,
-          serviceId: service.id,
-          tenantId,
-          status: OrderStatus.PENDING,
-          deliveryMode: service.deliveryMode,
-          fulfillmentType: service.fulfillmentType,
-          submittedData: normalizedSubmittedData,
-          requesterDocUrls:
-            normalizedRequesterDocuments as Prisma.InputJsonValue,
-          totalAmount: service.totalPrice,
-          platformFee: BigInt(
-            Math.floor(
-              Number(service.cbtCommission + service.providerCost) * service.platformFeePercent / 100,
-            ),
-          ),
-          cbtCommission: service.cbtCommission,
-        },
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
         select: {
           id: true,
-          orderNumber: true,
-          status: true,
-          totalAmount: true,
-          platformFee: true,
-          cbtCommission: true,
-          createdAt: true,
-          service: {
+          firstName: true,
+          lastName: true,
+          email: true,
+          phone: true,
+          wallet: {
             select: {
-              name: true,
-              slug: true,
-              category: {
-                select: {
-                  name: true,
-                  slug: true,
-                },
-              },
+              id: true,
+              availableBalance: true,
+              escrowBalance: true,
             },
           },
         },
       });
 
-      if (uploadedRequesterDocumentPublicIds.length > 0) {
-        await this.markUploadedOrderFilesAttached(
-          tx,
-          userId,
-          uploadedRequesterDocumentPublicIds,
-          createdOrder.id,
-          'REQUESTER_DOCUMENT',
+      if (!user?.wallet) {
+        throw new NotFoundException('Wallet not found');
+      }
+
+      const service = await this.prisma.service.findFirst({
+        where: {
+          id: dto.serviceId,
+          ...(tenantId
+            ? { OR: [{ tenantId: null }, { tenantId }] }
+            : { tenantId: null }),
+        },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          totalPrice: true,
+          platformFee: true,
+          platformFeePercent: true,
+          cbtCommission: true,
+          providerCost: true,
+          providerKey: true,
+          deliveryMode: true,
+          fulfillmentType: true,
+          isActive: true,
+          requiredFields: true,
+          requiredDocuments: true,
+          category: {
+            select: {
+              name: true,
+              slug: true,
+            },
+          },
+        },
+      });
+
+      if (!service || !service.isActive) {
+        throw new NotFoundException('Service not found');
+      }
+
+      const requiredFields = Array.isArray(service.requiredFields)
+        ? (service.requiredFields as RequiredFieldDefinition[])
+        : [];
+      const requiredDocuments = Array.isArray(service.requiredDocuments)
+        ? (service.requiredDocuments as RequiredDocumentDefinition[])
+        : [];
+      const normalizedSubmittedData = this.normalizeSubmittedData(
+        dto.submittedData,
+      );
+      const normalizedRequesterDocuments = this.normalizeRequesterDocuments(
+        dto.requesterDocuments,
+        dto.requesterDocUrls,
+        requiredDocuments,
+      );
+
+      this.validateRequiredFields(requiredFields, normalizedSubmittedData);
+      this.validateRequiredDocuments(
+        requiredDocuments,
+        normalizedRequesterDocuments,
+      );
+
+      if (
+        service.fulfillmentType === 'AUTOMATED' &&
+        service.deliveryMode === 'API_AUTOMATED'
+      ) {
+        return this.createAutomatedOrder(
+          {
+            ...user,
+            wallet: user.wallet,
+          },
+          service,
+          normalizedSubmittedData,
+          tenantId,
         );
       }
 
-      await tx.wallet.update({
-        where: { id: user.wallet!.id },
-        data: {
-          availableBalance: balanceAfter,
-          escrowBalance: escrowAfter,
-        },
-      });
+      if (user.wallet.availableBalance < service.totalPrice) {
+        throw new BadRequestException(
+          'Your wallet balance is not enough for this request.',
+        );
+      }
 
-      await tx.transaction.create({
-        data: {
-          walletId: user.wallet!.id,
-          userId: user.id,
-          orderId: createdOrder.id,
-          tenantId,
-          type: TransactionType.ESCROW_LOCK,
-          status: TransactionStatus.SUCCESS,
-          amount: service.totalPrice,
-          balanceBefore,
-          balanceAfter,
-          reference: transactionReference,
-          description: `Escrow locked for ${service.name}`,
-          metadata: {
+      const balanceBefore = user.wallet.availableBalance;
+      const balanceAfter = balanceBefore - service.totalPrice;
+      const escrowAfter = user.wallet.escrowBalance + service.totalPrice;
+      const orderNumber = generateOrderNumber();
+      const transactionReference = generateTransactionRef();
+
+      const order = await this.prisma.$transaction(async (tx) => {
+        const createdOrder = await tx.order.create({
+          data: {
             orderNumber,
-            serviceSlug: service.slug,
-            serviceCategorySlug: service.category.slug,
-          },
-        },
-      });
-
-      await tx.notification.create({
-        data: {
-          userId: user.id,
-          tenantId,
-          type: NotificationType.ORDER_PLACED,
-          title: 'Order placed successfully',
-          message: `${service.name} has been submitted and moved into escrow.`,
-        },
-      });
-
-      await tx.auditLog.create({
-        data: {
-          userId: user.id,
-          tenantId,
-          action: 'ORDER_CREATED',
-          entity: 'Order',
-          entityId: createdOrder.id,
-          newValues: {
-            orderNumber: createdOrder.orderNumber,
+            requesterId: user.id,
             serviceId: service.id,
-            totalAmount: service.totalPrice.toString(),
-            escrowReference: transactionReference,
+            tenantId,
+            status: OrderStatus.PENDING,
+            deliveryMode: service.deliveryMode,
+            fulfillmentType: service.fulfillmentType,
+            submittedData: normalizedSubmittedData,
+            requesterDocUrls:
+              normalizedRequesterDocuments as Prisma.InputJsonValue,
+            totalAmount: service.totalPrice,
+            platformFee: BigInt(
+              Math.floor(
+                (Number(service.cbtCommission + service.providerCost) *
+                  service.platformFeePercent) /
+                  100,
+              ),
+            ),
+            cbtCommission: service.cbtCommission,
+          },
+          select: {
+            id: true,
+            orderNumber: true,
+            status: true,
+            totalAmount: true,
+            platformFee: true,
+            cbtCommission: true,
+            createdAt: true,
+            service: {
+              select: {
+                name: true,
+                slug: true,
+                category: {
+                  select: {
+                    name: true,
+                    slug: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        if (uploadedRequesterDocumentPublicIds.length > 0) {
+          await this.markUploadedOrderFilesAttached(
+            tx,
+            userId,
+            uploadedRequesterDocumentPublicIds,
+            createdOrder.id,
+            'REQUESTER_DOCUMENT',
+          );
+        }
+
+        await tx.wallet.update({
+          where: { id: user.wallet!.id },
+          data: {
+            availableBalance: balanceAfter,
+            escrowBalance: escrowAfter,
+          },
+        });
+
+        await tx.transaction.create({
+          data: {
+            walletId: user.wallet!.id,
+            userId: user.id,
+            orderId: createdOrder.id,
+            tenantId,
+            type: TransactionType.ESCROW_LOCK,
+            status: TransactionStatus.SUCCESS,
+            amount: service.totalPrice,
+            balanceBefore,
+            balanceAfter,
+            reference: transactionReference,
+            description: `Escrow locked for ${service.name}`,
+            metadata: {
+              orderNumber,
+              serviceSlug: service.slug,
+              serviceCategorySlug: service.category.slug,
+            },
+          },
+        });
+
+        await tx.notification.create({
+          data: {
+            userId: user.id,
+            tenantId,
+            type: NotificationType.ORDER_PLACED,
+            title: 'Order placed successfully',
+            message: `${service.name} has been submitted and moved into escrow.`,
+          },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            userId: user.id,
+            tenantId,
+            action: 'ORDER_CREATED',
+            entity: 'Order',
+            entityId: createdOrder.id,
+            newValues: {
+              orderNumber: createdOrder.orderNumber,
+              serviceId: service.id,
+              totalAmount: service.totalPrice.toString(),
+              escrowReference: transactionReference,
+            },
+          },
+        });
+
+        return createdOrder;
+      });
+      orderPersisted = true;
+
+      // Real-time: notify requester wallet changed + broadcast new job to CBT pool
+      this.notificationsService.broadcastWalletUpdated(userId);
+      if (service.fulfillmentType === 'MANUAL') {
+        this.notificationsService.broadcastNewJob({
+          orderId: order.id,
+          serviceId: service.id,
+          serviceName: service.name,
+          tenantId,
+        });
+      }
+      this.notificationsService.pushNotificationToUser(userId, {
+        type: 'ORDER_PLACED',
+        title: 'Order placed successfully',
+        message: `${service.name} has been submitted and moved into escrow.`,
+      });
+      await this.sendOrderPlacedEmail({
+        email: user.email,
+        firstName: user.firstName,
+        serviceName: service.name,
+        orderNumber: order.orderNumber,
+        tenantId,
+      }).catch(() => undefined);
+      await this.sendOrderPlacedSms({
+        phone: user.phone,
+        serviceName: service.name,
+        orderNumber: order.orderNumber,
+      }).catch(() => undefined);
+
+      return {
+        message: 'Order created successfully and payment moved into escrow.',
+        data: {
+          id: order.id,
+          orderNumber: order.orderNumber,
+          status: order.status,
+          totalAmount: order.totalAmount.toString(),
+          platformFee: order.platformFee.toString(),
+          cbtCommission: order.cbtCommission.toString(),
+          createdAt: order.createdAt,
+          service: {
+            name: order.service.name,
+            slug: order.service.slug,
+            category: order.service.category,
+          },
+          wallet: {
+            availableBalance: balanceAfter.toString(),
+            escrowBalance: escrowAfter.toString(),
           },
         },
-      });
-
-      return createdOrder;
-    });
-    orderPersisted = true;
-
-    // Real-time: notify requester wallet changed + broadcast new job to CBT pool
-    this.notificationsService.broadcastWalletUpdated(userId);
-    if (service.fulfillmentType === 'MANUAL') {
-      this.notificationsService.broadcastNewJob({
-        orderId: order.id,
-        serviceId: service.id,
-        serviceName: service.name,
-        tenantId,
-      });
-    }
-    this.notificationsService.pushNotificationToUser(userId, {
-      type: 'ORDER_PLACED',
-      title: 'Order placed successfully',
-      message: `${service.name} has been submitted and moved into escrow.`,
-    });
-    await this.sendOrderPlacedEmail({
-      email: user.email,
-      firstName: user.firstName,
-      serviceName: service.name,
-      orderNumber: order.orderNumber,
-      tenantId,
-    }).catch(() => undefined);
-    await this.sendOrderPlacedSms({
-      phone: user.phone,
-      serviceName: service.name,
-      orderNumber: order.orderNumber,
-    }).catch(() => undefined);
-
-    return {
-      message: 'Order created successfully and payment moved into escrow.',
-      data: {
-        id: order.id,
-        orderNumber: order.orderNumber,
-        status: order.status,
-        totalAmount: order.totalAmount.toString(),
-        platformFee: order.platformFee.toString(),
-        cbtCommission: order.cbtCommission.toString(),
-        createdAt: order.createdAt,
-        service: {
-          name: order.service.name,
-          slug: order.service.slug,
-          category: order.service.category,
-        },
-        wallet: {
-          availableBalance: balanceAfter.toString(),
-          escrowBalance: escrowAfter.toString(),
-        },
-      },
-    };
+      };
     } catch (error) {
       if (!orderPersisted && uploadedRequesterDocumentPublicIds.length > 0) {
         await this.cleanupUploadedOrderFiles(
@@ -4020,7 +4035,9 @@ export class OrdersService {
     } catch (error) {
       await Promise.all(
         uploads.map((upload) =>
-          this.storageService.deleteFile(upload.publicId).catch(() => undefined),
+          this.storageService
+            .deleteFile(upload.publicId)
+            .catch(() => undefined),
         ),
       );
 
@@ -4210,21 +4227,20 @@ export class OrdersService {
         );
       }
 
-      return Object.entries(requesterDocuments).reduce<OrderDocumentAttachment[]>(
-        (accumulator, [name, rawValue]) => {
-          const definition = requiredDocumentsByName.get(name);
-          const normalized =
-            this.normalizeStoredRequesterDocument(rawValue, definition, name) ??
-            null;
+      return Object.entries(requesterDocuments).reduce<
+        OrderDocumentAttachment[]
+      >((accumulator, [name, rawValue]) => {
+        const definition = requiredDocumentsByName.get(name);
+        const normalized =
+          this.normalizeStoredRequesterDocument(rawValue, definition, name) ??
+          null;
 
-          if (normalized) {
-            accumulator.push(normalized);
-          }
+        if (normalized) {
+          accumulator.push(normalized);
+        }
 
-          return accumulator;
-        },
-        [],
-      );
+        return accumulator;
+      }, []);
     }
 
     return this.normalizeDocumentUrlList(requesterDocUrls).map((url, index) => {
@@ -4274,7 +4290,9 @@ export class OrdersService {
     fallbackIndex?: number,
   ) {
     const fallbackDocumentName =
-      fallbackName ?? definition?.name ?? `document-${(fallbackIndex ?? 0) + 1}`;
+      fallbackName ??
+      definition?.name ??
+      `document-${(fallbackIndex ?? 0) + 1}`;
 
     if (typeof rawValue === 'string') {
       const url = this.normalizeOptionalAttachmentText(rawValue);
@@ -4359,32 +4377,16 @@ export class OrdersService {
       return [];
     }
 
-    return rawValue.reduce<OrderDocumentAttachment[]>((accumulator, item, index) => {
-      const definition = requiredDocuments[index];
-      const normalized =
-        this.normalizeStoredRequesterDocument(
-          item,
-          definition,
-          definition?.name,
-          index,
-        ) ?? null;
-
-      if (normalized) {
-        accumulator.push(normalized);
-      }
-
-      return accumulator;
-    }, []);
-  }
-
-  private toDisputeEvidenceFiles(rawValue: Prisma.JsonValue) {
-    if (!Array.isArray(rawValue)) {
-      return [];
-    }
-
-    return rawValue.reduce<DisputeEvidenceAttachment[]>(
-      (accumulator, item) => {
-        const normalized = this.normalizeStoredDisputeEvidenceFile(item);
+    return rawValue.reduce<OrderDocumentAttachment[]>(
+      (accumulator, item, index) => {
+        const definition = requiredDocuments[index];
+        const normalized =
+          this.normalizeStoredRequesterDocument(
+            item,
+            definition,
+            definition?.name,
+            index,
+          ) ?? null;
 
         if (normalized) {
           accumulator.push(normalized);
@@ -4394,6 +4396,22 @@ export class OrdersService {
       },
       [],
     );
+  }
+
+  private toDisputeEvidenceFiles(rawValue: Prisma.JsonValue) {
+    if (!Array.isArray(rawValue)) {
+      return [];
+    }
+
+    return rawValue.reduce<DisputeEvidenceAttachment[]>((accumulator, item) => {
+      const normalized = this.normalizeStoredDisputeEvidenceFile(item);
+
+      if (normalized) {
+        accumulator.push(normalized);
+      }
+
+      return accumulator;
+    }, []);
   }
 
   private validateRequiredDocuments(
@@ -4747,7 +4765,9 @@ export class OrdersService {
   }
 
   private serializeOrderSummary(order: OrderListRecord) {
-    const requesterDocuments = this.toRequesterDocuments(order.requesterDocUrls);
+    const requesterDocuments = this.toRequesterDocuments(
+      order.requesterDocUrls,
+    );
 
     return {
       id: order.id,
@@ -4761,7 +4781,10 @@ export class OrdersService {
       submittedData: this.toStringRecord(order.submittedData),
       requesterDocuments,
       requesterDocUrls: requesterDocuments.map((document) => document.url),
-      resultFileUrl: this.buildResultFileAccessUrl(order.id, order.resultFileUrl),
+      resultFileUrl: this.buildResultFileAccessUrl(
+        order.id,
+        order.resultFileUrl,
+      ),
       resultUploadedAt: order.resultUploadedAt,
       escrowReleasedAt: order.escrowReleasedAt,
       disputeWindowExpiresAt: order.disputeWindowExpiresAt,
@@ -4800,7 +4823,10 @@ export class OrdersService {
       submittedData: this.toStringRecord(order.submittedData),
       requesterDocuments,
       requesterDocUrls: requesterDocuments.map((document) => document.url),
-      resultFileUrl: this.buildResultFileAccessUrl(order.id, order.resultFileUrl),
+      resultFileUrl: this.buildResultFileAccessUrl(
+        order.id,
+        order.resultFileUrl,
+      ),
       resultUploadedAt: order.resultUploadedAt,
       totalAmount: order.totalAmount.toString(),
       platformFee: order.platformFee.toString(),
@@ -5031,7 +5057,9 @@ export class OrdersService {
   }
 
   private serializeCbtOrderSummary(order: CbtOrderListRecord) {
-    const requesterDocuments = this.toRequesterDocuments(order.requesterDocUrls);
+    const requesterDocuments = this.toRequesterDocuments(
+      order.requesterDocUrls,
+    );
 
     return {
       id: order.id,
@@ -5092,7 +5120,10 @@ export class OrdersService {
       submittedData: this.toStringRecord(order.submittedData),
       requesterDocuments,
       requesterDocUrls: requesterDocuments.map((document) => document.url),
-      resultFileUrl: this.buildResultFileAccessUrl(order.id, order.resultFileUrl),
+      resultFileUrl: this.buildResultFileAccessUrl(
+        order.id,
+        order.resultFileUrl,
+      ),
       resultUploadedAt: order.resultUploadedAt,
       escrowReleasedAt: order.escrowReleasedAt,
       disputeWindowExpiresAt: order.disputeWindowExpiresAt,
@@ -5225,7 +5256,9 @@ export class OrdersService {
     if (user.role === UserRole.CBT_STAFF) {
       const parentProfile = user.cbtStaffProfile?.cbt?.cbtProfile;
       if (!parentProfile) {
-        throw new NotFoundException('CBT center profile not found for this staff member');
+        throw new NotFoundException(
+          'CBT center profile not found for this staff member',
+        );
       }
       if (parentProfile.approvalStatus !== CbtApprovalStatus.APPROVED) {
         throw new ForbiddenException(

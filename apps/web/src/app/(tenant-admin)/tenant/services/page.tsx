@@ -79,14 +79,6 @@ export default function TenantServicesPage() {
     usesCustom !== (selection?.usesCustomSelection ?? false) ||
     services.some((service) => service.isSelected !== effectiveSelected.has(service.slug));
 
-  const automatedCount = services.filter(
-    (service) => service.deliveryMode === ServiceDeliveryMode.API_AUTOMATED,
-  ).length;
-  const visibleCount = usesCustom
-    ? Array.from(effectiveSelected).length
-    : selection?.visibleCount ?? services.length;
-  const hiddenCount = Math.max(services.length - visibleCount, 0);
-
   const toggleService = (slug: string) => {
     setSuccessMessage('');
     setDraft((prev) => {
@@ -817,4 +809,3 @@ function serializeDocumentDefinitions(docs: ServiceDocumentFormValue[]) {
     };
   });
 }
-

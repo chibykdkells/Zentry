@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Bell } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth.store';
 import { useTenantStore } from '@/stores/tenant.store';
+import { useHydrated } from '@/hooks/use-hydrated';
 import { getDefaultRouteForRole, inferRoleFromPath } from '@/lib/auth-routes';
 import { appendTenantContextToPath } from '@/lib/tenant-runtime';
 import { cn } from '@/lib/utils';
@@ -20,10 +20,9 @@ export function TopBar({ title, className }: TopBarProps) {
   const pathname = usePathname();
   const { user } = useAuthStore();
   const tenant = useTenantStore((state) => state.tenant);
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const hydrated = useHydrated();
 
-  const resolvedTenant = mounted ? tenant : null;
+  const resolvedTenant = hydrated ? tenant : null;
   const { data: unreadCount = 0 } = useNotificationsUnreadCount();
   const effectiveRole = user?.role ?? inferRoleFromPath(pathname);
   const tenantSlug = resolvedTenant?.slug ?? null;

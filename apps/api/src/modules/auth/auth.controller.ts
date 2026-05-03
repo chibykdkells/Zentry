@@ -88,7 +88,9 @@ export class AuthController {
   }
 
   private getRefreshCookieDomain(): string | undefined {
-    const explicitDomain = this.configService.get<string>('COOKIE_DOMAIN')?.trim();
+    const explicitDomain = this.configService
+      .get<string>('COOKIE_DOMAIN')
+      ?.trim();
     if (explicitDomain) {
       return explicitDomain.startsWith('.')
         ? explicitDomain

@@ -267,7 +267,10 @@ export class OrdersController {
     @CurrentUser() user: JwtUser,
     @Body() dto: CleanupOrderUploadsDto,
   ) {
-    return this.ordersService.cleanupUploadedOrderFiles(user.sub, dto.publicIds);
+    return this.ordersService.cleanupUploadedOrderFiles(
+      user.sub,
+      dto.publicIds,
+    );
   }
 
   @Post()

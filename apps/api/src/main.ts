@@ -101,10 +101,7 @@ async function bootstrap() {
       // Allow all tenant subdomains: acme.zendocx.net, etc.
       try {
         const { hostname, protocol } = new URL(origin);
-        if (
-          protocol === 'https:' &&
-          hostname.endsWith(`.${platformDomain}`)
-        ) {
+        if (protocol === 'https:' && hostname.endsWith(`.${platformDomain}`)) {
           callback(null, true);
           return;
         }

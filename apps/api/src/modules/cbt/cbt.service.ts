@@ -53,21 +53,27 @@ export class CbtService {
       this.prisma.user.findFirst({
         where: {
           email: normalizedEmail,
-          ...(cbtCenter.tenantId ? { tenantId: cbtCenter.tenantId } : { tenantId: null }),
+          ...(cbtCenter.tenantId
+            ? { tenantId: cbtCenter.tenantId }
+            : { tenantId: null }),
         },
         select: { id: true },
       }),
       this.prisma.user.findFirst({
         where: {
           phone: normalizedPhone,
-          ...(cbtCenter.tenantId ? { tenantId: cbtCenter.tenantId } : { tenantId: null }),
+          ...(cbtCenter.tenantId
+            ? { tenantId: cbtCenter.tenantId }
+            : { tenantId: null }),
         },
         select: { id: true },
       }),
     ]);
 
-    if (emailConflict) throw new ConflictException('Email is already registered');
-    if (phoneConflict) throw new ConflictException('Phone number is already registered');
+    if (emailConflict)
+      throw new ConflictException('Email is already registered');
+    if (phoneConflict)
+      throw new ConflictException('Phone number is already registered');
 
     const rounds = Number(this.config.get('BCRYPT_ROUNDS', '12'));
     const passwordHash = await bcrypt.hash(dto.password, rounds);

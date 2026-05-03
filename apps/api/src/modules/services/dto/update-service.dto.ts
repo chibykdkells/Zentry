@@ -84,5 +84,4 @@ export class UpdateServiceDto {
   @IsInt()
   @Min(0)
   sortOrder?: number;
-
 }

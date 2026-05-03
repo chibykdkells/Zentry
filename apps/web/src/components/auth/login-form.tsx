@@ -157,6 +157,7 @@ export function LoginForm({ mode = 'auto' }: { mode?: LoginMode }) {
   }, [
     accessToken,
     clearAuth,
+    inferredTenantSlug,
     nextPath,
     router,
     sessionExpired,

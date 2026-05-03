@@ -3,7 +3,7 @@
 import { ChevronDown, Loader2, Send } from 'lucide-react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import {
   CreateWithdrawalRequestInput,
   CreateWithdrawalRequestSchema,
@@ -23,11 +23,11 @@ export function WithdrawalRequestForm() {
     message: string;
   } | null>(null);
   const {
+    control,
     register,
     handleSubmit,
     reset,
     setValue,
-    watch,
     formState: { errors },
   } = useForm<CreateWithdrawalRequestInput>({
     resolver: zodResolver(CreateWithdrawalRequestSchema),
@@ -40,7 +40,10 @@ export function WithdrawalRequestForm() {
     },
   });
 
-  const selectedBankCode = watch('bankCode');
+  const selectedBankCode = useWatch({
+    control,
+    name: 'bankCode',
+  });
 
   const handleBankChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const code = e.target.value;

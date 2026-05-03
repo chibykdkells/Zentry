@@ -4,8 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 
 const TENANT_CACHE_TTL = 60; // 60 seconds
-const PLATFORM_HOSTNAME =
-  process.env['PLATFORM_DOMAIN'] ?? 'zendocx.net';
+const PLATFORM_HOSTNAME = process.env['PLATFORM_DOMAIN'] ?? 'zendocx.net';
 
 @Injectable()
 export class TenantResolverService {

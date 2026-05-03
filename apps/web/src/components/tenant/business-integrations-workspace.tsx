@@ -385,7 +385,6 @@ export function TenantBusinessIntegrationsWorkspace() {
   const { readiness, loading, error, reload } = useTenantProviderReadiness();
   const {
     selection,
-    categories: _categories,
     services,
     loading: servicesLoading,
     error: servicesError,

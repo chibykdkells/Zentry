@@ -122,7 +122,9 @@ describe('TenantResolverService', () => {
     const result = await service.resolveFromHostname('testbiz.zendocx.net');
 
     expect(result).toEqual(tenant);
-    expect(redis.getJson).toHaveBeenCalledWith('tenant:host:testbiz.zendocx.net');
+    expect(redis.getJson).toHaveBeenCalledWith(
+      'tenant:host:testbiz.zendocx.net',
+    );
     expect(prisma.tenant.findFirst).toHaveBeenCalledWith({
       where: {
         slug: 'testbiz',

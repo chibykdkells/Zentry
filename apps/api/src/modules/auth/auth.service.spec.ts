@@ -4,6 +4,9 @@ import { UserRole } from '@zendocx/types';
 
 describe('AuthService', () => {
   let prisma: {
+    tenant: {
+      findUnique: jest.Mock;
+    };
     user: {
       findFirst: jest.Mock;
       create: jest.Mock;
@@ -42,6 +45,9 @@ describe('AuthService', () => {
 
   beforeEach(() => {
     prisma = {
+      tenant: {
+        findUnique: jest.fn().mockResolvedValue(null),
+      },
       user: {
         findFirst: jest.fn(),
         create: jest.fn(),
@@ -139,7 +145,11 @@ describe('AuthService', () => {
       redis as never,
       jwt as never,
       config as never,
-      { sendEmail: jest.fn().mockResolvedValue({ messageId: 'mock', accepted: true }) } as never,
+      {
+        sendEmail: jest
+          .fn()
+          .mockResolvedValue({ messageId: 'mock', accepted: true }),
+      } as never,
     );
   });
 

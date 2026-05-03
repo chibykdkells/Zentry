@@ -56,5 +56,4 @@ export class CreateServiceDto {
   @IsInt()
   @Min(0)
   sortOrder?: number;
-
 }

@@ -24,12 +24,10 @@ import {
   useCreateTenantAdmin,
   useCreateTenant,
   useDeleteTenantUser,
-  useDismissTenantAdminAccess,
   type PlatformAdminTenantListItem,
   type PlatformAdminTenantUserListItem,
   usePlatformAdminTenants,
   usePlatformAdminTenantUsers,
-  useResetTenantAdminPassword,
   useToggleTenantUserActive,
 } from '@/hooks/use-platform-admin-tenants';
 import { getApiErrorMessage } from '@/lib/api-error';

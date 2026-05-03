@@ -1,9 +1,4 @@
-import {
-  IsArray,
-  IsBoolean,
-  IsIn,
-  IsOptional,
-} from 'class-validator';
+import { IsArray, IsBoolean, IsIn, IsOptional } from 'class-validator';
 import { TENANT_ADMIN_PERMISSIONS } from '@zendocx/types';
 
 export class UpdateOwnTenantAdminDto {

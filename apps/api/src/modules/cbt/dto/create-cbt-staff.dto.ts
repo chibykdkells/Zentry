@@ -1,4 +1,11 @@
-import { IsEmail, IsNotEmpty, IsString, MinLength, MaxLength, Matches } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsString,
+  MinLength,
+  MaxLength,
+  Matches,
+} from 'class-validator';
 
 export class CreateCbtStaffDto {
   @IsString()
@@ -16,7 +23,9 @@ export class CreateCbtStaffDto {
 
   @IsString()
   @IsNotEmpty()
-  @Matches(/^\+?[0-9]{10,15}$/, { message: 'Phone number must be 10–15 digits' })
+  @Matches(/^\+?[0-9]{10,15}$/, {
+    message: 'Phone number must be 10–15 digits',
+  })
   phone!: string;
 
   @IsString()

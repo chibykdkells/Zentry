@@ -7387,3 +7387,56 @@ Replaced the entire two-column `AccountPanel` layout with a **5-tile DashTile gr
 
 - Fly deploy CLI times out with "net/http: request canceled" when the machine is briefly stopped during rolling update; machine recovers and health checks pass regardless — this is a Fly.io proxy/lease timing issue, not an app error. Re-running `fly deploy` after the machine stabilises works cleanly.
 - No CI auto-deploy for Fly.io — every API change still requires a manual `fly deploy` after push.
+
+---
+
+## Session 2026-05-03 (continued) — Workspace Verification Pass + Tracker Reconciliation
+
+**Phase:** Phase 10 — Admin Analytics, Security Audit & Launch
+**AI Assistant:** Codex GPT-5
+
+### What Was Done
+
+1. **Verification gates repaired and re-run**
+   - Fixed stale auth/orders API specs so tenant-aware sender lookup and uploaded-file tracking are mocked correctly.
+   - Cleaned up frontend lint failures by replacing the repeated `mounted` effect pattern with a shared hydration-safe hook and resolving the remaining error-level hook violations.
+   - Cleared API lint debt that surfaced afterward, including a few real typing issues in auth/tenant/users services plus test-file matcher noise.
+
+2. **Full workspace verification pass completed**
+   - `pnpm lint` — passed
+   - `pnpm typecheck` — passed
+   - `pnpm test` — passed (10/10 suites, 43/43 tests)
+   - `pnpm build` — passed
+
+3. **Build warnings narrowed to hardening work**
+   - Web build still warns about Sentry App Router setup:
+     - missing `onRequestError` hook in instrumentation
+     - missing `global-error` handler for React render errors
+     - legacy `sentry.client.config.ts` path should move toward `instrumentation-client.ts`
+   - `next-pwa` also warns that one large source map is skipped from precache because it exceeds the size threshold.
+
+4. **Trackers harmonized**
+   - Updated `PHASES.md` to reflect the verified green workspace gates and the real next action.
+   - Promoted completed items that were still marked pending, including admin service CRUD and SMS order-update coverage.
+   - Reframed the remaining launch blockers around production truth rather than repo uncertainty.
+
+### Files Modified
+
+- `docs/ai-context/PHASES.md`
+- `docs/ai-context/SESSION_LOG.md`
+
+### Verification
+
+- `pnpm lint` — passed
+- `pnpm typecheck` — passed
+- `pnpm test` — passed
+- `pnpm build` — passed
+
+### Blockers / Notes for Next Session
+
+- Production-truth pass is now the highest-value next step:
+  - verify Vercel Sentry env vars (`NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_ORG`, `SENTRY_PROJECT`)
+  - confirm `app.zendocx.net` CNAME in Cloudflare
+  - confirm `PAYSTACK_WEBHOOK_SECRET` and dashboard webhook endpoint
+  - manually verify silent refresh in-browser and PWA install flow
+- Repo verification is green, but build hardening remains open around Sentry App Router instrumentation.
