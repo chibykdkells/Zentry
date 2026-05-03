@@ -1,22 +1,21 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { type ElementType, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
   ArrowUpRight,
   Clock3,
   Filter,
+  History,
   Landmark,
-  LockKeyhole,
-  SearchSlash,
   ReceiptText,
   RefreshCcw,
-  ShieldCheck,
+  SearchSlash,
   Wallet as WalletIcon,
 } from 'lucide-react';
 import { ProtectedShell } from '@/components/layout/protected-shell';
+import { DetailModal } from '@/components/shared/detail-modal';
 import { EmptyState } from '@/components/shared/empty-state';
-import { AccountPanel } from '@/components/shared/account-panel';
 import { FeedbackBanner } from '@/components/shared/feedback-banner';
 import { PageHero } from '@/components/shared/page-hero';
 import { ScrollCardBody } from '@/components/shared/scroll-card-body';
@@ -61,6 +60,7 @@ export default function WalletPage() {
   const user = useAuthStore((state) => state.user);
   const { wallet, loading, error, reload } = useWallet();
   const [fundingOpen, setFundingOpen] = useState(false);
+  const [openTile, setOpenTile] = useState<string | null>(null);
   const [confirmingSandboxFunding, setConfirmingSandboxFunding] =
     useState(false);
   const [transactionFilters, setTransactionFilters] =
@@ -79,6 +79,13 @@ export default function WalletPage() {
     error: transactionsError,
     reload: reloadTransactions,
   } = useWalletTransactions(transactionFilters);
+  const {
+    requests,
+    summary,
+    loading: withdrawalLoading,
+    error: withdrawalError,
+    reload: reloadWithdrawals,
+  } = useMyWithdrawalRequests({ page: 1, limit: 6, status: 'ALL' });
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -233,6 +240,18 @@ export default function WalletPage() {
         ? 'Track platform-held money, released balances, and withdrawal activity without jumping between screens.'
         : 'See what is available now, what is on hold, and the latest wallet movement.';
 
+  const payoutsHeading =
+    isTenantAdmin
+      ? 'Business payouts'
+      : isPlatformOwner
+        ? 'Wallet withdrawals'
+        : 'Withdrawal requests';
+
+  const payoutsDescription =
+    isTenantAdmin
+      ? 'Move cleared business funds out of the wallet, track payout requests, and keep the finance trail easy to follow.'
+      : 'Submit a withdrawal request when funds are ready, then track review and payout progress from one place.';
+
   return (
     <ProtectedShell title="Wallet">
       <div className="mx-auto max-w-6xl space-y-5 p-4 md:space-y-6 md:p-8">
@@ -261,68 +280,22 @@ export default function WalletPage() {
           </div>
         ) : null}
 
-        <div className="grid gap-5 md:gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-          <WalletCard
-            availableBalance={wallet.availableBalance}
-            escrowBalance={wallet.escrowBalance}
-            className="min-h-[18rem]"
-            onFundClick={canTryOnlineFunding ? () => setFundingOpen(true) : undefined}
-            actionLabel="Fund wallet"
-            secondaryAction={
-              canRequestWithdrawal
-                ? {
-                    label: 'Withdraw money',
-                    icon: 'withdraw',
-                    onClick: () => {
-                      const section = document.getElementById('withdrawals');
-                      section?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    },
-                  }
-                : undefined
-            }
-          />
-          <AccountPanel
-            title="What you can do now"
-            description={
-              isRequesterOnly
-                ? 'Use the wallet for funding, request payments, and checking what is still reserved.'
-                : isCbt
-                  ? 'Use this wallet for earnings visibility, payout tracking, and reviewing recent movement.'
-                  : isTenantAdmin
-                    ? 'Use this business wallet for withdrawals, business balance checks, and payout tracking. Online top-up stays hidden until the live business flow is stable.'
-                    : 'Use this wallet for platform balance visibility, withdrawals, and finance review.'
-            }
-            contentClassName="space-y-4"
-          >
-            <ReadinessRow
-              icon={WalletIcon}
-              title="Available now"
-              description={`${formatNaira(wallet.availableBalance)} is ready to use immediately.`}
-            />
-            <ReadinessRow
-              icon={Clock3}
-              title="Still on hold"
-              description={`${formatNaira(wallet.escrowBalance)} is still reserved for active work or release checks.`}
-            />
-            {!isRequesterOnly ? (
-              <ReadinessRow
-                icon={Landmark}
-                title="Withdrawals"
-                description={
-                  isTenantAdmin
-                    ? 'Business payouts can be requested from the withdrawal section below.'
-                    : 'Withdrawal requests and payout history are available lower on this page.'
+        <WalletCard
+          availableBalance={wallet.availableBalance}
+          escrowBalance={wallet.escrowBalance}
+          className="min-h-[18rem]"
+          onFundClick={canTryOnlineFunding ? () => setFundingOpen(true) : undefined}
+          actionLabel="Fund wallet"
+          secondaryAction={
+            canRequestWithdrawal
+              ? {
+                  label: 'Payouts',
+                  icon: 'withdraw',
+                  onClick: () => setOpenTile('payouts'),
                 }
-              />
-            ) : (
-              <ReadinessRow
-                icon={ReceiptText}
-                title="Ledger activity"
-                description={`${wallet.transactionCount} wallet transaction${wallet.transactionCount === 1 ? '' : 's'} are already recorded.`}
-              />
-            )}
-          </AccountPanel>
-        </div>
+              : undefined
+          }
+        />
 
         <div
           className={cn(
@@ -373,27 +346,182 @@ export default function WalletPage() {
           )}
         </div>
 
-        {canRequestWithdrawal ? (
-          <section id="withdrawals">
-            <WithdrawalWorkspace
-              role={user?.role ?? null}
-              availableBalance={wallet.availableBalance}
+        {/* Tile grid */}
+        <div
+          className={cn(
+            'grid grid-cols-2 gap-3',
+            canRequestWithdrawal ? 'sm:grid-cols-4' : 'sm:grid-cols-2',
+          )}
+        >
+          {canRequestWithdrawal ? (
+            <DashTile
+              icon={Landmark}
+              label="Payouts"
+              value={formatNaira(summary?.pendingAmount ?? '0') + ' pending'}
+              color="bg-amber-500 text-white"
+              onClick={() => setOpenTile('payouts')}
             />
-          </section>
-        ) : null}
+          ) : null}
+          {canRequestWithdrawal ? (
+            <DashTile
+              icon={ArrowUpRight}
+              label="Withdrawal"
+              value={`${summary?.completedCount ?? 0} completed`}
+              color="bg-emerald-600 text-white"
+              onClick={() => setOpenTile('withdrawals')}
+            />
+          ) : null}
+          <DashTile
+            icon={ReceiptText}
+            label="Wallet Report"
+            value={`${wallet.transactionCount} records`}
+            color="bg-[#0D1B3E] text-white"
+            onClick={() => setOpenTile('report')}
+          />
+          <DashTile
+            icon={History}
+            label="Transaction History"
+            value={`${wallet.recentTransactions.length} recent`}
+            color="bg-cyan-600 text-white"
+            onClick={() => setOpenTile('history')}
+          />
+        </div>
 
-        <div className="grid gap-5 md:gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-          <AccountPanel
-            title="Wallet ledger"
-            description={
-              isRequesterOnly
-                ? 'Filter the wallet ledger by type, status, or date range to review funding, spending, held funds, releases, and refunds.'
-                : isCbt
-                  ? 'Filter the ledger by type, status, or date range to track earnings, withdrawals, and payout-related movement.'
-                  : 'Filter the ledger by type, status, or date range to review balance movement without leaving this workspace.'
-            }
-            contentClassName="space-y-4"
-          >
+        {/* Payouts modal */}
+        <DetailModal
+          open={openTile === 'payouts'}
+          onClose={() => setOpenTile(null)}
+          title={payoutsHeading}
+          description={payoutsDescription}
+          width="lg"
+        >
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <BalanceRow
+                label="Available now"
+                value={formatNaira(wallet.availableBalance)}
+                tone="strong"
+              />
+              <BalanceRow
+                label="Waiting review"
+                value={formatNaira(summary?.pendingAmount ?? '0')}
+              />
+              <BalanceRow
+                label="Processing"
+                value={formatNaira(summary?.processingAmount ?? '0')}
+              />
+              <BalanceRow
+                label="Completed"
+                value={formatNaira(summary?.completedAmount ?? '0')}
+              />
+            </div>
+            <FeedbackBanner
+              tone="info"
+              title="What this action does"
+              message={
+                isTenantAdmin
+                  ? 'Submit a payout request when the business has cleared funds. The amount is reserved immediately so finance review stays consistent.'
+                  : 'Submit a withdrawal request once funds are available. The amount is reserved immediately while it moves through review and payout processing.'
+              }
+            />
+            <WithdrawalRequestForm />
+          </div>
+        </DetailModal>
+
+        {/* Withdrawal history modal */}
+        <DetailModal
+          open={openTile === 'withdrawals'}
+          onClose={() => setOpenTile(null)}
+          title="Withdrawal history"
+          description="Recent payout requests and their review status."
+          width="lg"
+        >
+          {withdrawalError ? (
+            <EmptyState
+              title="Withdrawal history unavailable"
+              message={withdrawalError}
+              icon={Landmark}
+              action={
+                <button
+                  type="button"
+                  onClick={reloadWithdrawals}
+                  className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  Try again
+                </button>
+              }
+            />
+          ) : withdrawalLoading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <TransactionSkeleton key={index} />
+              ))}
+            </div>
+          ) : requests.length === 0 ? (
+            <EmptyState
+              title="No withdrawal requests yet"
+              message="As soon as a payout request is submitted, it will appear here with its review status and destination account."
+              icon={Landmark}
+            />
+          ) : (
+            <div className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <BalanceRow
+                  label="Pending count"
+                  value={String(summary?.pendingCount ?? 0)}
+                />
+                <BalanceRow
+                  label="Completed count"
+                  value={String(summary?.completedCount ?? 0)}
+                />
+              </div>
+              <ScrollCardBody bodyClassName="space-y-3">
+                {requests.map((request) => (
+                  <article
+                    key={request.id}
+                    className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4"
+                  >
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-semibold text-slate-900">
+                            {request.bankName} · {request.accountName}
+                          </p>
+                          <WithdrawalStatusBadge status={request.status} />
+                        </div>
+                        <p className="mt-1 text-sm text-slate-500">
+                          {request.accountNumber} · Requested {formatDate(request.createdAt)}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-400">
+                          {request.processorNote ?? 'No finance note yet.'}
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-white px-3 py-1.5 text-sm font-semibold text-slate-900">
+                        {formatNaira(request.amount)}
+                      </span>
+                    </div>
+                  </article>
+                ))}
+              </ScrollCardBody>
+            </div>
+          )}
+        </DetailModal>
+
+        {/* Wallet Report modal */}
+        <DetailModal
+          open={openTile === 'report'}
+          onClose={() => setOpenTile(null)}
+          title="Wallet Report"
+          description={
+            isRequesterOnly
+              ? 'Filter by type, status, or date range to review funding, spending, held funds, releases, and refunds.'
+              : isCbt
+                ? 'Filter by type, status, or date range to track earnings, withdrawals, and payout-related movement.'
+                : 'Filter by type, status, or date range to review balance movement without leaving this workspace.'
+          }
+          width="xl"
+        >
+          <div className="space-y-4">
             <div className="grid gap-3 md:grid-cols-2">
               <FilterSelect
                 label="Transaction type"
@@ -551,36 +679,53 @@ export default function WalletPage() {
                 ) : null}
               </div>
             )}
-          </AccountPanel>
+          </div>
+        </DetailModal>
 
-          <AccountPanel
-            title="Latest balance-moving activity"
-            description={
-              isRequesterOnly
-                ? 'A compact recent-activity view so you do not have to scan the full filtered ledger first.'
-                : isCbt
-                  ? 'A compact recent-activity view for the most recent earnings and payout movement.'
-                  : 'A compact recent-activity view so the newest balance changes stay visible beside the ledger.'
-            }
-          >
-            {wallet.recentTransactions.length === 0 ? (
-              <EmptyState
-                title="No recent activity yet"
-                message="Recent wallet activity will appear here once the ledger starts moving."
-                icon={ReceiptText}
-              />
-            ) : (
-              <ScrollCardBody bodyClassName="space-y-3">
-                {wallet.recentTransactions.map((transaction) => (
-                  <TransactionRow key={transaction.id} transaction={transaction} />
-                ))}
-              </ScrollCardBody>
-            )}
-          </AccountPanel>
-        </div>
-
+        {/* Transaction History modal */}
+        <DetailModal
+          open={openTile === 'history'}
+          onClose={() => setOpenTile(null)}
+          title="Transaction History"
+          description="The most recent balance-moving events on this wallet."
+          width="lg"
+        >
+          {wallet.recentTransactions.length === 0 ? (
+            <EmptyState
+              title="No recent activity yet"
+              message="Recent wallet activity will appear here once the ledger starts moving."
+              icon={ReceiptText}
+            />
+          ) : (
+            <ScrollCardBody bodyClassName="space-y-3">
+              {wallet.recentTransactions.map((transaction) => (
+                <TransactionRow key={transaction.id} transaction={transaction} />
+              ))}
+            </ScrollCardBody>
+          )}
+        </DetailModal>
       </div>
     </ProtectedShell>
+  );
+}
+
+function DashTile({ icon: Icon, label, value, color, onClick }: {
+  icon: ElementType; label: string; value: string; color: string; onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group flex flex-col gap-3 rounded-[1.5rem] border border-slate-200 bg-white p-5 text-left transition hover:border-slate-300 hover:shadow-sm active:scale-[0.98]"
+    >
+      <div className={`flex h-11 w-11 items-center justify-center rounded-2xl ${color}`}>
+        <Icon size={20} />
+      </div>
+      <div className="min-w-0">
+        <p className="truncate text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">{label}</p>
+        <p className="mt-1 truncate text-xl font-bold tracking-tight text-slate-900">{value}</p>
+      </div>
+    </button>
   );
 }
 
@@ -655,179 +800,6 @@ function BalanceRow({
     >
       <span className="text-sm text-slate-500">{label}</span>
       <span className="text-sm font-semibold text-slate-900">{value}</span>
-    </div>
-  );
-}
-
-function ReadinessRow({
-  icon: Icon,
-  title,
-  description,
-}: {
-  icon: React.ElementType;
-  title: string;
-  description: string;
-}) {
-  return (
-    <div className="flex gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
-      <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-slate-700 shadow-sm">
-        <Icon size={18} />
-      </div>
-      <div>
-        <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
-        <p className="mt-1 text-sm leading-6 text-slate-500">{description}</p>
-      </div>
-    </div>
-  );
-}
-
-function WithdrawalWorkspace({
-  role,
-  availableBalance,
-}: {
-  role: UserRole | null;
-  availableBalance: string;
-}) {
-  const {
-    requests,
-    summary,
-    loading,
-    error,
-    reload,
-  } = useMyWithdrawalRequests({
-    page: 1,
-    limit: 6,
-    status: 'ALL',
-  });
-
-  const heading =
-    role === UserRole.TENANT_ADMIN
-      ? 'Business payouts'
-      : role === UserRole.SUPER_ADMIN
-        ? 'Wallet withdrawals'
-        : 'Withdrawal requests';
-
-  const description =
-    role === UserRole.TENANT_ADMIN
-      ? 'Move cleared business funds out of the wallet, track payout requests, and keep the finance trail easy to follow.'
-      : 'Submit a withdrawal request when funds are ready, then track review and payout progress from one place.';
-
-  return (
-    <div className="grid gap-5 md:gap-6 xl:grid-cols-[0.92fr_1.08fr]">
-      <AccountPanel
-        title={heading}
-        description={description}
-        contentClassName="space-y-4"
-      >
-        <div className="grid gap-3 sm:grid-cols-2">
-          <BalanceRow
-            label="Available now"
-            value={formatNaira(availableBalance)}
-            tone="strong"
-          />
-          <BalanceRow
-            label="Waiting review"
-            value={formatNaira(summary?.pendingAmount ?? '0')}
-          />
-          <BalanceRow
-            label="Processing"
-            value={formatNaira(summary?.processingAmount ?? '0')}
-          />
-          <BalanceRow
-            label="Completed"
-            value={formatNaira(summary?.completedAmount ?? '0')}
-          />
-        </div>
-
-        <FeedbackBanner
-          tone="info"
-          title="What this action does"
-          message={
-            role === UserRole.TENANT_ADMIN
-              ? 'Submit a payout request when the business has cleared funds. The amount is reserved immediately so finance review stays consistent.'
-              : 'Submit a withdrawal request once funds are available. The amount is reserved immediately while it moves through review and payout processing.'
-          }
-        />
-
-        <WithdrawalRequestForm />
-      </AccountPanel>
-
-      <AccountPanel
-        title="Recent withdrawal activity"
-        description="Keep the latest payout requests visible so approvals, processing, and completed transfers are easy to understand at a glance."
-        contentClassName="space-y-4"
-      >
-        {error ? (
-          <EmptyState
-            title="Withdrawal history unavailable"
-            message={error}
-            icon={Landmark}
-            action={
-              <button
-                type="button"
-                onClick={reload}
-                className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-              >
-                Try again
-              </button>
-            }
-          />
-        ) : loading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 3 }).map((_, index) => (
-              <TransactionSkeleton key={index} />
-            ))}
-          </div>
-        ) : requests.length === 0 ? (
-          <EmptyState
-            title="No withdrawal requests yet"
-            message="As soon as a payout request is submitted, it will appear here with its review status and destination account."
-            icon={Landmark}
-          />
-        ) : (
-          <>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <BalanceRow
-                label="Pending count"
-                value={String(summary?.pendingCount ?? 0)}
-              />
-              <BalanceRow
-                label="Completed count"
-                value={String(summary?.completedCount ?? 0)}
-              />
-            </div>
-
-            <ScrollCardBody bodyClassName="space-y-3">
-              {requests.map((request) => (
-                <article
-                  key={request.id}
-                  className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4"
-                >
-                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-sm font-semibold text-slate-900">
-                          {request.bankName} · {request.accountName}
-                        </p>
-                        <WithdrawalStatusBadge status={request.status} />
-                      </div>
-                      <p className="mt-1 text-sm text-slate-500">
-                        {request.accountNumber} · Requested {formatDate(request.createdAt)}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-400">
-                        {request.processorNote ?? 'No finance note yet.'}
-                      </p>
-                    </div>
-                    <span className="rounded-full bg-white px-3 py-1.5 text-sm font-semibold text-slate-900">
-                      {formatNaira(request.amount)}
-                    </span>
-                  </div>
-                </article>
-              ))}
-            </ScrollCardBody>
-          </>
-        )}
-      </AccountPanel>
     </div>
   );
 }
@@ -963,23 +935,21 @@ function getTransactionLabel(type: TransactionType) {
 
 function WalletSkeleton() {
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-4 md:p-8">
+    <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-8">
       <div className="space-y-3">
         <SkeletonLine className="h-8 w-52" />
         <SkeletonLine className="h-4 w-full max-w-2xl" />
       </div>
-      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        <SkeletonBlock className="h-72" />
-        <SkeletonBlock className="h-72" />
-      </div>
+      <SkeletonBlock className="h-72" />
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {Array.from({ length: 4 }).map((_, index) => (
           <SkeletonBlock key={index} className="h-28" />
         ))}
       </div>
-      <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-        <SkeletonBlock className="h-72" />
-        <SkeletonBlock className="h-72" />
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <SkeletonBlock key={index} className="h-28" />
+        ))}
       </div>
     </div>
   );
