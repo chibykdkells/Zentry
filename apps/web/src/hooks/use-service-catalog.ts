@@ -52,6 +52,7 @@ export interface ServiceCatalogItem {
 export interface ServiceCatalogFilters {
   search?: string;
   categorySlug?: string;
+  tenantSlug?: string;
 }
 
 interface ServiceCatalogResponse {
@@ -111,6 +112,10 @@ export function useServiceCatalog(filters: ServiceCatalogFilters) {
 
       if (filters.categorySlug) {
         params.set('categorySlug', filters.categorySlug);
+      }
+
+      if (filters.tenantSlug) {
+        params.set('tenantSlug', filters.tenantSlug);
       }
 
       const queryString = params.toString();

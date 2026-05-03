@@ -1455,6 +1455,16 @@ export class ServicesService {
   }
 
   async getCatalog(query: GetServiceCatalogQueryDto, tenantId: string | null) {
+    // When called unauthenticated (tenantId=null), resolve tenant from slug param
+    // so CBT registration forms on tenant portals see the correct scoped catalog.
+    if (!tenantId && query.tenantSlug?.trim()) {
+      const tenant = await this.prisma.tenant.findFirst({
+        where: { slug: query.tenantSlug.trim().toLowerCase(), isActive: true },
+        select: { id: true },
+      });
+      tenantId = tenant?.id ?? null;
+    }
+
     const trimmedSearch = query.search?.trim();
     const tenantFilter = this.buildServiceVisibilityFilter(tenantId);
     const where: Prisma.ServiceWhereInput = {

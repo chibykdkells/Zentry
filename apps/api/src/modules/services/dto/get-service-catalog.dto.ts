@@ -8,4 +8,8 @@ export class GetServiceCatalogQueryDto {
   @IsOptional()
   @IsString()
   categorySlug?: string;
+
+  @IsOptional()
+  @IsString()
+  tenantSlug?: string;
 }

@@ -101,12 +101,13 @@ export function RegistrationForm({
   const [formError, setFormError] = useState<string | null>(null);
   const tenantReady = Boolean(tenant ?? resolveTenantSlugForRequest());
   const requiresTenant = true;
+  const tenantSlugForCatalog = tenant?.slug ?? resolveTenantSlugForRequest() ?? undefined;
   const {
     categories: catalogCategories,
     services: catalogServices,
     loading: categoriesLoading,
     error: categoriesError,
-  } = useServiceCatalog({});
+  } = useServiceCatalog({ tenantSlug: tenantSlugForCatalog });
   const manualServiceCategories = useMemo(() => {
     const manualCategoryIds = new Set(
       catalogServices

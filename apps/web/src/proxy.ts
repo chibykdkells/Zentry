@@ -81,7 +81,10 @@ export function proxy(request: NextRequest) {
       return NextResponse.next();
     }
 
-    if (role) {
+    // ?preview=1 lets authenticated admins view the public portal home as a visitor
+    const isPortalPreview = request.nextUrl.searchParams.get('preview') === '1';
+
+    if (role && !isPortalPreview) {
       return persistTenantCookie(
         NextResponse.redirect(
           new URL(
