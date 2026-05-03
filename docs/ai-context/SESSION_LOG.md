@@ -7559,3 +7559,41 @@ Both frontend changes committed and pushed to `main` (Vercel auto-deploys). API 
 ### Blockers / Notes for Next Session
 - **PAYSTACK_WEBHOOK_SECRET must be verified**: `PAYSTACK_WEBHOOK_SECRET=49bb8a67b557e235` is set on Fly.io. Confirm this exactly matches the secret shown in your Paystack dashboard under Settings → API Keys & Webhooks → Webhook Secret. If they don't match, the webhook signature check fails silently and wallet balances won't update on payment events. The redirect-based confirm (just fixed) is a fallback but webhooks are the reliable path.
 - Production-truth pass still pending: Sentry Vercel env vars, `app.zendocx.net` CNAME, silent refresh browser test, PWA install.
+
+---
+
+## Session 2026-05-03 (continued 4) — CBT job visibility fix + remove CBT mgmt from super admin
+
+**Phase:** Phase 10 — Admin Analytics, Security Audit & Launch
+**AI Assistant:** Claude Sonnet 4.6
+
+### What Was Done
+
+#### 1. CBT job visibility fix — `buildSupportedCbtCategoryWhere` empty-array bug
+**Root cause**: `buildSupportedCbtCategoryWhere([])` returned `{ service: { category: { slug: { in: [] } } } }`. Prisma's `{ in: [] }` matches **no rows**, so any APPROVED CBT center with no categories explicitly assigned would see 0 available jobs on the dashboard AND the job pool page.
+
+**Fix**: Added an early return — if `categorySlugs.length === 0`, return `{}` (no filter) so all available MANUAL pending jobs are visible.
+
+This applies to: `getCbtDashboard`, `getCbtJobPool`, `getCbtMyJobs`.
+
+#### 2. Remove CBT Centers from super admin nav and approval flow
+Per product decision: CBT center approval is the tenant admin's responsibility, not the platform admin's.
+- Removed `{ label: 'CBT Centers', href: '/admin/cbt', icon: Users }` from `adminPrimaryNav` in `navigation.ts`
+- Replaced `/admin/cbt/page.tsx` content with a `redirect('/admin/dashboard')` so direct URL access doesn't 404
+
+### Files Modified
+- `apps/api/src/modules/orders/orders.service.ts` — `buildSupportedCbtCategoryWhere` empty-array fix
+- `apps/web/src/lib/navigation.ts` — removed CBT Centers from `adminPrimaryNav`
+- `apps/web/src/app/(admin)/admin/cbt/page.tsx` — replaced with redirect to /admin/dashboard
+
+### Commits
+- `d814b31` — Fix CBT job visibility and remove CBT management from super admin
+
+### Verification
+- `pnpm --filter api exec tsc --noEmit` — clean
+- `pnpm --filter web exec tsc --noEmit` — clean
+- `fly deploy` — machine `7849236f167d58` reached good state, webpack recompiled fresh
+
+### Blockers / Notes for Next Session
+- CBT centers that were approved but still see 0 jobs may need a page refresh to bust the TanStack Query cache.
+- Production-truth pass still pending: Sentry env vars, CNAME, Paystack webhook secret, silent refresh, PWA install.

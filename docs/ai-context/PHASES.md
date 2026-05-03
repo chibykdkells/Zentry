@@ -719,6 +719,8 @@ optimized. Production deployed.
 - [x] Hydration refactor — shared useHydrated hook replaces repeated useState/useEffect mount guard across all layouts
 - [x] Admin CBT detail modal button layout fixed — removed flex-1 from Approve/Reject buttons
 - [x] Wallet Paystack live payment redirect fixed — removed checkout=sandbox guard; POST /wallet/fund/confirm now fires for both sandbox and live redirects
+- [x] CBT job visibility fixed — buildSupportedCbtCategoryWhere([]) now returns {} instead of { in: [] } (which matched nothing in Prisma)
+- [x] Super admin CBT Centers nav removed — approval is tenant admin responsibility; /admin/cbt redirects to /admin/dashboard
 - [ ] Confirm password reset email delivery in production (run fly logs --app zentry-api-prod)
 - [ ] Sentry Vercel env vars still needed: NEXT_PUBLIC_SENTRY_DSN, SENTRY_ORG=zendocx, SENTRY_PROJECT=zendocx-web
 - [ ] app.zendocx.net CNAME record in Cloudflare (add app → cname.vercel-dns.com)
