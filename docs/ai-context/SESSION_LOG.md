@@ -7117,3 +7117,227 @@ Complete redesign of all five tenant-admin pages plus the tenant dashboard. The 
 - Portal preview card currently shows a static branded gradient — a live `<iframe>` rendering of `/?tenant={slug}` was discussed but deferred (iframe would need `pointer-events: none` + CSS scale transform to fit the preview container).
 - Sentry Vercel env vars (`NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_ORG`, `SENTRY_PROJECT`) still pending.
 - `app.zendocx.net` CNAME record in Cloudflare still needed.
+
+---
+
+## Session 2026-05-03 — Hotfix: CBT Registration "Session Expired" on Service Categories
+
+**Phase:** Phase 10 — Admin Analytics, Security Audit & Launch
+**AI Assistant:** Claude Sonnet 4.6
+
+### What Was Done
+
+- **Bug reported:** CBT registration form at `/register/cbt` showed "Your session has expired. Please sign in again." inside the "Supported service categories" checkbox section, blocking new CBT center registrations.
+- **Root cause:** `GET /services/catalog` had no `@Public()` decorator, so the global `JwtAuthGuard` rejected every unauthenticated request with a 401. The frontend API error handler converted that 401 to the "session expired" message.
+- **Fix:** Added `@Public()` to the `getCatalog` controller method and made `@CurrentUser()` parameter optional (`JwtUser | undefined`), passing `user?.tenantId ?? null` to the service. Logged-in users continue to receive their tenant-scoped catalog view; guests receive the full platform catalog, which is correct for registration.
+
+### Files Modified
+
+- `apps/api/src/modules/services/services.controller.ts` — added `@Public()` import + decorator, made `user` parameter optional
+- `docs/ai-context/SESSION_LOG.md`
+
+### Commit
+
+- `a961cb6` — pushed to `main`, triggers Fly.io API deploy
+
+### Verification
+
+- `pnpm --filter @zendocx/api typecheck` — passed clean
+
+---
+
+## Session 2026-05-03 — Deep Fix: CBT Registration Catalog + Portal Preview Redirect
+
+**Phase:** Phase 10 — Admin Analytics, Security Audit & Launch
+**AI Assistant:** Claude Sonnet 4.6
+
+### Root Causes Found
+
+**Service categories "session expired" (deeper issue beyond the @Public fix):**
+After `@Public()` was added to `GET /services/catalog`, unauthenticated users could reach the endpoint but still got *platform-level* categories only (`tenantId=null` → `buildServiceVisibilityFilter(null)` → `{ tenantId: null }`). A CBT registering on a specific tenant portal should see *that tenant's* service category selection, not the raw platform set.
+
+**Portal "Open portal" → 404 / wrong page:**
+The proxy at `pathname === '/'` has an `if (role)` block that immediately redirects any authenticated user (including `TENANT_ADMIN`) to `getDefaultRouteForRole(role)` = `/tenant/dashboard`. So clicking "Open portal" from the settings page put the admin back on their dashboard, not the customer-facing portal home. The 404 was the result of that redirect landing on an unexpected URL state.
+
+### What Was Fixed
+
+1. **API — `GetServiceCatalogQueryDto`**: Added optional `tenantSlug` field. When `tenantId` is null (unauthenticated) but `tenantSlug` is provided, `services.service.ts getCatalog()` resolves the tenant by slug and uses its ID for service visibility filtering.
+
+2. **Frontend — `ServiceCatalogFilters` + `useServiceCatalog`**: Added optional `tenantSlug` to the filter type and forwarded it as a query param in the API call.
+
+3. **Frontend — `registration-form.tsx`**: Passes `tenant?.slug ?? resolveTenantSlugForRequest()` as `tenantSlug` to `useServiceCatalog`, so CBT registrants on a tenant portal see that tenant's specific service categories.
+
+4. **Frontend — `proxy.ts`**: Added `?preview=1` bypass: when `request.nextUrl.searchParams.get('preview') === '1'` is true on the root path, the authenticated-role redirect is skipped and the request falls through to render `TenantPortalHome`. Authenticated admins can now view the portal as a visitor.
+
+5. **Frontend — `settings/page.tsx`**: `portalUrl` for non-custom-domain tenants now appends `&preview=1`. The visible URL label still shows `?tenant=slug` only (the preview param is invisible to the user).
+
+### Files Modified
+
+- `apps/api/src/modules/services/dto/get-service-catalog.dto.ts`
+- `apps/api/src/modules/services/services.service.ts`
+- `apps/web/src/hooks/use-service-catalog.ts`
+- `apps/web/src/components/auth/registration-form.tsx`
+- `apps/web/src/proxy.ts`
+- `apps/web/src/app/(tenant-admin)/tenant/settings/page.tsx`
+- `docs/ai-context/SESSION_LOG.md`
+
+### Commit
+
+- `62cbeed` — pushed to `main`, triggers Fly.io API + Vercel web deploy
+
+### Verification
+
+- `pnpm --filter @zendocx/api typecheck` — clean
+- `pnpm --filter @zendocx/web typecheck` — clean
+
+---
+
+## Session 2026-05-03 — Remove Service Category Selection from CBT Registration
+
+**Phase:** Phase 10 — Admin Analytics, Security Audit & Launch
+**AI Assistant:** Claude Sonnet 4.6
+
+### Decision
+
+Service category selection during CBT registration is unnecessary friction. The tenant admin already manages which categories a CBT center handles from the CBT management page after the CBT registers and gets approved. Requiring it upfront caused the "session expired" error (catalog needed auth) and validation failures.
+
+### What Was Removed
+
+- `serviceCategoryIds` field from `RegisterCbtSchema` (validators package)
+- `serviceCategoryIds` field + `@IsArray @ArrayMinSize(1)` validators from `RegisterCbtDto`
+- Entire `getAssignableCbtServiceCategoryIds()` private method from `auth.service.ts`
+- Category ID validation, normalization, and `serviceCategoryAssignments.create` block from `registerCbt()`
+- "Supported service categories" checkbox section from `registration-form.tsx`
+- `useServiceCatalog` import and hook call from `registration-form.tsx`
+- Catalog state variables (`catalogCategories`, `catalogServices`, `categoriesLoading`, `categoriesError`, `manualServiceCategories`) from `registration-form.tsx`
+
+### Files Modified
+
+- `packages/validators/src/auth.schema.ts`
+- `apps/api/src/modules/auth/dto/register-cbt.dto.ts`
+- `apps/api/src/modules/auth/auth.service.ts`
+- `apps/web/src/components/auth/registration-form.tsx`
+- `docs/ai-context/SESSION_LOG.md`
+
+### Commit
+
+- `a7756c2` — pushed to `main`
+
+### Verification
+
+- `pnpm --filter @zendocx/api typecheck` — clean
+- `pnpm --filter @zendocx/web typecheck` — clean
+
+---
+
+## Session 2026-05-03 — Dashboard Redesign: Tile Grid → DetailModal Pattern
+
+**Phase:** Phase 10 — Admin Analytics, Security Audit & Launch
+**AI Assistant:** Claude Sonnet 4.6
+
+### What Was Done
+
+Replaced all large `AccountPanel` / `FocusCard` content blocks across all four role dashboards with a compact `DashTile` grid. Each tile shows a colored icon, label, and live metric. Clicking any tile opens a `DetailModal` with the full content that was previously in the panel.
+
+**Pattern used in all four files:**
+- `DashTile` local component: rounded card, colored icon square, label, large value, hover/active states
+- Grid: `grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4`
+- `openTile: useState<string | null>(null)` drives which modal is open
+- `DetailModal` with `width="md"` or `"lg"` per content volume
+
+**Individual dashboard (`/home`):**
+- Removed: 4-card stat grid, "Popular services" panel, "Recent activity" panel
+- Added: Orders, Services, Wallet, Activity tiles → modals with the same content
+
+**CBT dashboard (`/dashboard`):**
+- Removed: 3-card stat grid, "Open work near you" panel, "Your active context" panel
+- Added: Job Pool, Active Jobs, Earnings, Status tiles → modals
+
+**Admin dashboard (`/admin/dashboard`):**
+- Removed: "Needs attention now", "Platform money snapshot", "Jobs waiting for a CBT center", "Release pressure" panels
+- Added: Operations, Finance, Job Queue, Release tiles → modals
+- Kept: `MoneyTile`, `PostureRow` helpers (still used in modal content)
+
+**Tenant dashboard (`/tenant/dashboard`):**
+- Removed: `FocusCard` section (Wallet/payout, Users/operators, Catalog/API), "Needs attention now" panel, `MiniFinanceTile` helper
+- Added: Wallet, Customers, Services, Attention tiles → modals
+- Kept: StatCards (colorful top row), "Newest users" row→modal, "Completed job queue" panel, `ReleaseBadge`
+
+### Files Modified
+
+- `apps/web/src/app/(dashboard)/home/page.tsx`
+- `apps/web/src/app/(cbt)/dashboard/page.tsx`
+- `apps/web/src/app/(admin)/admin/dashboard/page.tsx`
+- `apps/web/src/app/(tenant-admin)/tenant/dashboard/page.tsx`
+- `docs/ai-context/SESSION_LOG.md`
+
+### Commit
+
+- `d246daf` — pushed to `main`
+
+### Verification
+
+- `pnpm --filter @zendocx/web typecheck` — clean
+
+---
+
+## Session 2026-05-03 (continued) — Wallet Page & Business Workspace: Tile Grid → DetailModal Pattern
+
+**Phase:** Phase 10 — Admin Analytics, Security Audit & Launch
+**AI Assistant:** Claude Sonnet 4.6
+
+### What Was Done
+
+Extended the DashTile → DetailModal redesign pattern (from the previous session's dashboard work) to two additional pages: the Wallet page and the Business Workspace (tenant settings) page.
+
+#### Wallet page (`/wallet`)
+
+Removed all large `AccountPanel` blocks and replaced them with a compact 4-tile grid. Tiles are conditional on user role.
+
+**Removed:**
+- "What you can do now" `AccountPanel` (readiness/balance copy panel)
+- `WithdrawalWorkspace` grid layout (two-column panel with payout form + withdrawal history)
+- "Latest balance-moving activity" `AccountPanel` (redundant with Transaction History tile)
+
+**Added tile grid (conditional):**
+- **Payouts** (canRequestWithdrawal only) — Landmark icon, amber. Modal: payout summary (available/pending/processing/completed balance rows) + FeedbackBanner + `WithdrawalRequestForm`
+- **Withdrawal** (canRequestWithdrawal only) — ArrowUpRight icon, emerald. Modal: recent withdrawal requests list with count summary
+- **Wallet Report** (renamed from "Wallet ledger") — ReceiptText icon, navy. Modal (`width="xl"`): full filter selects (type + status + date range) + paginated transaction list with prev/next
+- **Transaction History** (consolidated from "Latest balance-moving activity") — History icon, cyan. Modal: `wallet.recentTransactions` quick view
+
+**Other changes:**
+- `useMyWithdrawalRequests` hook moved from `WithdrawalWorkspace` sub-component to top-level so state is always available
+- `WalletCard` secondary action changed from scroll-to-anchor to `setOpenTile('payouts')`
+- `WalletSkeleton` updated to match new layout (no two-column grid skeleton)
+
+#### Business Workspace (`/tenant/settings`)
+
+Replaced the entire two-column `AccountPanel` layout with a **5-tile DashTile grid** plus a `PageHero`.
+
+**Removed:** Monolithic single `<form>` wrapping all settings; separate `AccountPanel` blocks for brand/domain/homepage, portal preview, and admin access.
+
+**Added 5 tiles:**
+- **Brand details** (Palette, navy) — Modal (`width="xl"`): business name, logo upload, logo URL, primary/accent/text/button colors, font style
+- **Custom domain** (Globe, cyan) — Modal (`width="xl"`): custom domain input + full DNS verification workspace (TXT record host/value, live diagnostics, DNS provider tips, verify button)
+- **Homepage** (LayoutTemplate, amber) — Modal (`width="xl"`): template selector, headline, support text, about text, 3 manual service steps
+- **Portal preview** (Eye, emerald) — Modal (`width="lg"`): live brand preview card + portal URL info; read-only
+- **Admin access** (ShieldCheck, rose) — Modal (`width="xl"`): create business admin form (fields + permissions), admin list with permission toggles, pause/remove actions
+
+**Other changes:**
+- Added `PageHero` at top of page (was missing)
+- Single `handleSaveSettings()` helper called from the footer `settingsSaveFooter` node shared across Brand, Domain, and Homepage modals — always saves the full settings payload
+- `successMessage` state replaced with `logoUploadMessage` (narrower scope) + `toast.success()` for save confirmations
+- `AccountPanel` import removed (no longer used)
+
+### Files Modified
+
+- `apps/web/src/app/wallet/page.tsx` — full rewrite
+- `apps/web/src/app/(tenant-admin)/tenant/settings/page.tsx` — full rewrite
+
+### Commit
+
+- `9578911` — pushed to `main`
+
+### Verification
+
+- `npx tsc --noEmit -p apps/web/tsconfig.json` — clean
