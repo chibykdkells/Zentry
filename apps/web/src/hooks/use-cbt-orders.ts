@@ -302,3 +302,84 @@ export function useCompleteCbtJob() {
     },
   });
 }
+
+export function useRequestTimeExtension() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ orderId, reason }: { orderId: string; reason: string }) => {
+      const response = await apiClient.post<{ message: string; data: { id: string; status: string; createdAt: string } }>(
+        `/orders/cbt/${orderId}/request-extension`,
+        { reason },
+      );
+      return response.data;
+    },
+    onSuccess: (_data, { orderId }) => {
+      void queryClient.invalidateQueries({ queryKey: ['orders', 'cbt', 'detail', orderId] });
+      void queryClient.invalidateQueries({ queryKey: ['orders', 'cbt', 'my-jobs'] });
+    },
+  });
+}
+
+export interface ExtensionRequest {
+  id: string;
+  cbtId: string;
+  reason: string;
+  status: string;
+  createdAt: string;
+  order: {
+    id: string;
+    orderNumber: string;
+    deliveryDeadline: string | null;
+    service: { name: string };
+    assignedCbt: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      email: string;
+      cbtProfile: { centerName: string } | null;
+    } | null;
+  };
+}
+
+export function usePendingExtensionRequests() {
+  const query = useQuery({
+    queryKey: ['orders', 'admin', 'extension-requests'] as const,
+    queryFn: async () => {
+      const response = await apiClient.get<{ data: ExtensionRequest[] }>(
+        '/orders/admin/extension-requests',
+      );
+      return response.data.data;
+    },
+    refetchInterval: 30_000,
+  });
+  return {
+    requests: query.data ?? [],
+    loading: query.isLoading,
+    error: query.error ? getApiErrorMessage(query.error, 'Could not load extension requests.') : null,
+    reload: () => { void query.refetch(); },
+  };
+}
+
+export function useReviewExtension() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      extensionId,
+      action,
+      additionalMinutes,
+    }: {
+      extensionId: string;
+      action: 'APPROVE' | 'REJECT';
+      additionalMinutes?: number;
+    }) => {
+      const response = await apiClient.post<{ message: string }>(
+        `/orders/admin/extension-requests/${extensionId}/review`,
+        { action, additionalMinutes },
+      );
+      return response.data;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['orders', 'admin', 'extension-requests'] });
+    },
+  });
+}

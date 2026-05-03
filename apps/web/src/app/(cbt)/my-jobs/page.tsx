@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
-import { CheckCircle2, ClipboardList, Clock3, Loader2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ClipboardList, Clock3, Loader2, Timer } from 'lucide-react';
 import { MobileSheet } from '@/components/shared/mobile-sheet';
 import { EmptyState } from '@/components/shared/empty-state';
 import { FilePreviewGallery } from '@/components/shared/file-preview-gallery';
@@ -14,6 +14,7 @@ import {
   useCbtJobDetail,
   useCompleteCbtJob,
   useCbtMyJobs,
+  useRequestTimeExtension,
   useStartCbtJob,
 } from '@/hooks/use-cbt-orders';
 import { useMediaQuery } from '@/hooks/use-media-query';
@@ -54,6 +55,9 @@ export default function MyJobsPage() {
   } = useCbtJobDetail(effectiveSelectedJobId);
   const startJob = useStartCbtJob();
   const completeJob = useCompleteCbtJob();
+  const requestExtension = useRequestTimeExtension();
+  const [showExtensionForm, setShowExtensionForm] = useState(false);
+  const [extensionReason, setExtensionReason] = useState('');
 
   const handleStartJob = async (orderId: string) => {
     try {
@@ -115,6 +119,70 @@ export default function MyJobsPage() {
             <MetricPill label="Assigned" value={detail.assignedAt ? formatDate(detail.assignedAt) : 'Not assigned'} />
             <MetricPill label="Completed" value={detail.completedAt ? formatDate(detail.completedAt) : 'Not completed'} />
           </div>
+
+          {detail.deliveryDeadline && (detail.status === OrderStatus.ASSIGNED || detail.status === OrderStatus.IN_PROGRESS) ? (
+            <DeadlineTimer deadline={detail.deliveryDeadline} />
+          ) : null}
+
+          {detail.deliveryDeadline &&
+           (detail.status === OrderStatus.ASSIGNED || detail.status === OrderStatus.IN_PROGRESS) &&
+           !(detail.timeExtensionRequests?.length) ? (
+            showExtensionForm ? (
+              <div className="rounded-3xl border border-amber-100 bg-amber-50/70 p-5 space-y-4">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle size={16} className="text-amber-600" />
+                  <h3 className="text-sm font-semibold text-amber-900">Request extra time</h3>
+                </div>
+                <textarea
+                  value={extensionReason}
+                  onChange={(e) => setExtensionReason(e.target.value)}
+                  rows={3}
+                  placeholder="Explain why you need more time..."
+                  className="w-full rounded-2xl border border-amber-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-200"
+                />
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => { setShowExtensionForm(false); setExtensionReason(''); }}
+                    className="rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={extensionReason.trim().length < 10 || requestExtension.isPending}
+                    onClick={async () => {
+                      try {
+                        const res = await requestExtension.mutateAsync({ orderId: detail.id, reason: extensionReason.trim() });
+                        toast.success(res.message ?? 'Extension request sent.');
+                        setShowExtensionForm(false);
+                        setExtensionReason('');
+                      } catch (err) {
+                        toast.error(getApiErrorMessage(err, 'Could not send extension request.'));
+                      }
+                    }}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {requestExtension.isPending ? <Loader2 size={14} className="animate-spin" /> : null}
+                    Submit request
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowExtensionForm(true)}
+                className="inline-flex items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-700 hover:bg-amber-100"
+              >
+                <AlertTriangle size={15} />
+                Request extra time
+              </button>
+            )
+          ) : detail.timeExtensionRequests?.length ? (
+            <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-700">
+              Extension request pending — awaiting tenant admin review.
+            </div>
+          ) : null}
 
           <div className="rounded-3xl border border-slate-100 bg-slate-50/70 p-5">
             <h3 className="text-sm font-semibold text-slate-900">Submitted data</h3>
@@ -370,6 +438,44 @@ export default function MyJobsPage() {
       >
         {detailContent}
       </MobileSheet>
+    </div>
+  );
+}
+
+function DeadlineTimer({ deadline }: { deadline: string }) {
+  const [secondsLeft, setSecondsLeft] = useState(() =>
+    Math.max(0, Math.floor((new Date(deadline).getTime() - Date.now()) / 1000)),
+  );
+
+  useEffect(() => {
+    if (secondsLeft <= 0) return;
+    const id = setInterval(() => {
+      setSecondsLeft((s) => Math.max(0, s - 1));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [secondsLeft]);
+
+  const minutes = Math.floor(secondsLeft / 60);
+  const seconds = secondsLeft % 60;
+  const isUrgent = secondsLeft <= 120;
+  const expired = secondsLeft === 0;
+
+  return (
+    <div
+      className={`flex items-center gap-2 rounded-2xl border px-4 py-3 ${
+        expired
+          ? 'border-red-200 bg-red-50 text-red-700'
+          : isUrgent
+            ? 'border-amber-200 bg-amber-50 text-amber-700'
+            : 'border-slate-200 bg-slate-50 text-slate-700'
+      }`}
+    >
+      <Timer size={16} />
+      <span className="text-sm font-semibold">
+        {expired
+          ? 'Deadline expired'
+          : `Deliver within ${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`}
+      </span>
     </div>
   );
 }

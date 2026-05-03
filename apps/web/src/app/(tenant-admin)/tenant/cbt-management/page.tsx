@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import toast from 'react-hot-toast';
 import { CbtApprovalStatus } from '@zendocx/types';
-import { CheckCircle2, ExternalLink, Loader2, ShieldCheck, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ExternalLink, Loader2, ShieldCheck, XCircle } from 'lucide-react';
 import { DetailModal } from '@/components/shared/detail-modal';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PageHero } from '@/components/shared/page-hero';
@@ -16,6 +16,11 @@ import {
   useUpdateCbtServiceCategories,
   type AdminCbtApplication,
 } from '@/hooks/use-admin-cbt';
+import {
+  usePendingExtensionRequests,
+  useReviewExtension,
+  type ExtensionRequest,
+} from '@/hooks/use-cbt-orders';
 import { getApiErrorMessage } from '@/lib/api-error';
 import { formatDate } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -35,6 +40,7 @@ const STATUS_STYLES: Record<CbtApprovalStatus, string> = {
 };
 
 export default function TenantCbtManagementPage() {
+  const [activeTab, setActiveTab] = useState<'centers' | 'extensions'>('centers');
   const [statusFilter, setStatusFilter] = useState<CbtApprovalStatus | 'ALL'>('ALL');
   const [page, setPage] = useState(1);
   const [openUserId, setOpenUserId] = useState<string | null>(null);
@@ -44,6 +50,8 @@ export default function TenantCbtManagementPage() {
     userId: null,
     ids: [],
   });
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
+  const [additionalMinutes, setAdditionalMinutes] = useState('5');
 
   const { applications, meta, loading, error, reload } = useAdminCbtApplications({
     status: statusFilter,
@@ -54,6 +62,8 @@ export default function TenantCbtManagementPage() {
   const approve = useApproveCbtCenter();
   const reject = useRejectCbtCenter();
   const updateCategories = useUpdateCbtServiceCategories();
+  const { requests: extensionRequests, loading: extensionsLoading, error: extensionsError, reload: reloadExtensions } = usePendingExtensionRequests();
+  const reviewExtension = useReviewExtension();
 
   const openApp = applications.find((a) => a.id === openUserId) ?? null;
 
@@ -122,6 +132,22 @@ export default function TenantCbtManagementPage() {
     }
   };
 
+  const handleReviewExtension = async (req: ExtensionRequest, action: 'APPROVE' | 'REJECT') => {
+    const mins = parseInt(additionalMinutes, 10);
+    try {
+      const res = await reviewExtension.mutateAsync({
+        extensionId: req.id,
+        action,
+        additionalMinutes: action === 'APPROVE' ? (Number.isFinite(mins) && mins > 0 ? mins : 5) : undefined,
+      });
+      toast.success(res.message ?? (action === 'APPROVE' ? 'Extension approved.' : 'Extension rejected.'));
+      setReviewingId(null);
+      setAdditionalMinutes('5');
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Could not process this request.'));
+    }
+  };
+
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-4 md:p-8">
       <PageHero
@@ -130,6 +156,158 @@ export default function TenantCbtManagementPage() {
         description="Review applications, assign supported service categories, and approve or reject licensed fulfillers registered in this business portal."
       />
 
+      {/* Tab switcher */}
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => setActiveTab('centers')}
+          className={cn(
+            'rounded-full border px-4 py-2 text-sm font-semibold transition',
+            activeTab === 'centers'
+              ? 'border-[#0D1B3E] bg-[#0D1B3E] text-white'
+              : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+          )}
+        >
+          CBT Centers
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('extensions')}
+          className={cn(
+            'relative rounded-full border px-4 py-2 text-sm font-semibold transition',
+            activeTab === 'extensions'
+              ? 'border-amber-500 bg-amber-500 text-white'
+              : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+          )}
+        >
+          Extension Requests
+          {extensionRequests.length > 0 ? (
+            <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-white ring-2 ring-white">
+              {extensionRequests.length}
+            </span>
+          ) : null}
+        </button>
+      </div>
+
+      {activeTab === 'extensions' ? (
+        <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
+          {extensionsLoading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <SkeletonBlock key={i} className="h-20 rounded-2xl" />
+              ))}
+            </div>
+          ) : extensionsError ? (
+            <EmptyState
+              title="Extension requests unavailable"
+              message={extensionsError}
+              icon={ShieldCheck}
+              action={
+                <button
+                  type="button"
+                  onClick={() => { void reloadExtensions(); }}
+                  className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  Try again
+                </button>
+              }
+            />
+          ) : extensionRequests.length ? (
+            <div className="space-y-3">
+              {extensionRequests.map((req) => (
+                <div key={req.id} className="rounded-2xl border border-amber-100 bg-amber-50/60 p-4 space-y-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">
+                        {req.order.assignedCbt?.cbtProfile?.centerName
+                          ?? (`${req.order.assignedCbt?.firstName ?? ''} ${req.order.assignedCbt?.lastName ?? ''}`.trim() || 'Unknown CBT')}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {req.order.orderNumber} · {req.order.service.name}
+                      </p>
+                      {req.order.deliveryDeadline ? (
+                        <p className="mt-1 text-xs text-amber-700 font-medium">
+                          Deadline: {formatDate(req.order.deliveryDeadline)}
+                        </p>
+                      ) : null}
+                    </div>
+                    <span className="rounded-full border border-amber-200 bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                      Pending review
+                    </span>
+                  </div>
+
+                  <div className="rounded-2xl border border-amber-200 bg-white px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Reason</p>
+                    <p className="mt-1 text-sm text-slate-700">{req.reason}</p>
+                  </div>
+
+                  {reviewingId === req.id ? (
+                    <div className="flex flex-wrap items-center gap-3">
+                      <label className="flex items-center gap-2 text-sm text-slate-700">
+                        <span className="font-medium">Extra minutes:</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={120}
+                          value={additionalMinutes}
+                          onChange={(e) => setAdditionalMinutes(e.target.value)}
+                          className="w-20 rounded-xl border border-slate-200 px-3 py-1.5 text-sm outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-200"
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        disabled={reviewExtension.isPending}
+                        onClick={() => { void handleReviewExtension(req, 'APPROVE'); }}
+                        className="inline-flex items-center gap-1.5 rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                      >
+                        {reviewExtension.isPending ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
+                        Confirm approve
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setReviewingId(null); setAdditionalMinutes('5'); }}
+                        className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={reviewExtension.isPending}
+                        onClick={() => { setReviewingId(req.id); setAdditionalMinutes('5'); }}
+                        className="inline-flex items-center gap-1.5 rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                      >
+                        <CheckCircle2 size={13} />
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        disabled={reviewExtension.isPending}
+                        onClick={() => { void handleReviewExtension(req, 'REJECT'); }}
+                        className="inline-flex items-center gap-1.5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-60"
+                      >
+                        {reviewExtension.isPending ? <Loader2 size={13} className="animate-spin" /> : <XCircle size={13} />}
+                        Reject
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="No pending extension requests"
+              message="CBT centers with active jobs can request extra delivery time. Requests will appear here."
+              icon={AlertTriangle}
+            />
+          )}
+        </div>
+      ) : null}
+
+      {activeTab === 'centers' ? (
+        <>
       {/* Status filter */}
       <div className="flex flex-wrap gap-2">
         {STATUS_OPTIONS.map((opt) => (
@@ -422,6 +600,8 @@ export default function TenantCbtManagementPage() {
             </div>
           </div>
         </DetailModal>
+      ) : null}
+        </>
       ) : null}
     </div>
   );

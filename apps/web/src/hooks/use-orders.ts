@@ -73,10 +73,12 @@ export interface OrderDetail extends OrderListItem {
   disputeWindowExpiresAt: string | null;
   assignedAt: string | null;
   completedAt: string | null;
+  deliveryDeadline: string | null;
   providerReference: string | null;
   providerResponse: Record<string, unknown> | null;
   cbtNotes: string | null;
   adminNotes: string | null;
+  timeExtensionRequests: Array<{ id: string; status: string; createdAt: string }> | null;
   state: {
     isActive: boolean;
     hasIssue: boolean;

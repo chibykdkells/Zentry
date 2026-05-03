@@ -94,6 +94,15 @@ enum NotificationType {
   CBT_APPROVED
   CBT_REJECTED
   JOB_AVAILABLE
+  CBT_EXTENSION_REQUESTED
+  CBT_EXTENSION_REVIEWED
+  JOB_UNASSIGNED
+}
+
+enum CbtExtensionStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 enum PaymentGateway {
@@ -444,13 +453,16 @@ model Order {
   providerResponse       Json?
   cbtNotes               String?
   adminNotes             String?
+  deliveryDeadline       DateTime?
   createdAt              DateTime    @default(now())
   updatedAt              DateTime    @updatedAt
 
-  transactions  Transaction[]
-  dispute       Dispute?
-  notifications Notification[]
-  uploadedOrderFiles UploadedOrderFile[]
+  transactions          Transaction[]
+  dispute               Dispute?
+  notifications         Notification[]
+  uploadedOrderFiles    UploadedOrderFile[]
+  timeExtensionRequests CbtTimeExtensionRequest[]
+  jobBlocks             CbtJobBlock[]
 
   @@index([tenantId])
   @@index([requesterId])
@@ -675,4 +687,34 @@ model SystemConfig {
   updatedById String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model CbtTimeExtensionRequest {
+  id                String             @id @default(uuid())
+  orderId           String
+  order             Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  cbtId             String
+  reason            String             @db.Text
+  status            CbtExtensionStatus @default(PENDING)
+  additionalMinutes Int?
+  reviewedAt        DateTime?
+  createdAt         DateTime           @default(now())
+
+  @@index([orderId])
+  @@index([cbtId])
+  @@index([status])
+  @@map("cbt_time_extension_requests")
+}
+
+model CbtJobBlock {
+  id        String   @id @default(uuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  cbtId     String
+  reason    String   @default("deadline_missed")
+  createdAt DateTime @default(now())
+
+  @@unique([orderId, cbtId])
+  @@index([cbtId])
+  @@map("cbt_job_blocks")
 }

@@ -281,6 +281,7 @@ describe('OrdersService', () => {
       storageService as never,
       ordersReleaseQueueService as never,
       {} as never,
+      {} as never,
       notificationsService as never,
       emailService as never,
       smsService as never,

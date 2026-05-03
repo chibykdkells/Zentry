@@ -27,8 +27,11 @@ import { EmailService } from '../../providers/email/email.service';
 import { SmsService } from '../../providers/sms/sms.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { OrdersReleaseQueueService } from './orders-release-queue.service';
+import { OrdersDeadlineQueueService } from './orders-deadline-queue.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreateOrderDto } from './dto/create-order.dto';
+import { RequestExtensionDto } from './dto/request-extension.dto';
+import { ReviewExtensionDto } from './dto/review-extension.dto';
 import { CompleteCbtJobDto } from './dto/complete-cbt-job.dto';
 import { CreateDisputeDto } from './dto/create-dispute.dto';
 import { GetAdminDisputesQueryDto } from './dto/get-admin-disputes.dto';
@@ -46,6 +49,7 @@ import {
   RELEASE_ESCROW_JOB_NAME,
   RELEASE_ESCROW_QUEUE_NAME,
 } from './release-queue.constants';
+import { DELIVERY_DEADLINE_MINUTES } from './delivery-deadline.constants';
 import { AdminDisputeAction, ReviewDisputeDto } from './dto/review-dispute.dto';
 import { ReviewDisputeFinancialFollowUpDto } from './dto/review-dispute-financial-follow-up.dto';
 import { UpdateAdminOrderNotesDto } from './dto/update-admin-order-notes.dto';
@@ -198,6 +202,7 @@ const orderDetailSelect = Prisma.validator<Prisma.OrderSelect>()({
   disputeWindowExpiresAt: true,
   assignedAt: true,
   completedAt: true,
+  deliveryDeadline: true,
   providerReference: true,
   providerResponse: true,
   cbtNotes: true,
@@ -279,6 +284,11 @@ const orderDetailSelect = Prisma.validator<Prisma.OrderSelect>()({
       resolutionNote: true,
       evidenceUrls: true,
     },
+  },
+  timeExtensionRequests: {
+    where: { status: 'PENDING' },
+    select: { id: true, status: true, createdAt: true },
+    take: 1,
   },
 });
 
@@ -494,6 +504,7 @@ export class OrdersService {
     private readonly configService: ConfigService,
     private readonly storageService: StorageService,
     private readonly ordersReleaseQueueService: OrdersReleaseQueueService,
+    private readonly ordersDeadlineQueueService: OrdersDeadlineQueueService,
     private readonly vtuService: VtuService,
     private readonly notificationsService: NotificationsService,
     private readonly emailService: EmailService,
@@ -2389,6 +2400,271 @@ export class OrdersService {
     };
   }
 
+  async requestTimeExtension(
+    userId: string,
+    orderId: string,
+    dto: RequestExtensionDto,
+    tenantId: string | null,
+  ) {
+    const order = await this.prisma.order.findFirst({
+      where: {
+        id: orderId,
+        assignedCbtId: userId,
+        status: { in: [OrderStatus.ASSIGNED, OrderStatus.IN_PROGRESS] },
+        ...(tenantId ? { tenantId } : {}),
+      },
+      select: {
+        id: true,
+        orderNumber: true,
+        tenantId: true,
+        deliveryDeadline: true,
+        service: { select: { name: true } },
+        timeExtensionRequests: {
+          where: { status: 'PENDING' },
+          select: { id: true },
+        },
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Active job not found.');
+    }
+
+    if (order.timeExtensionRequests.length > 0) {
+      throw new ConflictException(
+        'You already have a pending extension request for this job.',
+      );
+    }
+
+    const extensionRequest = await this.prisma.cbtTimeExtensionRequest.create({
+      data: {
+        orderId,
+        cbtId: userId,
+        reason: dto.reason,
+      },
+    });
+
+    if (order.tenantId) {
+      const tenantAdmin = await this.prisma.user.findFirst({
+        where: { tenantId: order.tenantId, role: UserRole.TENANT_ADMIN },
+        select: { id: true },
+      });
+      if (tenantAdmin) {
+        await this.prisma.notification.create({
+          data: {
+            userId: tenantAdmin.id,
+            orderId,
+            type: NotificationType.CBT_EXTENSION_REQUESTED,
+            title: 'CBT center requested a time extension',
+            message: `A CBT center has requested extra time to complete order ${order.orderNumber} (${order.service.name}). Review and respond in your CBT management dashboard.`,
+            metadata: {
+              orderNumber: order.orderNumber,
+              extensionRequestId: extensionRequest.id,
+              reason: dto.reason,
+            },
+          },
+        });
+        this.notificationsService.pushNotificationToUser(tenantAdmin.id, {
+          type: 'CBT_EXTENSION_REQUESTED',
+          title: 'Time extension request',
+          message: `Order ${order.orderNumber} — CBT needs more time.`,
+          orderId,
+        });
+      }
+    }
+
+    return {
+      message: 'Extension request submitted. The tenant admin has been notified.',
+      data: {
+        id: extensionRequest.id,
+        status: extensionRequest.status,
+        createdAt: extensionRequest.createdAt,
+      },
+    };
+  }
+
+  async reviewTimeExtension(
+    adminUserId: string,
+    extensionRequestId: string,
+    dto: ReviewExtensionDto,
+    tenantId: string | null,
+  ) {
+    const extensionRequest = await this.prisma.cbtTimeExtensionRequest.findFirst({
+      where: {
+        id: extensionRequestId,
+        status: 'PENDING',
+        order: tenantId ? { tenantId } : {},
+      },
+      select: {
+        id: true,
+        cbtId: true,
+        orderId: true,
+        reason: true,
+        order: {
+          select: {
+            id: true,
+            orderNumber: true,
+            status: true,
+            deliveryDeadline: true,
+            assignedCbtId: true,
+            service: { select: { name: true } },
+          },
+        },
+      },
+    });
+
+    if (!extensionRequest) {
+      throw new NotFoundException('Extension request not found or already reviewed.');
+    }
+
+    const order = extensionRequest.order;
+
+    if (
+      order.status !== OrderStatus.ASSIGNED &&
+      order.status !== OrderStatus.IN_PROGRESS
+    ) {
+      throw new BadRequestException('This job is no longer active.');
+    }
+
+    const now = new Date();
+
+    if (dto.action === 'APPROVE') {
+      const additionalMs = (dto.additionalMinutes ?? 5) * 60 * 1000;
+      const currentDeadline = order.deliveryDeadline ?? now;
+      const newDeadline = new Date(Math.max(currentDeadline.getTime(), now.getTime()) + additionalMs);
+
+      await this.prisma.$transaction(async (tx) => {
+        await tx.cbtTimeExtensionRequest.update({
+          where: { id: extensionRequestId },
+          data: {
+            status: 'APPROVED',
+            additionalMinutes: dto.additionalMinutes,
+            reviewedAt: now,
+          },
+        });
+
+        await tx.order.update({
+          where: { id: order.id },
+          data: { deliveryDeadline: newDeadline },
+        });
+
+        await tx.notification.create({
+          data: {
+            userId: extensionRequest.cbtId,
+            orderId: order.id,
+            type: NotificationType.CBT_EXTENSION_REVIEWED,
+            title: 'Time extension approved',
+            message: `Your request for extra time on order ${order.orderNumber} has been approved. You have ${dto.additionalMinutes ?? 5} more minutes.`,
+            metadata: {
+              orderNumber: order.orderNumber,
+              additionalMinutes: dto.additionalMinutes,
+              newDeadline: newDeadline.toISOString(),
+            },
+          },
+        });
+      });
+
+      await this.ordersDeadlineQueueService.cancelDeadline(order.id);
+      await this.ordersDeadlineQueueService.scheduleDeadline(order.id, newDeadline);
+
+      this.notificationsService.pushNotificationToUser(extensionRequest.cbtId, {
+        type: 'CBT_EXTENSION_REVIEWED',
+        title: 'Extension approved',
+        message: `${dto.additionalMinutes ?? 5} more minutes granted for order ${order.orderNumber}.`,
+        orderId: order.id,
+      });
+
+      return {
+        message: 'Extension approved.',
+        data: { newDeadline: newDeadline.toISOString() },
+      };
+    }
+
+    // REJECT
+    await this.prisma.$transaction(async (tx) => {
+      await tx.cbtTimeExtensionRequest.update({
+        where: { id: extensionRequestId },
+        data: { status: 'REJECTED', reviewedAt: now },
+      });
+
+      await tx.order.update({
+        where: { id: order.id },
+        data: {
+          status: OrderStatus.PENDING,
+          assignedCbtId: null,
+          assignedAt: null,
+          deliveryDeadline: null,
+        },
+      });
+
+      await tx.cbtJobBlock.upsert({
+        where: { orderId_cbtId: { orderId: order.id, cbtId: extensionRequest.cbtId } },
+        create: { orderId: order.id, cbtId: extensionRequest.cbtId, reason: 'extension_rejected' },
+        update: {},
+      });
+
+      await tx.notification.create({
+        data: {
+          userId: extensionRequest.cbtId,
+          orderId: order.id,
+          type: NotificationType.CBT_EXTENSION_REVIEWED,
+          title: 'Extension request rejected',
+          message: `Your extension request for order ${order.orderNumber} was rejected. The job has been returned to the pool.`,
+          metadata: { orderNumber: order.orderNumber },
+        },
+      });
+    });
+
+    await this.ordersDeadlineQueueService.cancelDeadline(order.id);
+    this.notificationsService.pushNotificationToUser(extensionRequest.cbtId, {
+      type: 'CBT_EXTENSION_REVIEWED',
+      title: 'Extension rejected',
+      message: `Order ${order.orderNumber} has been returned to the job pool.`,
+      orderId: order.id,
+    });
+
+    return { message: 'Extension rejected. Job returned to pool.' };
+  }
+
+  async getPendingExtensionRequests(tenantId: string | null) {
+    const requests = await this.prisma.cbtTimeExtensionRequest.findMany({
+      where: {
+        status: 'PENDING',
+        order: tenantId ? { tenantId } : {},
+      },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        cbtId: true,
+        reason: true,
+        status: true,
+        createdAt: true,
+        order: {
+          select: {
+            id: true,
+            orderNumber: true,
+            deliveryDeadline: true,
+            service: { select: { name: true } },
+            assignedCbt: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                cbtProfile: { select: { centerName: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return {
+      message: 'Extension requests retrieved.',
+      data: requests,
+    };
+  }
+
   async getCbtDashboard(userId: string, tenantId: string | null) {
     const user = await this.prisma.user.findFirst({
       where: {
@@ -2737,6 +3013,16 @@ export class OrdersService {
     const supportedCategorySlugs =
       this.getSupportedCbtServiceCategorySlugs(cbtUser);
 
+    // Check if this CBT has been blocked from this job
+    const isBlocked = await this.prisma.cbtJobBlock.findUnique({
+      where: { orderId_cbtId: { orderId, cbtId: userId } },
+    });
+    if (isBlocked) {
+      throw new ForbiddenException(
+        'You are not eligible to claim this job.',
+      );
+    }
+
     const candidateOrder = await this.prisma.order.findUnique({
       where: { id: orderId },
       select: {
@@ -2783,6 +3069,7 @@ export class OrdersService {
           assignedCbtId: userId,
           assignedAt: claimedAt,
           status: OrderStatus.ASSIGNED,
+          deliveryDeadline: new Date(claimedAt.getTime() + DELIVERY_DEADLINE_MINUTES * 60 * 1000),
         },
       });
 
@@ -2881,6 +3168,11 @@ export class OrdersService {
 
       return claimedOrder;
     });
+
+    await this.ordersDeadlineQueueService.scheduleDeadline(
+      orderId,
+      new Date(claimedAt.getTime() + DELIVERY_DEADLINE_MINUTES * 60 * 1000),
+    );
 
     // Real-time: notify requester their order was assigned
     this.notificationsService.pushNotificationToUser(order.requester.id, {
@@ -3190,6 +3482,8 @@ export class OrdersService {
         // Queue recovery runs on startup, so a transient enqueue failure
         // should not undo the completed result submission.
       }
+
+      await this.ordersDeadlineQueueService.cancelDeadline(orderId);
 
       // Real-time: notify requester that the result is ready
       this.notificationsService.pushNotificationToUser(order.requester.id, {

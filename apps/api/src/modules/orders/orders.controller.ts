@@ -29,6 +29,8 @@ import { GetMyDisputesQueryDto } from './dto/get-my-disputes.dto';
 import { ReviewDisputeDto } from './dto/review-dispute.dto';
 import { ReviewDisputeFinancialFollowUpDto } from './dto/review-dispute-financial-follow-up.dto';
 import { UpdateAdminOrderNotesDto } from './dto/update-admin-order-notes.dto';
+import { RequestExtensionDto } from './dto/request-extension.dto';
+import { ReviewExtensionDto } from './dto/review-extension.dto';
 import { OrdersService, UploadedDocumentFile } from './orders.service';
 
 @Controller('orders')
@@ -208,6 +210,32 @@ export class OrdersController {
     @Query() query: GetCbtMyJobsQueryDto,
   ) {
     return this.ordersService.getCbtMyJobs(user.sub, query, user.tenantId);
+  }
+
+  @Roles(UserRole.CBT_CENTER, UserRole.CBT_STAFF)
+  @Post('cbt/:orderId/request-extension')
+  requestTimeExtension(
+    @CurrentUser() user: JwtUser,
+    @Param('orderId') orderId: string,
+    @Body() dto: RequestExtensionDto,
+  ) {
+    return this.ordersService.requestTimeExtension(user.sub, orderId, dto, user.tenantId);
+  }
+
+  @Roles(UserRole.TENANT_ADMIN)
+  @Get('admin/extension-requests')
+  getPendingExtensionRequests(@CurrentUser() user: JwtUser) {
+    return this.ordersService.getPendingExtensionRequests(user.tenantId);
+  }
+
+  @Roles(UserRole.TENANT_ADMIN)
+  @Post('admin/extension-requests/:extensionId/review')
+  reviewTimeExtension(
+    @CurrentUser() user: JwtUser,
+    @Param('extensionId') extensionId: string,
+    @Body() dto: ReviewExtensionDto,
+  ) {
+    return this.ordersService.reviewTimeExtension(user.sub, extensionId, dto, user.tenantId);
   }
 
   @Roles(UserRole.CBT_CENTER, UserRole.CBT_STAFF)
