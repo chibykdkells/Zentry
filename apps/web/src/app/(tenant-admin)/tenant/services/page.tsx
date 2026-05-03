@@ -1,12 +1,10 @@
 'use client';
 
-import Link from 'next/link';
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useFieldArray, useForm, useWatch } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { ServiceDeliveryMode } from '@zendocx/types';
 import {
-  ArrowRight,
   Eye,
   EyeOff,
   Layers3,
@@ -15,12 +13,9 @@ import {
   Save,
   Search,
   Settings2,
-  Sparkles,
-  Zap,
 } from 'lucide-react';
 import { EmptyState } from '@/components/shared/empty-state';
 import { FeedbackBanner } from '@/components/shared/feedback-banner';
-import { PageHero } from '@/components/shared/page-hero';
 import { SkeletonBlock } from '@/components/shared/skeleton-loader';
 import {
   type TenantManageableServiceItem,
@@ -143,21 +138,6 @@ export default function TenantServicesPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-5 p-4 pb-28 md:space-y-6 md:p-8 md:pb-32">
-      <PageHero
-        eyebrow="Business services"
-        title="Control what this business can sell"
-        description="Every service your customers or operators can use is managed here. By default, the business inherits the full platform catalog and the platform API setup. Switch to a custom service mix only when this tenant needs a tighter offering."
-        actions={
-          <Link
-            href="/tenant/providers"
-            className="inline-flex items-center gap-2 rounded-2xl bg-brand-button px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand-button-strong"
-          >
-            Open API integrations
-            <ArrowRight size={16} />
-          </Link>
-        }
-      />
-
       {successMessage ? <FeedbackBanner tone="success" message={successMessage} /> : null}
       {updateSelection.error ? (
         <FeedbackBanner
@@ -169,32 +149,7 @@ export default function TenantServicesPage() {
         />
       ) : null}
 
-      <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr_0.8fr]">
-        <SummaryCard
-          icon={Sparkles}
-          label="Selection mode"
-          title={usesCustom ? 'Custom business catalog' : 'Using full platform catalog'}
-          description={
-            usesCustom
-              ? 'This business is now hiding or showing services intentionally.'
-              : 'Every platform service is available here until you switch to a custom mix.'
-          }
-        />
-        <SummaryCard
-          icon={Layers3}
-          label="Visible services"
-          title={`${visibleCount} live`}
-          description={`${hiddenCount} hidden from this business portal right now.`}
-        />
-        <SummaryCard
-          icon={Zap}
-          label="Automated services"
-          title={`${automatedCount} API-driven`}
-          description="These services inherit the default platform API unless this tenant configures its own connection."
-        />
-      </section>
-
-      <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+      <div>
         <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm md:p-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div className="space-y-1.5">
@@ -294,41 +249,7 @@ export default function TenantServicesPage() {
             </div>
           </div>
         </div>
-
-        <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-navy/[0.07] text-brand-navy">
-              <Settings2 size={18} />
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                How service routing works
-              </p>
-              <h2 className="text-lg font-semibold text-slate-900">
-                API control stays in one place
-              </h2>
-            </div>
-          </div>
-
-          <div className="mt-5 space-y-3">
-            <RouteRule
-              title="Default provider"
-              description="If a service is automated and this business has no custom endpoint, it uses the platform API connection automatically."
-              tone="default"
-            />
-            <RouteRule
-              title="Business override"
-              description="If this tenant saves its own API connection, every visible automated service can route through that business-specific endpoint."
-              tone="success"
-            />
-            <RouteRule
-              title="Hidden services"
-              description="A hidden service disappears from the business portal, but its API setup remains available in API Integrations when you want to bring it back."
-              tone="warning"
-            />
-          </div>
-        </div>
-      </section>
+      </div>
 
       <section className="rounded-[2rem] border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-200 px-5 py-4 md:px-6">
@@ -897,51 +818,3 @@ function serializeDocumentDefinitions(docs: ServiceDocumentFormValue[]) {
   });
 }
 
-function SummaryCard({
-  icon: Icon,
-  label,
-  title,
-  description,
-}: {
-  icon: React.ElementType;
-  label: string;
-  title: string;
-  description: string;
-}) {
-  return (
-    <article className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-navy/[0.07] text-brand-navy">
-        <Icon size={18} />
-      </div>
-      <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-        {label}
-      </p>
-      <h2 className="mt-2 text-base font-semibold text-slate-900">{title}</h2>
-      <p className="mt-2 text-sm leading-6 text-slate-500">{description}</p>
-    </article>
-  );
-}
-
-function RouteRule({
-  title,
-  description,
-  tone,
-}: {
-  title: string;
-  description: string;
-  tone: 'default' | 'success' | 'warning';
-}) {
-  return (
-    <div
-      className={cn(
-        'rounded-[1.35rem] border p-4',
-        tone === 'default' && 'border-slate-200 bg-slate-50/70',
-        tone === 'success' && 'border-emerald-200 bg-emerald-50/70',
-        tone === 'warning' && 'border-amber-200 bg-amber-50/70',
-      )}
-    >
-      <p className="text-sm font-semibold text-slate-900">{title}</p>
-      <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
-    </div>
-  );
-}

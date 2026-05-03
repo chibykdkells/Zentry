@@ -5,9 +5,9 @@ import toast from 'react-hot-toast';
 import { UserRole } from '@zendocx/types';
 import { ShieldCheck } from 'lucide-react';
 import { AccountPanel } from '@/components/shared/account-panel';
+import { DetailModal } from '@/components/shared/detail-modal';
 import { EmptyState } from '@/components/shared/empty-state';
 import { FeedbackBanner } from '@/components/shared/feedback-banner';
-import { PageHero } from '@/components/shared/page-hero';
 import { SkeletonBlock } from '@/components/shared/skeleton-loader';
 import {
   useDeleteTenantUser,
@@ -16,11 +16,13 @@ import {
 } from '@/hooks/use-tenant-admin';
 import { getApiErrorMessage } from '@/lib/api-error';
 import { formatDate } from '@/lib/format';
+import { cn } from '@/lib/utils';
 
 export default function TenantCbtManagementPage() {
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [page, setPage] = useState(1);
+  const [openUserId, setOpenUserId] = useState<string | null>(null);
 
   const filters = useMemo(
     () => ({ page, limit: 12, search, role: UserRole.CBT_CENTER }),
@@ -30,50 +32,13 @@ export default function TenantCbtManagementPage() {
   const { users, pagination, loading, error, reload } = useTenantUsers(filters);
   const updateTenantUserRole = useUpdateTenantUserRole();
   const deleteTenantUser = useDeleteTenantUser();
-  const visibleCbtCenters = pagination?.total ?? users.length;
+  const openUser = users.find((u) => u.id === openUserId) ?? null;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-8">
-      <PageHero
-        eyebrow="CBT centers"
-        title="Licensed fulfillers operating in this portal"
-        description="See every CBT center registered under this tenant. Use the search to quickly locate a specific center by name or email."
-      />
-
-      <section className="grid gap-4 md:grid-cols-3">
-        <article className="rounded-[1.5rem] border border-slate-200 bg-gradient-to-br from-amber-50/70 to-white p-5 shadow-sm">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-            Visible now
-          </p>
-          <p className="mt-3 text-3xl font-bold tracking-tight text-slate-900">
-            {loading ? '...' : visibleCbtCenters}
-          </p>
-          <p className="mt-1 text-sm text-slate-500">CBT centers in this business</p>
-        </article>
-        <article className="rounded-[1.5rem] border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-5 shadow-sm">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-            Search state
-          </p>
-          <p className="mt-3 text-sm font-semibold text-slate-900">
-            {search ? `Filtered by "${search}"` : 'Showing the full CBT center directory'}
-          </p>
-          <p className="mt-2 text-sm text-slate-500">
-            Individual users stay on their own customer page so the fulfilment network stays easier to read.
-          </p>
-        </article>
-        <article className="rounded-[1.5rem] border border-slate-200 bg-gradient-to-br from-emerald-50/70 to-white p-5 shadow-sm">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-            Operations view
-          </p>
-          <p className="mt-3 text-sm leading-6 text-slate-600">
-            Use this workspace when you want to review fulfilment partners only, without customer-account noise.
-          </p>
-        </article>
-      </section>
-
+    <div className="mx-auto max-w-4xl space-y-6 p-4 md:p-8">
       <AccountPanel
-        title="CBT center directory"
-        description="CBT centers registered within this business portal."
+        title="CBT centers"
+        description="Licensed fulfillers registered in this business portal. Click any row to view details."
         actions={
           <div className="flex flex-col gap-3 sm:flex-row">
             <input
@@ -96,7 +61,7 @@ export default function TenantCbtManagementPage() {
               }}
               className="rounded-2xl bg-brand-button px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-button-strong"
             >
-              Search directory
+              Search
             </button>
           </div>
         }
@@ -122,9 +87,9 @@ export default function TenantCbtManagementPage() {
         ) : null}
 
         {loading ? (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {Array.from({ length: 4 }).map((_, index) => (
-              <SkeletonBlock key={index} className="h-28 rounded-[1.5rem]" />
+              <SkeletonBlock key={index} className="h-14 rounded-2xl" />
             ))}
           </div>
         ) : error ? (
@@ -143,119 +108,40 @@ export default function TenantCbtManagementPage() {
             }
           />
         ) : users.length ? (
-          <div className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {users.map((user) => (
-                <article
-                  key={user.id}
-                  className="rounded-[1.5rem] border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-5 shadow-sm"
+          <div className="space-y-1">
+            {users.map((user) => (
+              <button
+                key={user.id}
+                type="button"
+                onClick={() => setOpenUserId(user.id)}
+                className="flex w-full items-center gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-left transition hover:border-slate-300 hover:bg-slate-50/60"
+              >
+                <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900">
+                  {user.firstName} {user.lastName}
+                </span>
+                <span className="hidden max-w-[200px] truncate text-sm text-slate-500 sm:block">
+                  {user.email}
+                </span>
+                <span
+                  className={cn(
+                    'shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold',
+                    user.isActive
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : 'bg-rose-50 text-rose-700',
+                  )}
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h2 className="text-base font-semibold text-slate-900">
-                        {user.firstName} {user.lastName}
-                      </h2>
-                      <p className="mt-1 text-sm text-slate-500">{user.email}</p>
-                    </div>
-                    <span
-                      className={[
-                        'rounded-full px-3 py-1 text-xs font-semibold shadow-sm',
-                        user.isActive
-                          ? 'bg-emerald-50 text-emerald-700'
-                          : 'bg-rose-50 text-rose-700',
-                      ].join(' ')}
-                    >
-                      {user.isActive ? 'Active' : 'Paused'}
-                    </span>
-                  </div>
-
-                  <dl className="mt-4 space-y-2 text-sm text-slate-600">
-                    <div className="flex items-center justify-between gap-4">
-                      <dt>Phone</dt>
-                      <dd>{user.phone}</dd>
-                    </div>
-                    <div className="flex items-center justify-between gap-4">
-                      <dt>Email verified</dt>
-                      <dd>{user.isEmailVerified ? 'Yes' : 'Pending'}</dd>
-                    </div>
-                    <div className="flex items-center justify-between gap-4">
-                      <dt>Joined</dt>
-                      <dd>{formatDate(user.createdAt)}</dd>
-                    </div>
-                    <div className="flex items-center justify-between gap-4">
-                      <dt>Last sign-in</dt>
-                      <dd>{user.lastLoginAt ? formatDate(user.lastLoginAt) : 'Not yet'}</dd>
-                    </div>
-                  </dl>
-
-                  <div className="mt-5 border-t border-slate-100 pt-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-                      Business admin controls
-                    </p>
-                    <div className="mt-3 flex flex-col gap-3">
-                      <select
-                        defaultValue={user.role}
-                        onChange={(event) => {
-                          const nextRole = event.target.value as UserRole;
-                          if (nextRole === user.role) {
-                            return;
-                          }
-
-                          updateTenantUserRole.mutate(
-                            {
-                              userId: user.id,
-                              role: nextRole,
-                            },
-                            {
-                              onSuccess: () => {
-                                toast.success(
-                                  `${user.firstName} ${user.lastName} is now ${
-                                    nextRole === UserRole.CBT_CENTER ? 'a CBT center' : 'an individual user'
-                                  }.`,
-                                );
-                              },
-                            },
-                          );
-                        }}
-                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-brand-button focus:ring-2 focus:ring-brand-button/10"
-                      >
-                        <option value={UserRole.CBT_CENTER}>CBT center</option>
-                        <option value={UserRole.INDIVIDUAL}>Individual user</option>
-                      </select>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (
-                            !window.confirm(
-                              `Remove ${user.firstName} ${user.lastName} from this business?`,
-                            )
-                          ) {
-                            return;
-                          }
-
-                          deleteTenantUser.mutate(user.id, {
-                            onSuccess: () => {
-                              toast.success(
-                                `${user.firstName} ${user.lastName} was removed from this business.`,
-                              );
-                            },
-                          });
-                        }}
-                        className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
-                      >
-                        Delete user
-                      </button>
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
+                  {user.isActive ? 'Active' : 'Paused'}
+                </span>
+                <span className="hidden shrink-0 text-sm text-slate-400 sm:block">
+                  {formatDate(user.createdAt)}
+                </span>
+              </button>
+            ))}
 
             {pagination && pagination.totalPages > 1 ? (
               <div className="flex items-center justify-between gap-3 border-t border-slate-100 pt-4 text-sm text-slate-500">
                 <p>
-                  Page {pagination.page} of {pagination.totalPages} &bull;{' '}
-                  {pagination.total} CBT centers
+                  Page {pagination.page} of {pagination.totalPages} · {pagination.total} CBT centers
                 </p>
                 <div className="flex gap-2">
                   <button
@@ -292,6 +178,97 @@ export default function TenantCbtManagementPage() {
           />
         )}
       </AccountPanel>
+
+      {openUser ? (
+        <DetailModal
+          open
+          onClose={() => setOpenUserId(null)}
+          title={`${openUser.firstName} ${openUser.lastName}`}
+          description={openUser.email}
+          width="md"
+          footer={
+            <div className="space-y-3">
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <select
+                  defaultValue={openUser.role}
+                  onChange={(event) => {
+                    const nextRole = event.target.value as UserRole;
+                    if (nextRole === openUser.role) return;
+                    updateTenantUserRole.mutate(
+                      { userId: openUser.id, role: nextRole },
+                      {
+                        onSuccess: () => {
+                          toast.success(
+                            `${openUser.firstName} ${openUser.lastName} is now ${
+                              nextRole === UserRole.CBT_CENTER ? 'a CBT center' : 'an individual user'
+                            }.`,
+                          );
+                          setOpenUserId(null);
+                        },
+                      },
+                    );
+                  }}
+                  className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-brand-button focus:ring-2 focus:ring-brand-button/10"
+                >
+                  <option value={UserRole.CBT_CENTER}>CBT center</option>
+                  <option value={UserRole.INDIVIDUAL}>Individual user</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (
+                      !window.confirm(
+                        `Remove ${openUser.firstName} ${openUser.lastName} from this business?`,
+                      )
+                    )
+                      return;
+                    deleteTenantUser.mutate(openUser.id, {
+                      onSuccess: () => {
+                        toast.success(
+                          `${openUser.firstName} ${openUser.lastName} was removed.`,
+                        );
+                        setOpenUserId(null);
+                      },
+                    });
+                  }}
+                  className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          }
+        >
+          <dl className="grid gap-y-3 text-sm sm:grid-cols-2 sm:gap-x-8">
+            <div className="flex items-center justify-between sm:contents">
+              <dt className="text-slate-500">Phone</dt>
+              <dd className="font-medium text-slate-900">{openUser.phone}</dd>
+            </div>
+            <div className="flex items-center justify-between sm:contents">
+              <dt className="text-slate-500">Status</dt>
+              <dd className={cn('font-medium', openUser.isActive ? 'text-emerald-600' : 'text-rose-600')}>
+                {openUser.isActive ? 'Active' : 'Paused'}
+              </dd>
+            </div>
+            <div className="flex items-center justify-between sm:contents">
+              <dt className="text-slate-500">Email verified</dt>
+              <dd className="font-medium text-slate-900">
+                {openUser.isEmailVerified ? 'Yes' : 'Pending'}
+              </dd>
+            </div>
+            <div className="flex items-center justify-between sm:contents">
+              <dt className="text-slate-500">Joined</dt>
+              <dd className="font-medium text-slate-900">{formatDate(openUser.createdAt)}</dd>
+            </div>
+            <div className="flex items-center justify-between sm:contents">
+              <dt className="text-slate-500">Last sign-in</dt>
+              <dd className="font-medium text-slate-900">
+                {openUser.lastLoginAt ? formatDate(openUser.lastLoginAt) : 'Never'}
+              </dd>
+            </div>
+          </dl>
+        </DetailModal>
+      ) : null}
     </div>
   );
 }

@@ -373,27 +373,6 @@ function deliveryClasses(mode: ServiceDeliveryMode) {
   }
 }
 
-function SectionMetric({
-  label,
-  value,
-  detail,
-}: {
-  label: string;
-  value: string;
-  detail: string;
-}) {
-  return (
-    <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 px-4 py-4">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-        {label}
-      </p>
-      <p className="mt-2 text-2xl font-black tracking-tight text-slate-950">
-        {value}
-      </p>
-      <p className="mt-2 text-sm leading-6 text-slate-500">{detail}</p>
-    </div>
-  );
-}
 
 export function TenantBusinessIntegrationsWorkspace() {
   const [visibilityFilter, setVisibilityFilter] =
@@ -708,32 +687,6 @@ export function TenantBusinessIntegrationsWorkspace() {
             </div>
           </div>
 
-          <div className="grid gap-4 px-5 py-5 md:grid-cols-2 xl:grid-cols-4 md:px-8 md:py-6">
-            <SectionMetric
-              label="Visible in this business"
-              value={`${visibleServiceCount}/${services.length}`}
-              detail="These are the services people in this business can see right now."
-            />
-            <SectionMetric
-              label="Services using an API"
-              value={`${readyApiServices}/${apiManagedServices.length}`}
-              detail="These services depend on either the Zendocx connection or a business-owned API."
-            />
-            <SectionMetric
-              label="Connection in use"
-              value={isTenantOverride ? 'Business API' : 'Zendocx default'}
-              detail={
-                isTenantOverride
-                  ? 'This business has its own saved connection details.'
-                  : 'This business is currently using the Zendocx shared connection.'
-              }
-            />
-            <SectionMetric
-              label="Latest connection check"
-              value={probeLabel}
-              detail={readiness.vtu.probe.message}
-            />
-          </div>
         </section>
 
         {successMessage ? (

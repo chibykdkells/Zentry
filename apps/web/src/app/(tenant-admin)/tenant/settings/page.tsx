@@ -8,6 +8,7 @@ import {
   type TenantAdminPermission,
   UserRole,
 } from '@zendocx/types';
+import { ExternalLink } from 'lucide-react';
 import {
   useCreateTenantAdmin,
   useDeleteTenantAdmin,
@@ -21,7 +22,6 @@ import {
 } from '@/hooks/use-tenant-admin';
 import { AccountPanel } from '@/components/shared/account-panel';
 import { FeedbackBanner } from '@/components/shared/feedback-banner';
-import { PageHero } from '@/components/shared/page-hero';
 import { SkeletonBlock } from '@/components/shared/skeleton-loader';
 import { EmptyState } from '@/components/shared/empty-state';
 import { InfoHint } from '@/components/shared/info-hint';
@@ -254,41 +254,13 @@ export default function TenantSettingsPage() {
     }
   };
 
+  const portalUrl =
+    overview.tenant.customDomainVerified && overview.tenant.customDomain
+      ? `https://${overview.tenant.customDomain}`
+      : `/${overview.tenant.slug}`;
+
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-8">
-      <PageHero
-        eyebrow="Business settings"
-        title="Shape how this business portal looks and who manages it"
-        description="Business admins can control the visible brand for this tenant here. Individual users stay on the users page, CBT centers stay on the CBT page, and business-admin access is shown in this settings workspace."
-      />
-
-      <section className="grid gap-4 lg:grid-cols-3">
-        <article className="rounded-[1.5rem] border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-5 shadow-sm">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-            Brand identity
-          </p>
-          <p className="mt-3 text-sm leading-6 text-slate-600">
-            Adjust the logo, colors, and type feel here so the business portal is visually distinct from the platform owner workspace.
-          </p>
-        </article>
-        <article className="rounded-[1.5rem] border border-slate-200 bg-gradient-to-br from-amber-50/70 to-white p-5 shadow-sm">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-            Admin ownership
-          </p>
-          <p className="mt-3 text-sm leading-6 text-slate-600">
-            Business-admin accounts live in this settings page so customer and CBT directories stay focused on their own roles.
-          </p>
-        </article>
-        <article className="rounded-[1.5rem] border border-slate-200 bg-gradient-to-br from-emerald-50/70 to-white p-5 shadow-sm">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-            Portal preview
-          </p>
-          <p className="mt-3 text-sm leading-6 text-slate-600">
-            The preview on this page helps you sanity-check the business look before customers and CBT centers see it.
-          </p>
-        </article>
-      </section>
-
       <div className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
         <AccountPanel
           title="Brand and portal details"
@@ -906,7 +878,7 @@ export default function TenantSettingsPage() {
 
         <AccountPanel
           title="Portal preview"
-          description="A quick view of what people will recognize when they enter this business portal."
+          description="Live brand preview. Open the portal to see the full customer-facing experience."
         >
           <div className="space-y-4">
             <div
@@ -936,38 +908,45 @@ export default function TenantSettingsPage() {
               <p className="mt-2 max-w-sm text-sm leading-6 opacity-90">
                 Sign-in, user management, and service operations are all scoped to this business identity.
               </p>
-              <button
-                type="button"
-                className="mt-5 inline-flex items-center rounded-2xl px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition"
-                style={{ backgroundColor: buttonColor }}
-              >
-                Main business button preview
-              </button>
+              <div className="mt-5 flex flex-wrap items-center gap-3">
+                <span
+                  className="inline-flex items-center rounded-2xl px-4 py-2.5 text-sm font-semibold text-white shadow-sm"
+                  style={{ backgroundColor: buttonColor }}
+                >
+                  Button preview
+                </span>
+                <a
+                  href={portalUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 rounded-2xl bg-white/20 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/30"
+                >
+                  <ExternalLink size={14} />
+                  Open portal
+                </a>
+              </div>
             </div>
 
             <div className="rounded-[1.5rem] border border-slate-100 bg-gradient-to-br from-slate-50 to-white p-4 text-sm text-slate-600 shadow-sm">
               <p>
-                <span className="font-semibold text-slate-800">Portal slug:</span>{' '}
-                {overview.tenant.slug}
+                <span className="font-semibold text-slate-800">Portal URL:</span>{' '}
+                <a
+                  href={portalUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-brand-navy underline underline-offset-2 transition hover:opacity-70"
+                >
+                  {overview.tenant.customDomainVerified && overview.tenant.customDomain
+                    ? overview.tenant.customDomain
+                    : `${overview.tenant.slug} (slug-based)`}
+                </a>
               </p>
               <p className="mt-2">
-                <span className="font-semibold text-slate-800">Current domain:</span>{' '}
+                <span className="font-semibold text-slate-800">Domain:</span>{' '}
                 {customDomain.trim() || 'Not connected yet'}
               </p>
               <p className="mt-2">
-                <span className="font-semibold text-slate-800">Logo:</span>{' '}
-                {logoUrl.trim() || 'No logo URL saved yet'}
-              </p>
-              <p className="mt-2">
-                <span className="font-semibold text-slate-800">Text color:</span>{' '}
-                {textColor}
-              </p>
-              <p className="mt-2">
-                <span className="font-semibold text-slate-800">Button color:</span>{' '}
-                {buttonColor}
-              </p>
-              <p className="mt-2">
-                <span className="font-semibold text-slate-800">Font style:</span>{' '}
+                <span className="font-semibold text-slate-800">Font:</span>{' '}
                 {selectedFont.label}
               </p>
             </div>
