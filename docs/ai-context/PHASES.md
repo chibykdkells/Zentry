@@ -12,8 +12,8 @@
 
 ```
 Active Phase  : Phase 10 — Admin Analytics, Security Audit & Launch (IN PROGRESS)
-Last Session  : 2026-05-02 (Email system wired, tenant-scoped routing, platform login routing fix, dashboard redesign)
-Next Action   : Confirm password reset email delivery (fly logs), Sentry Vercel env vars, upload janitor bug fix
+Last Session  : 2026-05-03 (Tenant admin UI overhaul — one-line rows + DetailModal, portal URL fix, noise removal, dashboard stat card reposition, Money/payout panel removed)
+Next Action   : Verify "Open portal" link shows public portal for authenticated admins, Sentry Vercel env vars, app.zendocx.net CNAME
 ```
 
 ---

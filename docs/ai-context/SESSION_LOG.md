@@ -7047,3 +7047,73 @@ No new phase items completed — this session was purely UI/UX polish.
 - Admin dashboard pages (orders, CBT centers, disputes) could also use table/list view improvements.
 - No Vercel/Fly.io deployment done this session — changes should be built + deployed next session.
 - Sentry env vars (`NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_ORG`, `SENTRY_PROJECT`) still needed on Vercel.
+
+---
+
+## Session 2026-05-03 — Tenant Admin UI Overhaul: Noise Removal, One-line Rows, Portal Preview Fix
+
+**Phase:** Phase 10 — Admin Analytics, Security Audit & Launch
+**AI Assistant:** Claude Sonnet 4.6
+
+### What Was Done
+
+Complete redesign of all five tenant-admin pages plus the tenant dashboard. The goal was to remove visual noise, replace expanded info-card grids with compact one-line rows that open a `DetailModal`, and fix a broken portal preview URL.
+
+#### 1. `/tenant/users/page.tsx` — One-line rows + DetailModal
+- Removed: `PageHero`, 3 summary info cards (Total customers, Active filter, Role switching), accordion-style expanded rows, `ChevronDown`/`ChevronUp` imports.
+- Added: `openUserId` state, clickable one-line rows (name · email · status badge · date), `DetailModal` with full user details and a role-change `<select>` + Remove button in the modal footer.
+
+#### 2. `/tenant/cbt-management/page.tsx` — One-line rows + DetailModal
+- Same pattern as users page: removed PageHero + 3 info cards + expanded card grid.
+- Modal footer: role-change select (CBT center / Individual) and Remove button side-by-side. Removal gated behind `window.confirm`.
+
+#### 3. `/tenant/services/page.tsx` — Noise removed, layout simplified
+- Removed: `PageHero`, `ArrowRight`, `Sparkles`, `Zap`, `useRef` imports.
+- Removed: 3 SummaryCard metrics section, right-side "How Service Routing Works" panel, `SummaryCard` and `RouteRule` inline component definitions.
+- Changed two-column `xl:grid-cols-[1.1fr_0.9fr]` layout to a single `<div>`.
+- Fixed floating save bar: `bottom-4` → `bottom-20 md:bottom-4` so it no longer hides behind the mobile bottom nav.
+
+#### 4. `business-integrations-workspace.tsx` — API integrations page simplified
+- Removed: 4 `SectionMetric` cards, verbose hero section with long explanatory copy, "Current connection" bottom banner, category chip filter description text, `SectionMetric` component definition.
+- Added: compact header card with title, 2 action buttons, and a single inline status row (connection type · health badge · last checked · endpoint).
+- Simplified service table from 6 columns to 4 (removed "Customer price" and "Connection used" columns).
+- Automation controls condensed to a single compact row at the bottom of the page.
+- Config modal kept 100% intact.
+
+#### 5. `/tenant/settings/page.tsx` — Portal URL fix + preview open link
+- Removed: `PageHero` and 3 info cards section.
+- Fixed portal preview 404: changed `/${overview.tenant.slug}` (non-existent path) to `/?tenant=${overview.tenant.slug}`.
+- Added `portalUrl` constant: uses `https://${customDomain}` when custom domain is verified, falls back to `/?tenant=${slug}`.
+- Replaced generic portal preview with branding preview card + "Open portal" `<a>` button with `ExternalLink` icon, `target="_blank"`, pointing to `portalUrl`.
+- Added portal URL display row with clickable link showing the domain or `?tenant=slug` label.
+
+#### 6. `/tenant/dashboard/page.tsx` — Stat cards repositioned + "Newest users" rows + panel removed
+- Moved the 4 colorful `StatCard` widgets (Customers, CBT centers, Active requests, Held funds) to appear immediately after `PageHero`, before the `FocusCards` grid — was previously below the focus cards, now above the fold.
+- Grid changed from `md:grid-cols-2 xl:grid-cols-4` to `sm:grid-cols-2 xl:grid-cols-4` for better mobile layout.
+- "Newest users" section converted from expanded profile cards → compact one-line clickable rows (name · role badge) → `DetailModal` (role, joined, last sign-in).
+- Removed the entire "Money and payout posture" `AccountPanel` (Waiting on dispute window / Ready for payout release / Blocked by dispute) — this data is already visible in the "Needs attention now" panel and the colorful stat cards. Removed the surrounding `grid gap-6 xl:grid-cols-2` wrapper and kept only the "Completed job queue" panel as a standalone section.
+
+### Files Modified
+
+- `apps/web/src/app/(tenant-admin)/tenant/users/page.tsx`
+- `apps/web/src/app/(tenant-admin)/tenant/cbt-management/page.tsx`
+- `apps/web/src/app/(tenant-admin)/tenant/services/page.tsx`
+- `apps/web/src/components/tenant/business-integrations-workspace.tsx`
+- `apps/web/src/app/(tenant-admin)/tenant/settings/page.tsx`
+- `apps/web/src/app/(tenant-admin)/tenant/dashboard/page.tsx`
+- `docs/ai-context/SESSION_LOG.md`
+
+### Decisions Made
+
+- One-line rows → `DetailModal` is now the standard pattern for all tenant-admin list pages. No more expanded inline rows.
+- Portal URL uses query param `/?tenant={slug}` routing (not `/{slug}` path routing), matching the actual root `page.tsx` resolution logic.
+- "Open portal" link opens in a new tab (`target="_blank"`) so the admin's authenticated session is not disrupted.
+- "Money and payout posture" panel was redundant — the same three metrics (awaiting/ready/blocked) are already visible in the "Needs attention now" panel. Removed to reduce page length.
+- Mobile floating save bar must always use `bottom-20 md:bottom-4` to clear the bottom navigation bar on small screens.
+
+### Blockers / Notes for Next Session
+
+- "Open portal" link may redirect authenticated tenant admins to `/tenant/dashboard` via the auth middleware instead of showing the public portal page. This is a behavior to verify — the public portal (`TenantPortalHome`) is shown only when the user is unauthenticated or the slug is in the `zendocx-returning-tenants` cookie flow.
+- Portal preview card currently shows a static branded gradient — a live `<iframe>` rendering of `/?tenant={slug}` was discussed but deferred (iframe would need `pointer-events: none` + CSS scale transform to fit the preview container).
+- Sentry Vercel env vars (`NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_ORG`, `SENTRY_PROJECT`) still pending.
+- `app.zendocx.net` CNAME record in Cloudflare still needed.

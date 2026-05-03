@@ -291,76 +291,54 @@ export default function TenantDashboardPage() {
         </AccountPanel>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-2">
-        <AccountPanel
-          title="Money and payout posture"
-          description="Understand what is waiting, what is ready, and what the business can already move."
-        >
-          <div className="grid gap-3 sm:grid-cols-3">
-            <MiniFinanceTile
-              label="Waiting on dispute window"
-              value={String(overview.metrics.awaitingReleaseCount)}
-            />
-            <MiniFinanceTile
-              label="Ready for payout release"
-              value={String(overview.metrics.readyReleaseCount)}
-            />
-            <MiniFinanceTile
-              label="Blocked by dispute"
-              value={String(overview.metrics.blockedReleaseCount)}
-            />
-          </div>
-        </AccountPanel>
-
-        <AccountPanel
-          title="Completed job queue"
-          description="Completed manual jobs still waiting on the payout cycle."
-        >
-          {overview.releaseQueue.length ? (
-            <div className="space-y-3">
-              {overview.releaseQueue.map((item) => (
-                <div
-                  key={item.id}
-                  className="rounded-[1.5rem] border border-slate-100 bg-gradient-to-br from-slate-50 to-white p-4 shadow-sm"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-slate-900">
-                        {item.orderNumber} · {item.service.name}
-                      </p>
-                      <p className="mt-1 truncate text-sm text-slate-500">
-                        {item.requester.name} · {item.requester.email}
-                      </p>
-                    </div>
-                    <ReleaseBadge state={item.releaseState} />
-                  </div>
-                  <div className="mt-3 grid gap-1.5 text-sm text-slate-600 sm:grid-cols-2">
-                    <p>CBT payout: {formatNaira(item.cbtCommission)}</p>
-                    <p>CBT: {item.assignedCbt ? item.assignedCbt.name : 'Not assigned'}</p>
-                    <p>
-                      Window:{' '}
-                      {item.disputeWindowExpiresAt
-                        ? `${formatDate(item.disputeWindowExpiresAt)}${
-                            item.releaseState === 'AWAITING_WINDOW'
-                              ? ` · ${formatTimeUntil(item.disputeWindowExpiresAt)}`
-                              : ''
-                          }`
-                        : 'Not available'}
+      <AccountPanel
+        title="Completed job queue"
+        description="Completed manual jobs still waiting on the payout cycle."
+      >
+        {overview.releaseQueue.length ? (
+          <div className="space-y-3">
+            {overview.releaseQueue.map((item) => (
+              <div
+                key={item.id}
+                className="rounded-[1.5rem] border border-slate-100 bg-gradient-to-br from-slate-50 to-white p-4 shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-900">
+                      {item.orderNumber} · {item.service.name}
                     </p>
-                    <p>Dispute: {item.dispute ? item.dispute.reason : 'None'}</p>
+                    <p className="mt-1 truncate text-sm text-slate-500">
+                      {item.requester.name} · {item.requester.email}
+                    </p>
                   </div>
+                  <ReleaseBadge state={item.releaseState} />
                 </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyState
-              title="No completed jobs waiting"
-              message="When manual jobs complete and enter the payout cycle they will appear here."
-              icon={Clock3}
-            />
-          )}
-        </AccountPanel>
-      </div>
+                <div className="mt-3 grid gap-1.5 text-sm text-slate-600 sm:grid-cols-2">
+                  <p>CBT payout: {formatNaira(item.cbtCommission)}</p>
+                  <p>CBT: {item.assignedCbt ? item.assignedCbt.name : 'Not assigned'}</p>
+                  <p>
+                    Window:{' '}
+                    {item.disputeWindowExpiresAt
+                      ? `${formatDate(item.disputeWindowExpiresAt)}${
+                          item.releaseState === 'AWAITING_WINDOW'
+                            ? ` · ${formatTimeUntil(item.disputeWindowExpiresAt)}`
+                            : ''
+                        }`
+                      : 'Not available'}
+                  </p>
+                  <p>Dispute: {item.dispute ? item.dispute.reason : 'None'}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            title="No completed jobs waiting"
+            message="When manual jobs complete and enter the payout cycle they will appear here."
+            icon={Clock3}
+          />
+        )}
+      </AccountPanel>
 
       {openUser ? (
         <DetailModal

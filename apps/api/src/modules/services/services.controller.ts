@@ -11,6 +11,7 @@ import {
 import type { JwtUser } from '@zendocx/types';
 import { UserRole } from '@zendocx/types';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CreateServiceCategoryDto } from './dto/create-service-category.dto';
 import { CreateServiceDto } from './dto/create-service.dto';
@@ -166,12 +167,13 @@ export class ServicesController {
     return this.servicesService.deleteService(id);
   }
 
+  @Public()
   @Get('catalog')
   getCatalog(
     @Query() query: GetServiceCatalogQueryDto,
-    @CurrentUser() user: JwtUser,
+    @CurrentUser() user: JwtUser | undefined,
   ) {
-    return this.servicesService.getCatalog(query, user.tenantId);
+    return this.servicesService.getCatalog(query, user?.tenantId ?? null);
   }
 
   @Get('vtu/data-plans/:serviceId')
