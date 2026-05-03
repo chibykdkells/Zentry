@@ -16,6 +16,70 @@
 
 ---
 
+## Session 2026-05-03 (continued 2) — CBT job delivery timer + extension request workflow
+
+**Phase:** Phase 4 / Phase 10
+**AI Assistant:** Claude Sonnet 4.6
+
+### What Was Done
+
+Completed the CBT job delivery timer feature end-to-end:
+
+**Root fix (from prior session):** `cbt_staff_memberships` table and `CBT_STAFF` enum value were missing from the database — created migration `20260503220000_add_cbt_staff_membership`. `buildSupportedCbtCategoryWhere([])` returned a Prisma `{ in: [] }` filter that matched zero rows — fixed with an early `return {}` guard.
+
+**Job delivery timer (this session):**
+- When a CBT claims a job, `deliveryDeadline` is set to `claimedAt + 10 minutes` on the Order record.
+- A Bull queue job (`delivery-deadline` queue, `ENFORCE_DEADLINE` job) is scheduled to fire at the deadline.
+- If the CBT misses the deadline: job returns to PENDING pool, `CbtJobBlock` is created (prevents re-claiming), both CBT and tenant admin are notified.
+- CBT can request a time extension before the deadline (requires ≥10-char reason).
+- Tenant admin reviews in the CBT management "Extensions" tab: approve (sets additionalMinutes, reschedules queue job) or reject (job returned to pool, CBT blocked).
+
+**Other fixes in same session:**
+- Admin CBT page redirects to /admin/dashboard (CBT approval belongs to tenant admin only).
+- CBT Centers nav removed from super admin sidebar.
+- Wallet page now handles both sandbox and live Paystack redirects (removed `checkout !== 'sandbox'` guard).
+
+### Files Created / Modified
+
+**New files:**
+- `apps/api/prisma/migrations/20260503220000_add_cbt_staff_membership/migration.sql`
+- `apps/api/prisma/migrations/20260503240000_add_cbt_job_time_tracking/migration.sql`
+- `apps/api/src/modules/orders/delivery-deadline.constants.ts`
+- `apps/api/src/modules/orders/dto/request-extension.dto.ts`
+- `apps/api/src/modules/orders/dto/review-extension.dto.ts`
+- `apps/api/src/modules/orders/orders-deadline-queue.service.ts`
+- `apps/api/src/modules/orders/orders-deadline.processor.ts`
+
+**Modified:**
+- `apps/api/prisma/schema.prisma` — `CbtExtensionStatus` enum, `deliveryDeadline` on Order, `CbtTimeExtensionRequest` and `CbtJobBlock` models, new `NotificationType` values
+- `apps/api/src/modules/orders/orders.module.ts` — registered `DELIVERY_DEADLINE_QUEUE`, added processor and queue service
+- `apps/api/src/modules/orders/orders.service.ts` — `claimCbtJob` sets deadline, `requestTimeExtension`, `reviewTimeExtension`, `getPendingExtensionRequests`
+- `apps/api/src/modules/orders/orders.controller.ts` — three new endpoints: `POST cbt/:orderId/request-extension`, `GET admin/extension-requests`, `POST admin/extension-requests/:id/review`
+- `apps/api/src/modules/orders/orders.service.spec.ts` — added missing `ordersDeadlineQueueService` arg to constructor call
+- `apps/web/src/hooks/use-cbt-orders.ts` — `useRequestTimeExtension`, `usePendingExtensionRequests`, `useReviewExtension`, `ExtensionRequest` interface
+- `apps/web/src/app/(cbt)/my-jobs/page.tsx` — `DeadlineTimer` component, extension request form
+- `apps/web/src/app/(tenant-admin)/tenant/cbt-management/page.tsx` — "Extensions" tab with approve (additionalMinutes input) / reject actions
+- `apps/web/src/lib/navigation.ts` — removed CBT Centers from admin nav
+- `apps/web/src/app/(admin)/admin/cbt/page.tsx` — replaced with redirect to /admin/dashboard
+
+### Decisions Made
+
+- Deadline enforcement is queue-based only (never triggered by client) — consistent with escrow release pattern.
+- Each CBT can only have one pending extension request per order at a time.
+- `CbtJobBlock` uses a composite unique index `(orderId, cbtId)` — upsert is safe to call from both deadline processor and extension rejection handler.
+- DTO pattern: `class-validator` decorators only (no `nestjs-zod`) — consistent with existing codebase.
+
+### Phase Checklist Updates
+
+- [x] Phase 4: CBT job delivery timer with extension workflow
+
+### Blockers / Notes for Next Session
+
+- **Paystack config (user must do manually):** Set Live Callback URL in Paystack dashboard to `https://<vercel-url>/wallet`. Set Live Webhook URL to `https://zentry-api-prod.fly.dev/wallet/webhooks/payment`. Run `fly secrets set PAYSTACK_WEBHOOK_SECRET=sk_live_... -a zentry-api-prod` (value = Paystack Live Secret Key).
+- Remaining: Sentry Vercel env vars, `app.zendocx.net` CNAME, silent refresh browser test, PWA install flow.
+
+---
+
 ## Session 2026-05-02 (continued 4) — Service creation split: super admin vs tenant admin
 
 **Phase:** Phase 10 — Admin Analytics, Security Audit & Launch

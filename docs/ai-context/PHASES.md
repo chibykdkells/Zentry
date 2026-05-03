@@ -12,8 +12,8 @@
 
 ```
 Active Phase  : Phase 10 — Admin Analytics, Security Audit & Launch (IN PROGRESS)
-Last Session  : 2026-05-03 (Admin CBT button layout fixed; wallet Paystack live-redirect handler fixed and deployed)
-Next Action   : Verify PAYSTACK_WEBHOOK_SECRET on Fly matches Paystack dashboard. Then: Sentry Vercel env vars, app.zendocx.net CNAME, silent refresh, PWA install flow
+Last Session  : 2026-05-03 (CBT job delivery timer + extension request workflow; admin nav cleanup; wallet live-redirect fix)
+Next Action   : Configure Paystack: set Callback URL + Webhook URL in dashboard, set PAYSTACK_WEBHOOK_SECRET on Fly. Then: Sentry Vercel env vars, app.zendocx.net CNAME, silent refresh, PWA install flow
 ```
 
 ---
@@ -372,6 +372,9 @@ upload, 2-hour dispute window timer starts.
 - [x] Requester notified: result available (notification + real-time event)
 - [x] Job pool UI (CBT) — real-time via Socket.io (job:new invalidates query)
 - [x] Admin: CBT approvals dashboard (/admin/cbt page)
+- [x] CBT job delivery timer: 10-min deadline set on claim, enforced by Bull queue
+- [x] CBT time extension request flow (CBT requests → tenant admin approves/rejects)
+- [x] CbtJobBlock: prevents CBT from re-claiming jobs they missed or had extension rejected
 
 ### Notes
 - Phase 4 batch 1 completed on 2026-04-06:
