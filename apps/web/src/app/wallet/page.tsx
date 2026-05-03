@@ -61,8 +61,7 @@ export default function WalletPage() {
   const { wallet, loading, error, reload } = useWallet();
   const [fundingOpen, setFundingOpen] = useState(false);
   const [openTile, setOpenTile] = useState<string | null>(null);
-  const [confirmingSandboxFunding, setConfirmingSandboxFunding] =
-    useState(false);
+  const [confirmingFunding, setConfirmingFunding] = useState(false);
   const [transactionFilters, setTransactionFilters] =
     useState<WalletTransactionFilters>({
       page: 1,
@@ -94,16 +93,15 @@ export default function WalletPage() {
 
     const searchParams = new URLSearchParams(window.location.search);
     const reference = searchParams.get('reference');
-    const checkout = searchParams.get('checkout');
 
-    if (!reference || checkout !== 'sandbox') {
+    if (!reference) {
       return;
     }
 
     let cancelled = false;
 
     const confirmFunding = async () => {
-      setConfirmingSandboxFunding(true);
+      setConfirmingFunding(true);
 
       try {
         const response = await apiClient.post<{
@@ -124,11 +122,11 @@ export default function WalletPage() {
         }
 
         toast.error(
-          'We could not confirm that sandbox funding yet. Please try again.',
+          'We could not confirm your payment yet. Please try again or contact support.',
         );
       } finally {
         if (!cancelled) {
-          setConfirmingSandboxFunding(false);
+          setConfirmingFunding(false);
         }
       }
     };
@@ -273,10 +271,10 @@ export default function WalletPage() {
           description={walletHeroDescription}
         />
 
-        {confirmingSandboxFunding ? (
+        {confirmingFunding ? (
           <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700">
             <RefreshCcw size={14} className="animate-spin" />
-            Confirming sandbox funding...
+            Confirming payment...
           </div>
         ) : null}
 

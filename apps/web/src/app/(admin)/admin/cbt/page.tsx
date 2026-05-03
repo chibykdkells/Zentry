@@ -343,7 +343,7 @@ export default function AdminCbtPage() {
                 selectedCategoryIds.length === 0
               }
               onClick={() => handleApprove(selectedApp)}
-              className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[#0D1B3E] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#132754] disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#0D1B3E] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#132754] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {approve.isPending ? (
                 <Loader2 size={15} className="animate-spin" />
@@ -361,7 +361,7 @@ export default function AdminCbtPage() {
                 selectedApp.cbtProfile?.approvalStatus === CbtApprovalStatus.REJECTED
               }
               onClick={() => handleReject(selectedApp)}
-              className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-6 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {reject.isPending ? (
                 <Loader2 size={15} className="animate-spin" />
