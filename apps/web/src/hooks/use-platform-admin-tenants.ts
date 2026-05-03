@@ -10,7 +10,6 @@ export interface PlatformAdminTenantSummary {
   totalUsers: number;
   totalIndividuals: number;
   totalCbtUsers: number;
-  totalAdmins: number;
 }
 
 export interface PlatformAdminTenantListItem {

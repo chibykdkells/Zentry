@@ -3,10 +3,19 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
-import { Ban, Building2, Copy, PlusCircle, RefreshCcw, ShieldCheck, Trash2, Users } from 'lucide-react';
+import {
+  Ban,
+  Building2,
+  ChevronRight,
+  Copy,
+  PlusCircle,
+  RefreshCcw,
+  ShieldCheck,
+  Trash2,
+  Users,
+} from 'lucide-react';
 import { UserRole } from '@zendocx/types';
-import { AccountPanel } from '@/components/shared/account-panel';
-import { Accordion, type AccordionItem } from '@/components/shared/accordion';
+import { DetailModal } from '@/components/shared/detail-modal';
 import { EmptyState } from '@/components/shared/empty-state';
 import { FeedbackBanner } from '@/components/shared/feedback-banner';
 import { PageHero } from '@/components/shared/page-hero';
@@ -17,6 +26,7 @@ import {
   useDeleteTenantUser,
   useDismissTenantAdminAccess,
   type PlatformAdminTenantListItem,
+  type PlatformAdminTenantUserListItem,
   usePlatformAdminTenants,
   usePlatformAdminTenantUsers,
   useResetTenantAdminPassword,
@@ -27,488 +37,395 @@ import { formatDate, formatNaira } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 const roleOptions = [
-  { label: 'Everyone in this business', value: 'ALL' as const },
+  { label: 'Everyone', value: 'ALL' as const },
   { label: 'Individuals', value: UserRole.INDIVIDUAL },
   { label: 'CBT centers', value: UserRole.CBT_CENTER },
-  { label: 'Tenant admins', value: UserRole.TENANT_ADMIN },
+  { label: 'Business admins', value: UserRole.TENANT_ADMIN },
 ];
 
 function formatRoleLabel(role: UserRole) {
   switch (role) {
-    case UserRole.CBT_CENTER:
-      return 'CBT center';
-    case UserRole.TENANT_ADMIN:
-      return 'Business admin';
-    case UserRole.SUPER_ADMIN:
-      return 'Platform admin';
-    case UserRole.INDIVIDUAL:
-    default:
-      return 'Individual';
+    case UserRole.CBT_CENTER: return 'CBT center';
+    case UserRole.TENANT_ADMIN: return 'Business admin';
+    case UserRole.SUPER_ADMIN: return 'Platform admin';
+    default: return 'Individual';
   }
 }
 
 function buildSlug(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
-function TenantAccordionBody({
-  tenant,
-  isOpen,
-  origin,
-}: {
-  tenant: PlatformAdminTenantListItem;
-  isOpen: boolean;
-  origin: string;
-}) {
-  const [userSearchInput, setUserSearchInput] = useState('');
-  const [userSearch, setUserSearch] = useState('');
-  const [role, setRole] = useState<UserRole | 'ALL'>('ALL');
-  const [selectedTenantAdminDraft, setSelectedTenantAdminDraft] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    phone: '',
-  });
-  const [tenantAdminMessage, setTenantAdminMessage] = useState<string | null>(null);
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+// ─── User detail modal ────────────────────────────────────────────────────────
 
-  const createTenantAdmin = useCreateTenantAdmin();
-  const resetTenantAdminPassword = useResetTenantAdminPassword();
-  const dismissTenantAdminAccess = useDismissTenantAdminAccess();
+function UserDetailModal({
+  user,
+  tenantId,
+  open,
+  onClose,
+}: {
+  user: PlatformAdminTenantUserListItem;
+  tenantId: string;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const toggleUserActive = useToggleTenantUserActive();
   const deleteUser = useDeleteTenantUser();
 
-  const userFilters = useMemo(
-    () => ({ page: 1, limit: 12, search: userSearch, role }),
-    [role, userSearch],
-  );
-
-  const {
-    users,
-    meta: usersMeta,
-    loading: usersLoading,
-    error: usersError,
-    reload: reloadUsers,
-  } = usePlatformAdminTenantUsers(tenant.id, userFilters, { enabled: isOpen });
-
-  const buildTenantLoginLink = (slug: string) => `${origin}/?tenant=${encodeURIComponent(slug)}`;
-
   return (
-    <div className="space-y-4">
-      {/* Signup links */}
-      <div className="grid gap-3 md:grid-cols-2">
-        <TenantDetailCard
-          label="User signup link"
-          value={`${origin}${tenant.signupLinks.individual}`}
-          actionLabel="Copy"
-          onAction={() => {
-            void navigator.clipboard
-              .writeText(`${window.location.origin}${tenant.signupLinks.individual}`)
-              .then(() => toast.success('User signup link copied.'));
-          }}
-        />
-        <TenantDetailCard
-          label="CBT center signup link"
-          value={`${origin}${tenant.signupLinks.cbt}`}
-          actionLabel="Copy"
-          onAction={() => {
-            void navigator.clipboard
-              .writeText(`${window.location.origin}${tenant.signupLinks.cbt}`)
-              .then(() => toast.success('CBT signup link copied.'));
-          }}
-        />
-        <TenantDetailCard
-          label="Admin login link"
-          value={buildTenantLoginLink(tenant.slug)}
-          actionLabel="Copy"
-          onAction={() => {
-            void navigator.clipboard
-              .writeText(buildTenantLoginLink(tenant.slug))
-              .then(() => toast.success('Business admin login link copied.'));
-          }}
-        />
-        <TenantDetailCard
-          label="Admin accounts"
-          value={
-            tenant.metrics.tenantAdmins === 1
-              ? '1 business admin account'
-              : `${tenant.metrics.tenantAdmins} business admin accounts`
-          }
-        />
-      </div>
-
-      {/* Saved admin sign-in details */}
-      <div className="rounded-[1.5rem] border border-slate-100 bg-slate-50/70 p-4">
-        <h2 className="text-sm font-semibold text-slate-900">Saved admin sign-in details</h2>
-        <p className="mt-2 text-sm leading-6 text-slate-500">
-          Keep these details only while support needs them. Remove them after handoff, or reset the password if the admin needs a fresh temporary sign-in.
-        </p>
-
-        {tenant.tenantAdminAccesses.length ? (
-          <div className="mt-4 space-y-3">
-            {tenant.tenantAdminAccesses.map((access) => (
-              <div key={access.id} className="rounded-[1.5rem] border border-slate-200 bg-white p-4">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">
-                      {access.user.firstName} {access.user.lastName}
-                    </p>
-                    <p className="mt-1 text-sm text-slate-500">{access.email}</p>
-                    <p className="mt-2 text-xs uppercase tracking-[0.16em] text-slate-400">
-                      Created {formatDate(access.createdAt)}
-                      {access.lastResetAt ? ` · Reset ${formatDate(access.lastResetAt)}` : ''}
-                    </p>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <TenantMiniMetric label="Login email" value={access.email} />
-                    <TenantMiniMetric label="Portal link" value={buildTenantLoginLink(tenant.slug)} />
-                    <TenantMiniMetric label="Temporary password" value={access.tempPassword} />
-                  </div>
-                </div>
-
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void navigator.clipboard
-                        .writeText(access.email)
-                        .then(() => toast.success('Business admin login email copied.'))
-                    }
-                    className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-white"
-                  >
-                    <Copy size={14} />
-                    Copy login email
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void navigator.clipboard
-                        .writeText(buildTenantLoginLink(tenant.slug))
-                        .then(() => toast.success('Business admin login link copied.'))
-                    }
-                    className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-white"
-                  >
-                    <Copy size={14} />
-                    Copy login link
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void navigator.clipboard
-                        .writeText(access.tempPassword)
-                        .then(() => toast.success('Temporary password copied.'))
-                    }
-                    className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-white"
-                  >
-                    <Copy size={14} />
-                    Copy password
-                  </button>
-                  <button
-                    type="button"
-                    disabled={resetTenantAdminPassword.isPending}
-                    onClick={() => {
-                      setTenantAdminMessage(null);
-                      void resetTenantAdminPassword
-                        .mutateAsync({ tenantId: tenant.id, userId: access.user.id })
-                        .then((updatedAdmin) => {
-                          setTenantAdminMessage(
-                            `Password reset. Portal: ${buildTenantLoginLink(tenant.slug)} · Email: ${updatedAdmin.email} · Password: ${updatedAdmin.tempPassword}`,
-                          );
-                        })
-                        .catch((error) => {
-                          toast.error(getApiErrorMessage(error, 'Could not reset the password right now.'));
-                        });
-                    }}
-                    className="inline-flex items-center gap-2 rounded-2xl bg-[#0D1B3E] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#132754] disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {resetTenantAdminPassword.isPending ? 'Resetting...' : 'Reset password'}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={dismissTenantAdminAccess.isPending}
-                    onClick={() => {
-                      setTenantAdminMessage(null);
-                      void dismissTenantAdminAccess
-                        .mutateAsync({ tenantId: tenant.id, accessId: access.id })
-                        .then(() => toast.success('Saved admin sign-in details removed.'))
-                        .catch((error) => {
-                          toast.error(getApiErrorMessage(error, 'Could not remove the saved access right now.'));
-                        });
-                    }}
-                    className="inline-flex items-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {dismissTenantAdminAccess.isPending ? 'Removing...' : 'Remove saved details'}
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="mt-4 text-sm text-slate-500">No saved admin sign-in details for this business.</p>
-        )}
-      </div>
-
-      {/* Add another admin */}
-      <div className="rounded-[1.5rem] border border-slate-100 bg-slate-50/70 p-4">
-        <h2 className="text-sm font-semibold text-slate-900">Add another business admin</h2>
-        <p className="mt-2 text-sm leading-6 text-slate-500">
-          Creates another admin account and returns a temporary password to share securely.
-        </p>
-
-        {tenantAdminMessage ? (
-          <div className="mt-4">
-            <FeedbackBanner tone="success" message={tenantAdminMessage} />
-          </div>
-        ) : null}
-
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
-          {(['firstName', 'lastName', 'email', 'phone'] as const).map((field) => (
-            <input
-              key={field}
-              value={selectedTenantAdminDraft[field]}
-              onChange={(e) =>
-                setSelectedTenantAdminDraft((current) => ({ ...current, [field]: e.target.value }))
-              }
-              placeholder={
-                field === 'firstName'
-                  ? 'First name'
-                  : field === 'lastName'
-                    ? 'Last name'
-                    : field === 'email'
-                      ? 'owner@business.com'
-                      : '+2348012345678'
-              }
-              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-[#0D1B3E] focus:ring-2 focus:ring-[#0D1B3E]/10"
-            />
-          ))}
-        </div>
-
-        <button
-          type="button"
-          disabled={
-            createTenantAdmin.isPending ||
-            !selectedTenantAdminDraft.firstName.trim() ||
-            !selectedTenantAdminDraft.lastName.trim() ||
-            !selectedTenantAdminDraft.email.trim() ||
-            !selectedTenantAdminDraft.phone.trim()
-          }
-          onClick={() => {
-            setTenantAdminMessage(null);
-            void createTenantAdmin
-              .mutateAsync({
-                tenantId: tenant.id,
-                firstName: selectedTenantAdminDraft.firstName.trim(),
-                lastName: selectedTenantAdminDraft.lastName.trim(),
-                email: selectedTenantAdminDraft.email.trim(),
-                phone: selectedTenantAdminDraft.phone.trim(),
-              })
-              .then((createdAdmin) => {
-                setTenantAdminMessage(
-                  `Admin created. Portal: ${buildTenantLoginLink(tenant.slug)} · Email: ${createdAdmin.email} · Password: ${createdAdmin.tempPassword}`,
-                );
-                setSelectedTenantAdminDraft({ firstName: '', lastName: '', email: '', phone: '' });
-              })
-              .catch((error) => {
-                toast.error(getApiErrorMessage(error, 'Could not create the business admin right now.'));
-              });
-          }}
-          className="mt-4 inline-flex items-center justify-center gap-2 rounded-2xl bg-[#0D1B3E] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#132754] disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <PlusCircle size={16} />
-          {createTenantAdmin.isPending ? 'Adding admin...' : 'Add business admin'}
-        </button>
-      </div>
-
-      {/* People in this business */}
-      <div className="rounded-[1.5rem] border border-slate-100 bg-slate-50/70 p-4">
-        <h2 className="text-sm font-semibold text-slate-900">People in this business</h2>
-        <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_180px_auto]">
-          <input
-            value={userSearchInput}
-            onChange={(e) => setUserSearchInput(e.target.value)}
-            placeholder="Search by name or email"
-            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-[#0D1B3E] focus:ring-2 focus:ring-[#0D1B3E]/10"
-          />
-          <select
-            value={role}
-            onChange={(e) => setRole(e.target.value as UserRole | 'ALL')}
-            className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-[#0D1B3E] focus:ring-2 focus:ring-[#0D1B3E]/10"
-          >
-            {roleOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+    <DetailModal
+      open={open}
+      onClose={() => { setConfirmDelete(false); onClose(); }}
+      title={`${user.firstName} ${user.lastName}`}
+      description={formatRoleLabel(user.role)}
+      width="md"
+      zIndex="nested"
+      footer={
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={() => setUserSearch(userSearchInput.trim())}
-            className="rounded-2xl bg-[#0D1B3E] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#132754]"
+            disabled={toggleUserActive.isPending}
+            onClick={() => {
+              void toggleUserActive
+                .mutateAsync({ tenantId, userId: user.id })
+                .then((res) => {
+                  toast.success(res.isActive ? `${user.firstName} reactivated.` : `${user.firstName} deactivated.`);
+                  onClose();
+                })
+                .catch((err) => toast.error(getApiErrorMessage(err, 'Could not update account status.')));
+            }}
+            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-white disabled:opacity-60"
           >
-            Apply
+            {user.isActive ? <><Ban size={14} /> Deactivate</> : <><RefreshCcw size={14} /> Reactivate</>}
+          </button>
+
+          {confirmDelete ? (
+            <>
+              <button
+                type="button"
+                disabled={deleteUser.isPending}
+                onClick={() => {
+                  void deleteUser
+                    .mutateAsync({ tenantId, userId: user.id })
+                    .then(() => { toast.success(`${user.firstName} removed.`); onClose(); })
+                    .catch((err) => { setConfirmDelete(false); toast.error(getApiErrorMessage(err, 'Could not delete this account.')); });
+                }}
+                className="inline-flex items-center gap-2 rounded-2xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:opacity-60"
+              >
+                <Trash2 size={14} />
+                {deleteUser.isPending ? 'Deleting…' : 'Confirm delete'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(false)}
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmDelete(true)}
+              className="inline-flex items-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
+            >
+              <Trash2 size={14} /> Delete
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="ml-auto rounded-2xl bg-[#0D1B3E] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#132754]"
+          >
+            Done
           </button>
         </div>
-
-        <div className="mt-4">
-          {usersError ? (
-            <EmptyState
-              title="People list unavailable"
-              message={usersError}
-              icon={Users}
-              action={
-                <button
-                  type="button"
-                  onClick={reloadUsers}
-                  className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                >
-                  Try again
-                </button>
-              }
-            />
-          ) : usersLoading ? (
-            <div className="space-y-3">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <SkeletonBlock key={i} className="h-28 rounded-[1.5rem]" />
-              ))}
+      }
+    >
+      <div className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-2">
+          {[
+            { label: 'Email', value: user.email },
+            { label: 'Phone', value: user.phone },
+            { label: 'Role', value: formatRoleLabel(user.role) },
+            { label: 'Account', value: user.isActive ? 'Active' : 'Paused' },
+            { label: 'Email verified', value: user.isEmailVerified ? 'Yes' : 'Pending' },
+            { label: 'Last sign-in', value: user.lastLoginAt ? formatDate(user.lastLoginAt) : 'Not yet' },
+            { label: 'Registered', value: formatDate(user.createdAt) },
+          ].map(({ label, value }) => (
+            <div key={label} className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</p>
+              <p className="mt-1 text-sm text-slate-800">{value}</p>
             </div>
-          ) : users.length ? (
-            <div className="space-y-3">
-              {users.map((user) => (
-                <article
-                  key={user.id}
-                  className="rounded-[1.5rem] border border-slate-200 bg-white p-4"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">
-                        {user.firstName} {user.lastName}
-                      </p>
-                      <p className="mt-1 text-sm text-slate-500">{user.email}</p>
-                    </div>
-                    <span
-                      className={cn(
-                        'rounded-full px-3 py-1 text-xs font-semibold',
-                        user.isActive ? 'bg-slate-100 text-slate-600' : 'bg-rose-50 text-rose-600',
-                      )}
-                    >
-                      {formatRoleLabel(user.role)}
-                      {!user.isActive ? ' · Inactive' : ''}
-                    </span>
-                  </div>
-                  <div className="mt-4 grid gap-2 text-sm text-slate-600 sm:grid-cols-2">
-                    <p>Phone: {user.phone}</p>
-                    <p>Account state: {user.isActive ? 'Active' : 'Paused'}</p>
-                    <p>Email: {user.isEmailVerified ? 'Verified' : 'Pending'}</p>
-                    <p>Last sign-in: {user.lastLoginAt ? formatDate(user.lastLoginAt) : 'Not yet'}</p>
-                  </div>
-
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      disabled={toggleUserActive.isPending}
-                      onClick={() => {
-                        void toggleUserActive
-                          .mutateAsync({ tenantId: tenant.id, userId: user.id })
-                          .then((res) =>
-                            toast.success(
-                              res.isActive ? `${user.firstName} reactivated.` : `${user.firstName} deactivated.`,
-                            ),
-                          )
-                          .catch((err) =>
-                            toast.error(getApiErrorMessage(err, 'Could not update account status right now.')),
-                          );
-                      }}
-                      className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {user.isActive ? (
-                        <>
-                          <Ban size={14} />
-                          Deactivate
-                        </>
-                      ) : (
-                        <>
-                          <RefreshCcw size={14} />
-                          Reactivate
-                        </>
-                      )}
-                    </button>
-
-                    {deleteConfirmId === user.id ? (
-                      <>
-                        <button
-                          type="button"
-                          disabled={deleteUser.isPending}
-                          onClick={() => {
-                            void deleteUser
-                              .mutateAsync({ tenantId: tenant.id, userId: user.id })
-                              .then(() => {
-                                setDeleteConfirmId(null);
-                                toast.success(`${user.firstName} ${user.lastName} removed.`);
-                              })
-                              .catch((err) => {
-                                setDeleteConfirmId(null);
-                                toast.error(getApiErrorMessage(err, 'Could not delete this account right now.'));
-                              });
-                          }}
-                          className="inline-flex items-center gap-2 rounded-2xl bg-rose-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          <Trash2 size={14} />
-                          {deleteUser.isPending ? 'Deleting…' : 'Confirm delete'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeleteConfirmId(null)}
-                          className="inline-flex items-center rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                        >
-                          Cancel
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setDeleteConfirmId(user.id)}
-                        className="inline-flex items-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
-                      >
-                        <Trash2 size={14} />
-                        Delete
-                      </button>
-                    )}
-                  </div>
-                </article>
-              ))}
-
-              {usersMeta ? (
-                <p className="text-sm text-slate-500">
-                  Showing {users.length} of {usersMeta.total} user
-                  {usersMeta.total === 1 ? '' : 's'} in this business.
-                </p>
-              ) : null}
-            </div>
-          ) : (
-            <EmptyState
-              title="No people matched"
-              message="Adjust the search or role filter to see more people in this business."
-              icon={Users}
-            />
-          )}
+          ))}
         </div>
       </div>
-    </div>
+    </DetailModal>
   );
 }
 
+// ─── Tenant detail modal ──────────────────────────────────────────────────────
+
+function TenantDetailModal({
+  tenant,
+  open,
+  onClose,
+  origin,
+}: {
+  tenant: PlatformAdminTenantListItem;
+  open: boolean;
+  onClose: () => void;
+  origin: string;
+}) {
+  const [openUserId, setOpenUserId] = useState<string | null>(null);
+  const [adminDraft, setAdminDraft] = useState({ firstName: '', lastName: '', email: '', phone: '' });
+  const [adminMessage, setAdminMessage] = useState<string | null>(null);
+  const [showAddAdmin, setShowAddAdmin] = useState(false);
+  const [userSearch, setUserSearch] = useState('');
+  const [userSearchInput, setUserSearchInput] = useState('');
+  const [role, setRole] = useState<UserRole | 'ALL'>('ALL');
+
+  const createTenantAdmin = useCreateTenantAdmin();
+  const userFilters = useMemo(() => ({ page: 1, limit: 20, search: userSearch, role }), [role, userSearch]);
+  const { users, meta: usersMeta, loading: usersLoading, error: usersError } = usePlatformAdminTenantUsers(
+    tenant.id,
+    userFilters,
+    { enabled: open },
+  );
+
+  const loginLink = `${origin}/?tenant=${encodeURIComponent(tenant.slug)}`;
+  const openUser = users.find((u) => u.id === openUserId) ?? null;
+
+  return (
+    <>
+      <DetailModal
+        open={open}
+        onClose={onClose}
+        title={tenant.name}
+        description={`${tenant.slug}${tenant.customDomain ? ` · ${tenant.customDomain}` : ''}`}
+        width="xl"
+        footer={
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-2xl bg-[#0D1B3E] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#132754]"
+            >
+              Done
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-5">
+          {/* Quick copy links */}
+          <div className="flex flex-wrap gap-2">
+            {[
+              { label: 'User signup', path: tenant.signupLinks.individual },
+              { label: 'CBT signup', path: tenant.signupLinks.cbt },
+              { label: 'Admin login', path: `/?tenant=${encodeURIComponent(tenant.slug)}` },
+            ].map(({ label, path }) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() =>
+                  void navigator.clipboard
+                    .writeText(`${window.location.origin}${path}`)
+                    .then(() => toast.success(`${label} link copied.`))
+                }
+                className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-white"
+              >
+                <Copy size={11} />
+                Copy {label} link
+              </button>
+            ))}
+          </div>
+
+          {/* Metrics snapshot */}
+          <div className="grid grid-cols-4 gap-2 sm:grid-cols-4">
+            {[
+              { label: 'Users', value: String(tenant.metrics.totalUsers) },
+              { label: 'CBTs', value: String(tenant.metrics.cbtUsers) },
+              { label: 'Individuals', value: String(tenant.metrics.individualUsers) },
+              { label: 'Admins', value: String(tenant.metrics.tenantAdmins) },
+              { label: 'Orders', value: String(tenant.metrics.totalOrders) },
+              { label: 'Transactions', value: String(tenant.metrics.totalTransactions) },
+              { label: 'On hold', value: formatNaira(tenant.metrics.heldFunds) },
+              { label: 'Available', value: formatNaira(tenant.metrics.availableBalance) },
+            ].map(({ label, value }) => (
+              <div key={label} className="rounded-2xl border border-slate-100 bg-slate-50/70 px-3 py-2.5">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</p>
+                <p className="mt-1 text-sm font-bold text-slate-900">{value}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Add admin toggle */}
+          <div className="rounded-[1.5rem] border border-slate-100 bg-slate-50/70 p-4">
+            <button
+              type="button"
+              onClick={() => setShowAddAdmin((v) => !v)}
+              className="flex w-full items-center justify-between text-sm font-semibold text-slate-900"
+            >
+              Add business admin
+              <ChevronRight size={15} className={cn('text-slate-400 transition-transform', showAddAdmin && 'rotate-90')} />
+            </button>
+
+            {showAddAdmin ? (
+              <div className="mt-4 space-y-3">
+                {adminMessage ? <FeedbackBanner tone="success" message={adminMessage} /> : null}
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {(['firstName', 'lastName', 'email', 'phone'] as const).map((field) => (
+                    <input
+                      key={field}
+                      value={adminDraft[field]}
+                      onChange={(e) => setAdminDraft((c) => ({ ...c, [field]: e.target.value }))}
+                      placeholder={
+                        field === 'firstName' ? 'First name'
+                        : field === 'lastName' ? 'Last name'
+                        : field === 'email' ? 'Email'
+                        : 'Phone'
+                      }
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-[#0D1B3E] focus:ring-2 focus:ring-[#0D1B3E]/10"
+                    />
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  disabled={
+                    createTenantAdmin.isPending ||
+                    !adminDraft.firstName.trim() ||
+                    !adminDraft.lastName.trim() ||
+                    !adminDraft.email.trim() ||
+                    !adminDraft.phone.trim()
+                  }
+                  onClick={() => {
+                    setAdminMessage(null);
+                    void createTenantAdmin
+                      .mutateAsync({
+                        tenantId: tenant.id,
+                        firstName: adminDraft.firstName.trim(),
+                        lastName: adminDraft.lastName.trim(),
+                        email: adminDraft.email.trim(),
+                        phone: adminDraft.phone.trim(),
+                      })
+                      .then((created) => {
+                        setAdminMessage(
+                          `Admin created. Portal: ${loginLink} · Email: ${created.email} · Password: ${created.tempPassword}`,
+                        );
+                        setAdminDraft({ firstName: '', lastName: '', email: '', phone: '' });
+                      })
+                      .catch((err) => toast.error(getApiErrorMessage(err, 'Could not create admin.')));
+                  }}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-[#0D1B3E] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#132754] disabled:opacity-60"
+                >
+                  <PlusCircle size={15} />
+                  {createTenantAdmin.isPending ? 'Adding...' : 'Add admin'}
+                </button>
+              </div>
+            ) : null}
+          </div>
+
+          {/* People list */}
+          <div>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold text-slate-900">People in this business</h3>
+              {usersMeta ? (
+                <span className="text-xs text-slate-400">{usersMeta.total} total</span>
+              ) : null}
+            </div>
+
+            <div className="mb-3 flex gap-2">
+              <input
+                value={userSearchInput}
+                onChange={(e) => setUserSearchInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') setUserSearch(userSearchInput.trim()); }}
+                placeholder="Search by name or email"
+                className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-[#0D1B3E] focus:ring-2 focus:ring-[#0D1B3E]/10"
+              />
+              <select
+                value={role}
+                onChange={(e) => setRole(e.target.value as UserRole | 'ALL')}
+                className="rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-[#0D1B3E]"
+              >
+                {roleOptions.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setUserSearch(userSearchInput.trim())}
+                className="rounded-2xl bg-[#0D1B3E] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#132754]"
+              >
+                Search
+              </button>
+            </div>
+
+            {usersError ? (
+              <p className="text-sm text-rose-500">{usersError}</p>
+            ) : usersLoading ? (
+              <div className="space-y-2">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <SkeletonBlock key={i} className="h-12 rounded-2xl" />
+                ))}
+              </div>
+            ) : users.length ? (
+              <div className="space-y-1.5">
+                {users.map((user) => (
+                  <button
+                    key={user.id}
+                    type="button"
+                    onClick={() => setOpenUserId(user.id)}
+                    className="flex w-full items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3 text-left transition hover:border-slate-200 hover:bg-white"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <span className="text-sm font-semibold text-slate-900">
+                        {user.firstName} {user.lastName}
+                      </span>
+                      <span className="ml-2 text-sm text-slate-500">{user.email}</span>
+                    </div>
+                    <span
+                      className={cn(
+                        'shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold',
+                        user.isActive ? 'bg-slate-100 text-slate-600' : 'bg-rose-50 text-rose-600',
+                      )}
+                    >
+                      {formatRoleLabel(user.role)}{!user.isActive ? ' · Inactive' : ''}
+                    </span>
+                    <ChevronRight size={14} className="shrink-0 text-slate-400" />
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400">No people matched this filter.</p>
+            )}
+          </div>
+        </div>
+      </DetailModal>
+
+      {openUser ? (
+        <UserDetailModal
+          user={openUser}
+          tenantId={tenant.id}
+          open={Boolean(openUserId)}
+          onClose={() => setOpenUserId(null)}
+        />
+      ) : null}
+    </>
+  );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
 export default function AdminUsersPage() {
   const [tenantSearch, setTenantSearch] = useState('');
+  const [openTenantId, setOpenTenantId] = useState<string | null>(null);
   const [tenantDraft, setTenantDraft] = useState({ name: '', slug: '' });
   const [tenantAdminDraft, setTenantAdminDraft] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    phone: '',
+    firstName: '', lastName: '', email: '', phone: '',
   });
   const [tenantMessage, setTenantMessage] = useState<{
     tone: 'success' | 'error' | 'info';
@@ -524,6 +441,7 @@ export default function AdminUsersPage() {
   const createTenantAdmin = useCreateTenantAdmin();
 
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const selectedTenant = tenants.find((t) => t.id === openTenantId) ?? null;
 
   const statCards = summary
     ? [
@@ -531,58 +449,15 @@ export default function AdminUsersPage() {
         { title: 'All users', value: String(summary.totalUsers), icon: Users },
         { title: 'Individuals', value: String(summary.totalIndividuals), icon: Users },
         { title: 'CBT centers', value: String(summary.totalCbtUsers), icon: ShieldCheck },
-        { title: 'Admins', value: String(summary.totalAdmins), icon: ShieldCheck },
       ]
     : [];
-
-  const accordionItems: AccordionItem[] = tenants.map((tenant) => ({
-    id: tenant.id,
-    header: (
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <p className="text-base font-semibold text-slate-900">{tenant.name}</p>
-            {tenant.isActive ? (
-              <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
-                Active
-              </span>
-            ) : (
-              <span className="rounded-full bg-rose-50 px-2.5 py-1 text-[11px] font-semibold text-rose-700">
-                Paused
-              </span>
-            )}
-          </div>
-          <p className="mt-1 text-sm text-slate-500">
-            {tenant.slug}
-            {tenant.customDomain ? ` · ${tenant.customDomain}` : ''}
-          </p>
-          <p className="mt-1.5 text-xs uppercase tracking-[0.16em] text-slate-400">
-            Created {formatDate(tenant.createdAt)}
-          </p>
-        </div>
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-4">
-          <TenantMiniMetric label="Users" value={String(tenant.metrics.totalUsers)} />
-          <TenantMiniMetric label="CBTs" value={String(tenant.metrics.cbtUsers)} />
-          <TenantMiniMetric label="Individuals" value={String(tenant.metrics.individualUsers)} />
-          <TenantMiniMetric label="Admins" value={String(tenant.metrics.tenantAdmins)} />
-          <TenantMiniMetric label="Orders" value={String(tenant.metrics.totalOrders)} />
-          <TenantMiniMetric label="Transactions" value={String(tenant.metrics.totalTransactions)} />
-          <TenantMiniMetric label="On hold" value={formatNaira(tenant.metrics.heldFunds)} />
-          <TenantMiniMetric label="Available" value={formatNaira(tenant.metrics.availableBalance)} />
-        </div>
-      </div>
-    ),
-    body: (isOpen: boolean) => (
-      <TenantAccordionBody tenant={tenant} isOpen={isOpen} origin={origin} />
-    ),
-  }));
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-8">
       <PageHero
         eyebrow="Business Access"
-        title="Create businesses, share links, and manage the people inside them"
-        description="Use this page to open a new business, give its admin access, and check who belongs to each business without switching between multiple tools."
+        title="Create businesses and manage the people inside them"
+        description="Open a new business, set up its admin, and inspect who belongs to each business."
         actions={
           <Link
             href="/admin/dashboard"
@@ -594,10 +469,10 @@ export default function AdminUsersPage() {
       />
 
       {/* Stats */}
-      <div className="grid gap-4 sm:grid-cols-3 xl:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {loading
-          ? Array.from({ length: 5 }).map((_, index) => (
-              <SkeletonBlock key={index} className="h-32 rounded-[1.5rem]" />
+          ? Array.from({ length: 4 }).map((_, i) => (
+              <SkeletonBlock key={i} className="h-32 rounded-[1.5rem]" />
             ))
           : statCards.map((item) => (
               <article
@@ -607,219 +482,127 @@ export default function AdminUsersPage() {
                 <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-[#0D1B3E]">
                   <item.icon size={18} />
                 </div>
-                <p className="mt-5 text-3xl font-bold tracking-tight text-slate-900">
-                  {item.value}
-                </p>
+                <p className="mt-5 text-3xl font-bold tracking-tight text-slate-900">{item.value}</p>
                 <p className="mt-1 text-sm text-slate-500">{item.title}</p>
               </article>
             ))}
       </div>
 
-      {/* Create business + info panels */}
-      <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-        <AccountPanel
-          title="Create a business"
-          description="Set up the business and its first admin in one step, then share the right signup links."
-          actions={
-            <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-              <PlusCircle size={14} />
-              Platform admin only
-            </div>
-          }
-        >
-          <form
-            className="space-y-4"
-            onSubmit={(event) => {
-              event.preventDefault();
-              setTenantMessage(null);
+      {/* Create business */}
+      <div className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="text-base font-bold text-slate-900">Create a business</h2>
+        <p className="mt-1 text-sm text-slate-500">Set up the business and its first admin in one step.</p>
 
-              void (async () => {
-                let createdTenant: { id: string; slug: string } | null = null;
-                try {
-                  createdTenant = await createTenant.mutateAsync({
-                    name: tenantDraft.name.trim(),
-                    slug: tenantDraft.slug.trim(),
-                  });
-
-                  const createdAdmin = await createTenantAdmin.mutateAsync({
-                    tenantId: createdTenant.id,
-                    firstName: tenantAdminDraft.firstName.trim(),
-                    lastName: tenantAdminDraft.lastName.trim(),
-                    email: tenantAdminDraft.email.trim(),
-                    phone: tenantAdminDraft.phone.trim(),
-                  });
-
-                  const loginLink = `${origin}/?tenant=${encodeURIComponent(createdTenant.slug)}`;
-                  setTenantMessage({
-                    tone: 'success',
-                    message: `Business created. Portal link: ${loginLink}. Login email: ${createdAdmin.email}. Temporary password: ${createdAdmin.tempPassword}`,
-                  });
-                  setTenantDraft({ name: '', slug: '' });
-                  setTenantAdminDraft({ firstName: '', lastName: '', email: '', phone: '' });
-                } catch (error) {
-                  if (createdTenant) {
-                    setTenantMessage({
-                      tone: 'info',
-                      message: `Business created, but the admin account was not completed. Open the business below and add the admin there. ${getApiErrorMessage(error, 'The admin account could not be created right now.')}`,
-                    });
-                    return;
-                  }
-                  setTenantMessage({
-                    tone: 'error',
-                    message: getApiErrorMessage(error, 'Could not complete business setup right now.'),
-                  });
-                }
-              })();
-            }}
-          >
-            {tenantMessage ? (
-              <FeedbackBanner tone={tenantMessage.tone} message={tenantMessage.message} />
-            ) : null}
-
-            {createTenant.error ? (
-              <FeedbackBanner
-                tone="error"
-                message={String(
-                  createTenant.error instanceof Error
-                    ? createTenant.error.message
-                    : 'Could not create the business right now.',
-                )}
-              />
-            ) : null}
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <label className="block">
-                <span className="mb-1.5 block text-sm font-medium text-slate-700">Business name</span>
-                <input
-                  value={tenantDraft.name}
-                  onChange={(e) => {
-                    const name = e.target.value;
-                    setTenantDraft((current) => ({
-                      ...current,
-                      name,
-                      slug: current.slug ? current.slug : buildSlug(name),
-                    }));
-                  }}
-                  placeholder="Summit CBT Services"
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-[#0D1B3E] focus:ring-2 focus:ring-[#0D1B3E]/10"
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1.5 block text-sm font-medium text-slate-700">Share slug</span>
-                <input
-                  value={tenantDraft.slug}
-                  onChange={(e) =>
-                    setTenantDraft((current) => ({ ...current, slug: buildSlug(e.target.value) }))
-                  }
-                  placeholder="summit-cbt"
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-[#0D1B3E] focus:ring-2 focus:ring-[#0D1B3E]/10"
-                />
-              </label>
-            </div>
-
-            <div className="space-y-1 pt-1">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                First business admin
-              </p>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              {(
-                [
-                  { field: 'firstName', label: 'Admin first name', placeholder: 'Ada' },
-                  { field: 'lastName', label: 'Admin last name', placeholder: 'Okafor' },
-                  { field: 'email', label: 'Admin email', placeholder: 'owner@business.com' },
-                  { field: 'phone', label: 'Admin phone', placeholder: '+2348012345678' },
-                ] as const
-              ).map(({ field, label, placeholder }) => (
-                <label key={field} className="block">
-                  <span className="mb-1.5 block text-sm font-medium text-slate-700">{label}</span>
-                  <input
-                    value={tenantAdminDraft[field]}
-                    onChange={(e) =>
-                      setTenantAdminDraft((current) => ({ ...current, [field]: e.target.value }))
-                    }
-                    placeholder={placeholder}
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-[#0D1B3E] focus:ring-2 focus:ring-[#0D1B3E]/10"
-                  />
-                </label>
-              ))}
-            </div>
-
-            <FeedbackBanner
-              tone="info"
-              title="What this creates"
-              message="This creates the business itself and the first business admin, so the business can sign in right away."
-            />
-
-            <button
-              type="submit"
-              disabled={
-                createTenant.isPending ||
-                createTenantAdmin.isPending ||
-                !tenantDraft.name.trim() ||
-                !tenantDraft.slug.trim() ||
-                !tenantAdminDraft.firstName.trim() ||
-                !tenantAdminDraft.lastName.trim() ||
-                !tenantAdminDraft.email.trim() ||
-                !tenantAdminDraft.phone.trim()
+        <form
+          className="mt-5 space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setTenantMessage(null);
+            void (async () => {
+              let created: { id: string; slug: string } | null = null;
+              try {
+                created = await createTenant.mutateAsync({
+                  name: tenantDraft.name.trim(),
+                  slug: tenantDraft.slug.trim(),
+                });
+                const admin = await createTenantAdmin.mutateAsync({
+                  tenantId: created.id,
+                  firstName: tenantAdminDraft.firstName.trim(),
+                  lastName: tenantAdminDraft.lastName.trim(),
+                  email: tenantAdminDraft.email.trim(),
+                  phone: tenantAdminDraft.phone.trim(),
+                });
+                const loginLink = `${origin}/?tenant=${encodeURIComponent(created.slug)}`;
+                setTenantMessage({
+                  tone: 'success',
+                  message: `Business created. Portal: ${loginLink} · Email: ${admin.email} · Password: ${admin.tempPassword}`,
+                });
+                setTenantDraft({ name: '', slug: '' });
+                setTenantAdminDraft({ firstName: '', lastName: '', email: '', phone: '' });
+              } catch (err) {
+                setTenantMessage({
+                  tone: created ? 'info' : 'error',
+                  message: created
+                    ? `Business created but admin setup failed. Find it in the list below. ${getApiErrorMessage(err, '')}`
+                    : getApiErrorMessage(err, 'Could not create the business right now.'),
+                });
               }
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#0D1B3E] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#132754] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <PlusCircle size={16} />
-              {createTenant.isPending || createTenantAdmin.isPending
-                ? 'Creating...'
-                : 'Create business'}
-            </button>
-          </form>
-        </AccountPanel>
-
-        <AccountPanel
-          title="What you manage here"
-          description="These are the three most common jobs on this page."
+            })();
+          }}
         >
-          <div className="space-y-4">
-            {[
-              {
-                title: 'Businesses',
-                description:
-                  'Each business has its own users, wallet activity, service setup, and login links.',
-              },
-              {
-                title: 'People and access',
-                description:
-                  'Expand a business row to copy links, create or reset admin access, and see who belongs to that business.',
-              },
-              {
-                title: 'Balances and support checks',
-                description:
-                  'Use the business list to spot available balances, money still on hold, and where support may need to step in.',
-              },
-            ].map((item) => (
-              <div key={item.title} className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
-                <h2 className="text-sm font-semibold text-slate-900">{item.title}</h2>
-                <p className="mt-2 text-sm leading-6 text-slate-500">{item.description}</p>
-              </div>
+          {tenantMessage ? <FeedbackBanner tone={tenantMessage.tone} message={tenantMessage.message} /> : null}
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-slate-700">Business name</span>
+              <input
+                value={tenantDraft.name}
+                onChange={(e) => {
+                  const name = e.target.value;
+                  setTenantDraft((c) => ({ ...c, name, slug: c.slug || buildSlug(name) }));
+                }}
+                placeholder="Summit CBT Services"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-[#0D1B3E] focus:ring-2 focus:ring-[#0D1B3E]/10"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-slate-700">Slug</span>
+              <input
+                value={tenantDraft.slug}
+                onChange={(e) => setTenantDraft((c) => ({ ...c, slug: buildSlug(e.target.value) }))}
+                placeholder="summit-cbt"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-[#0D1B3E] focus:ring-2 focus:ring-[#0D1B3E]/10"
+              />
+            </label>
+            {(['firstName', 'lastName', 'email', 'phone'] as const).map((field) => (
+              <label key={field} className="block">
+                <span className="mb-1.5 block text-sm font-medium text-slate-700">
+                  {field === 'firstName' ? 'First name'
+                    : field === 'lastName' ? 'Last name'
+                    : field === 'email' ? 'Admin email'
+                    : 'Admin phone'}
+                </span>
+                <input
+                  value={tenantAdminDraft[field]}
+                  onChange={(e) => setTenantAdminDraft((c) => ({ ...c, [field]: e.target.value }))}
+                  placeholder={field === 'email' ? 'owner@business.com' : field === 'phone' ? '+2348012345678' : ''}
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-[#0D1B3E] focus:ring-2 focus:ring-[#0D1B3E]/10"
+                />
+              </label>
             ))}
           </div>
-        </AccountPanel>
+
+          <button
+            type="submit"
+            disabled={
+              createTenant.isPending ||
+              createTenantAdmin.isPending ||
+              !tenantDraft.name.trim() ||
+              !tenantDraft.slug.trim() ||
+              !tenantAdminDraft.firstName.trim() ||
+              !tenantAdminDraft.lastName.trim() ||
+              !tenantAdminDraft.email.trim() ||
+              !tenantAdminDraft.phone.trim()
+            }
+            className="inline-flex items-center gap-2 rounded-2xl bg-[#0D1B3E] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#132754] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <PlusCircle size={16} />
+            {createTenant.isPending || createTenantAdmin.isPending ? 'Creating...' : 'Create business'}
+          </button>
+        </form>
       </div>
 
-      {/* Tenant accordion list */}
-      <AccountPanel
-        title="Businesses"
-        description="Expand a row to see signup links, admin access, and the people inside that business."
-        contentClassName="space-y-4"
-      >
-        <label className="block">
-          <span className="mb-1.5 block text-sm font-medium text-slate-700">Search businesses</span>
+      {/* Business list */}
+      <div className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <h2 className="text-base font-bold text-slate-900">Businesses</h2>
           <input
             value={tenantSearch}
             onChange={(e) => setTenantSearch(e.target.value)}
-            placeholder="Search by business name or slug"
-            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-[#0D1B3E] focus:ring-2 focus:ring-[#0D1B3E]/10"
+            placeholder="Search businesses…"
+            className="w-64 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-[#0D1B3E] focus:ring-2 focus:ring-[#0D1B3E]/10"
           />
-        </label>
+        </div>
 
         {error ? (
           <EmptyState
@@ -827,68 +610,66 @@ export default function AdminUsersPage() {
             message={error}
             icon={Building2}
             action={
-              <button
-                type="button"
-                onClick={reload}
-                className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-              >
+              <button type="button" onClick={reload} className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
                 Try again
               </button>
             }
           />
         ) : loading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 4 }).map((_, index) => (
-              <SkeletonBlock key={index} className="h-40 rounded-[1.5rem]" />
+          <div className="space-y-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <SkeletonBlock key={i} className="h-16 rounded-2xl" />
             ))}
           </div>
         ) : tenants.length ? (
-          <Accordion items={accordionItems} allowMultiple={false} />
+          <div className="space-y-1.5">
+            {tenants.map((tenant) => (
+              <button
+                key={tenant.id}
+                type="button"
+                onClick={() => setOpenTenantId(tenant.id)}
+                className="flex w-full items-center gap-4 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3.5 text-left transition hover:border-slate-200 hover:bg-white hover:shadow-sm"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-slate-900">{tenant.name}</span>
+                    <span
+                      className={cn(
+                        'rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                        tenant.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700',
+                      )}
+                    >
+                      {tenant.isActive ? 'Active' : 'Paused'}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-xs text-slate-400">{tenant.slug}</p>
+                </div>
+                <div className="hidden shrink-0 items-center gap-4 text-sm text-slate-500 sm:flex">
+                  <span>{tenant.metrics.totalUsers} users</span>
+                  <span>{tenant.metrics.totalOrders} orders</span>
+                  <span>{formatNaira(tenant.metrics.availableBalance)} available</span>
+                </div>
+                <ChevronRight size={15} className="shrink-0 text-slate-400" />
+              </button>
+            ))}
+          </div>
         ) : (
           <EmptyState
             title="No businesses found"
-            message="Create a business first, then its people and activity will appear here."
+            message="Create a business above to get started."
             icon={Building2}
           />
         )}
-      </AccountPanel>
-    </div>
-  );
-}
+      </div>
 
-function TenantMiniMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2.5">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-slate-900">{value}</p>
-    </div>
-  );
-}
-
-function TenantDetailCard({
-  label,
-  value,
-  actionLabel,
-  onAction,
-}: {
-  label: string;
-  value: string;
-  actionLabel?: string;
-  onAction?: () => void;
-}) {
-  return (
-    <div className="rounded-[1.5rem] border border-slate-200 bg-white p-4">
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</p>
-      <p className="mt-3 break-all text-sm text-slate-700">{value}</p>
-      {actionLabel && onAction ? (
-        <button
-          type="button"
-          onClick={onAction}
-          className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-white"
-        >
-          <Copy size={14} />
-          {actionLabel}
-        </button>
+      {/* Tenant detail modal */}
+      {selectedTenant ? (
+        <TenantDetailModal
+          tenant={selectedTenant}
+          open={Boolean(openTenantId)}
+          onClose={() => setOpenTenantId(null)}
+          origin={origin}
+        />
       ) : null}
     </div>
   );
