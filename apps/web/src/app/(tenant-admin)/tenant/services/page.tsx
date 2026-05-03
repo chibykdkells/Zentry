@@ -622,7 +622,7 @@ function ServiceConfigModal({
           <form id="service-config-form" onSubmit={handleSubmit} className="space-y-4">
 
             <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-500">
-              Platform fee: <strong>{service.platformFeePercent}%</strong> of total price is retained by the platform.
+              Platform fee: <strong>{service.platformFeePercent}%</strong> of your commission is retained by the platform.
             </div>
 
             <ConfigField label="Description">
@@ -644,7 +644,7 @@ function ServiceConfigModal({
                   {...form.register('totalPriceNaira', { valueAsNumber: true })}
                 />
               </ConfigField>
-              <ConfigField label="CBT commission (₦)">
+              <ConfigField label="CBT Task Fee (₦)">
                 <input
                   type="number"
                   step="0.01"
@@ -653,7 +653,7 @@ function ServiceConfigModal({
                   {...form.register('cbtCommissionNaira', { valueAsNumber: true })}
                 />
               </ConfigField>
-              <ConfigField label="Tenant commission (₦)">
+              <ConfigField label="Your commission (₦)">
                 <input
                   type="number"
                   step="0.01"

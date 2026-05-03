@@ -3213,6 +3213,7 @@ export class OrdersService {
         platformFee: true,
         platformFeePercent: true,
         cbtCommission: true,
+        providerCost: true,
         providerKey: true,
         deliveryMode: true,
         fulfillmentType: true,
@@ -3295,7 +3296,9 @@ export class OrdersService {
             normalizedRequesterDocuments as Prisma.InputJsonValue,
           totalAmount: service.totalPrice,
           platformFee: BigInt(
-            Math.floor(Number(service.totalPrice) * service.platformFeePercent / 100),
+            Math.floor(
+              Number(service.cbtCommission + service.providerCost) * service.platformFeePercent / 100,
+            ),
           ),
           cbtCommission: service.cbtCommission,
         },
@@ -3740,9 +3743,7 @@ export class OrdersService {
           submittedData,
           requesterDocUrls: [],
           totalAmount,
-          platformFee: BigInt(
-            Math.floor(Number(totalAmount) * service.platformFeePercent / 100),
-          ),
+          platformFee: service.platformFee,
           cbtCommission: service.cbtCommission,
           providerReference:
             providerResult?.providerReference ?? providerReference,

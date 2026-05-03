@@ -16,6 +16,62 @@
 
 ---
 
+## Session 2026-05-02 (continued 4) — Service creation split: super admin vs tenant admin
+
+**Phase:** Phase 10 — Admin Analytics, Security Audit & Launch
+**AI Assistant:** Claude Sonnet 4.6
+
+### What Was Done
+
+Redesigned service creation so responsibilities are split by role:
+
+**Super admin** creates/edits services with structural fields only: category, delivery mode (auto-derives fulfillmentType), slug, name, platform fee % (0–100), sort order, active status.
+
+**Tenant admin** configures per-service pricing and form fields via a new "Configure" modal: description, total price (₦), CBT commission (₦), tenant commission (₦, was "provider cost"), required fields (form inputs), required documents.
+
+Implementation details:
+- Added `platformFeePercent Float @default(0)` to `Service` schema and corresponding migration. `platformFee` BigInt on the service record is no longer set at create time; instead it is computed at order creation as `totalPrice × platformFeePercent / 100`.
+- `CreateServiceDto` stripped of all pricing and description fields; accepts `platformFeePercent`.
+- `UpdateServiceDto` retains pricing fields for super-admin override but now uses `platformFeePercent` instead of `platformFeeNaira`.
+- New `UpdateTenantServiceDto` handles: description, totalPriceNaira, cbtCommissionNaira, tenantCommissionNaira, requiredFields, requiredDocuments.
+- New controller route: `PATCH /services/tenant/services/:id` — upserts a tenant-scoped Service record (tenantId = tenant's ID) using the platform record as the template.
+- `updateTenantService` in services.service.ts upserts via Prisma `@@unique([slug, tenantId])` constraint.
+- Tenant management catalog response extended with `tenantCommission`, `platformFeePercent`, and full `requiredFields`/`requiredDocuments` for pre-populating the configure modal.
+- Orders: `platformFee` on new orders now computed from `service.platformFeePercent` × `totalPrice`, both for manual and automated order paths.
+- Admin services page: form slimmed to super-admin fields only; all price/description/fields/documents sections removed.
+- Tenant services page: added "Configure" button per service; opens `ServiceConfigModal` with full pricing + fields form.
+
+### Files Created / Modified
+
+- `apps/api/prisma/schema.prisma` — added `platformFeePercent`, `platformFee @default(0)`, `totalPrice @default(0)`
+- `apps/api/prisma/migrations/20260502120000_add_platform_fee_percent_to_service/migration.sql` — new
+- `apps/api/src/modules/services/dto/create-service.dto.ts` — stripped to structural fields
+- `apps/api/src/modules/services/dto/update-service.dto.ts` — uses platformFeePercent, no requiredFields/Docs
+- `apps/api/src/modules/services/dto/update-tenant-service.dto.ts` — new
+- `apps/api/src/modules/services/services.controller.ts` — added tenant PATCH route
+- `apps/api/src/modules/services/services.service.ts` — updateTenantService, updated create/update/validate/map
+- `apps/api/src/modules/orders/orders.service.ts` — platformFee computed from percent
+- `apps/web/src/app/(admin)/admin/services/page.tsx` — simplified form
+- `apps/web/src/app/(tenant-admin)/tenant/services/page.tsx` — Configure modal added
+- `apps/web/src/hooks/use-admin-services.ts` — added platformFeePercent to AdminServiceItem
+- `apps/web/src/hooks/use-tenant-services.ts` — added useUpdateTenantService, TenantManageableServiceItem fields
+
+### Decisions Made
+
+- Platform fee is stored as a percentage on the Service record, not as a fixed kobo amount. The kobo value is computed at order creation time. This avoids having to recompute it whenever tenant pricing changes, and keeps the value locked on the order once placed.
+- Tenant pricing is stored in a separate tenant-scoped Service row (same slug, different tenantId), not a join table. The existing `@@unique([slug, tenantId])` constraint and `dedupeTenantScopedBySlug` logic already supports this.
+- Required fields and required documents are the tenant's responsibility (they know their workflow). Super admin only defines what the service IS, not how to collect data for it.
+
+### Blockers / Notes for Next Session
+
+- Migration `20260502120000` will run on next `fly deploy` via the release command.
+- Existing services will have `platformFeePercent = 0` until super admin edits them.
+- Existing services will have `totalPrice @default(0)` applied but existing row values are unchanged (ALTER COLUMN SET DEFAULT doesn't change existing rows).
+- PAYSTACK_WEBHOOK_SECRET still not set in production — webhook verification will reject all Paystack events.
+- tenantFee field routing in order escrow release is still not wired (all services have tenantFee=0 currently).
+
+---
+
 ## Session 2026-05-02 (continued 3) — Password reset UX, payment/wallet audit & fixes
 
 **Phase:** Phase 10 — Admin Analytics, Security Audit & Launch

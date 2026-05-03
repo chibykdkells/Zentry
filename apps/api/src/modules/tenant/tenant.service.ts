@@ -476,7 +476,7 @@ export class TenantService {
         }
       : {};
 
-    const [tenants, total, totalUsers, totalIndividuals, totalCbtUsers] =
+    const [tenants, total, totalUsers, totalIndividuals, totalCbtUsers, totalAdmins] =
       await Promise.all([
         this.prisma.tenant.findMany({
           where,
@@ -491,6 +491,9 @@ export class TenantService {
         }),
         this.prisma.user.count({
           where: { role: UserRole.CBT_CENTER },
+        }),
+        this.prisma.user.count({
+          where: { role: { in: [UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN] } },
         }),
       ]);
 
@@ -592,6 +595,7 @@ export class TenantService {
           totalUsers,
           totalIndividuals,
           totalCbtUsers,
+          totalAdmins,
         },
         tenants: tenantItems,
         total,

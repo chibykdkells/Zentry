@@ -10,6 +10,7 @@ export interface PlatformAdminTenantSummary {
   totalUsers: number;
   totalIndividuals: number;
   totalCbtUsers: number;
+  totalAdmins: number;
 }
 
 export interface PlatformAdminTenantListItem {
@@ -165,10 +166,11 @@ export function usePlatformAdminTenants(filters: PlatformAdminTenantsFilters) {
 export function usePlatformAdminTenantUsers(
   tenantId: string | null,
   filters: PlatformAdminTenantUsersFilters,
+  options?: { enabled?: boolean },
 ) {
   const query = useQuery({
     queryKey: ['platform-admin', 'tenant-users', tenantId, filters] as const,
-    enabled: Boolean(tenantId),
+    enabled: Boolean(tenantId) && (options?.enabled !== false),
     queryFn: async () => {
       const params = new URLSearchParams();
 

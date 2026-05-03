@@ -34,9 +34,11 @@ export class UpdateTenantServiceDto {
 
   @IsOptional()
   @IsArray()
+  @Type(() => Object)
   requiredFields?: Record<string, unknown>[];
 
   @IsOptional()
   @IsArray()
+  @Type(() => Object)
   requiredDocuments?: Record<string, unknown>[];
 }
