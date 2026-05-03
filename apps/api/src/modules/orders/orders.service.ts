@@ -2385,7 +2385,75 @@ export class OrdersService {
   }
 
   async getCbtDashboard(userId: string, tenantId: string | null) {
-    const cbtUser = await this.ensureApprovedCbtUser(userId, tenantId);
+    const user = await this.prisma.user.findFirst({
+      where: {
+        id: userId,
+        ...(tenantId ? { tenantId } : { tenantId: null }),
+      },
+      select: {
+        id: true,
+        role: true,
+        cbtProfile: {
+          select: {
+            centerName: true,
+            approvalStatus: true,
+            serviceCategoryAssignments: {
+              select: { serviceCategory: { select: { id: true, name: true, slug: true } } },
+            },
+          },
+        },
+        cbtStaffProfile: {
+          select: {
+            cbt: {
+              select: {
+                cbtProfile: {
+                  select: {
+                    centerName: true,
+                    approvalStatus: true,
+                    serviceCategoryAssignments: {
+                      select: { serviceCategory: { select: { id: true, name: true, slug: true } } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!user) throw new NotFoundException('User not found');
+
+    const profile =
+      user.role === UserRole.CBT_STAFF
+        ? user.cbtStaffProfile?.cbt?.cbtProfile ?? null
+        : user.cbtProfile;
+
+    if (!profile) throw new NotFoundException('CBT profile not found');
+
+    // Return limited response for non-approved centers so the frontend can
+    // show a pending/rejected state rather than a hard error.
+    if (profile.approvalStatus !== CbtApprovalStatus.APPROVED) {
+      return {
+        message: 'CBT dashboard retrieved',
+        data: {
+          centerName: profile.centerName,
+          approvalStatus: profile.approvalStatus,
+          metrics: {
+            availableJobs: 0,
+            activeJobs: 0,
+            completedJobs: 0,
+            totalEarned: '0',
+            availableBalance: '0',
+            totalWithdrawn: '0',
+          },
+          availableJobs: [],
+          myJobs: [],
+        },
+      };
+    }
+
+    const cbtUser = { ...user, cbtProfile: profile };
     const tenantFilter = tenantId ? { tenantId } : {};
     const supportedCategoryWhere = this.buildSupportedCbtCategoryWhere(
       this.getSupportedCbtServiceCategorySlugs(cbtUser),
@@ -2451,8 +2519,8 @@ export class OrdersService {
     return {
       message: 'CBT dashboard retrieved',
       data: {
-        centerName: cbtUser.cbtProfile!.centerName,
-        approvalStatus: cbtUser.cbtProfile!.approvalStatus,
+        centerName: profile.centerName,
+        approvalStatus: profile.approvalStatus,
         metrics: {
           availableJobs: availableCount,
           activeJobs: activeCount,

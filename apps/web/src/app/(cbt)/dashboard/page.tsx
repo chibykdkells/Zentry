@@ -2,7 +2,7 @@
 
 import { type ElementType, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Briefcase, Clock3, ShieldCheck, TrendingUp } from 'lucide-react';
+import { ArrowRight, Briefcase, Clock3, Hourglass, ShieldCheck, TrendingUp, XCircle } from 'lucide-react';
 import { DetailModal } from '@/components/shared/detail-modal';
 import { EmptyState } from '@/components/shared/empty-state';
 import { SkeletonBlock } from '@/components/shared/skeleton-loader';
@@ -28,12 +28,12 @@ export default function CbtDashboardPage() {
     );
   }
 
-  if (!dashboard || error) {
+  if (error) {
     return (
       <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-8">
         <EmptyState
           title="CBT dashboard unavailable"
-          message={error ?? 'We could not load the CBT workspace right now.'}
+          message={error}
           action={
             <button
               type="button"
@@ -44,6 +44,43 @@ export default function CbtDashboardPage() {
             </button>
           }
         />
+      </div>
+    );
+  }
+
+  if (!dashboard) return null;
+
+  if (dashboard.approvalStatus === 'PENDING') {
+    return (
+      <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-8">
+        <div className="rounded-[2rem] border border-amber-200 bg-amber-50 p-8 text-center">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-amber-100">
+            <Hourglass size={28} className="text-amber-600" />
+          </div>
+          <h1 className="text-xl font-bold text-slate-900">Awaiting approval</h1>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            <span className="font-semibold">{dashboard.centerName}</span> has been registered and is
+            pending review by the platform admin. You'll be notified once approved and can start
+            picking up jobs.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (dashboard.approvalStatus === 'REJECTED') {
+    return (
+      <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-8">
+        <div className="rounded-[2rem] border border-rose-200 bg-rose-50 p-8 text-center">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-rose-100">
+            <XCircle size={28} className="text-rose-600" />
+          </div>
+          <h1 className="text-xl font-bold text-slate-900">Application rejected</h1>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            The application for <span className="font-semibold">{dashboard.centerName}</span> was not
+            approved. Please contact support for more information.
+          </p>
+        </div>
       </div>
     );
   }

@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm --filter @zendocx/api add resend)",
+      "Bash(grep -n \"^    </div>$\\\\|^  \\);\\\\|^}\" /Users/admin/Documents/Projects/Deve-projects/Zentry/apps/web/src/app/\\\\\\(admin\\\\\\)/admin/services/page.tsx)",
+      "Bash(grep -n \"false &&\\\\|^    </div>$\\\\|^  \\);\\\\|adminServicesSections\\\\|Workspace notes\\\\|Catalog controls\" /Users/admin/Documents/Projects/Deve-projects/Zentry/apps/web/src/app/\\\\\\(admin\\\\\\)/admin/services/page.tsx)",
+      "Bash(pnpm --filter @zendocx/web exec tsc --noEmit --project apps/web/tsconfig.json)",
+      "Bash(git commit -m ' *)",
+      "Bash(pnpm --filter api typecheck)",
+      "Bash(fly deploy *)",
+      "Read(//dev/**)",
+      "Bash(fly pg *)",
+      "Bash(fly mpg *)",
+      "Bash(fly logs *)",
+      "Bash(curl -s -X POST https://api.zendocx.net/api/v1/auth/forgot-password -H 'Content-Type: application/json' -d '{\"email\":\"assistnghq@gmail.com\"}')",
+      "Bash(python3 -c \"import sys,json; lines=[json.loads\\(l\\) for l in sys.stdin if l.strip\\(\\)]; lines.sort\\(key=lambda x: x.get\\('timestamp',''\\)\\); [print\\(l.get\\('timestamp',''\\), l.get\\('message',''\\)\\) for l in lines[-30:]]\")",
+      "Bash(grep -v \"^$\")",
+      "Bash(curl -s -H \"Authorization: Bearer re_iZrdzsHX_2yrbYsc1NUhdhxLMd1jV9Zc5\" \"https://api.resend.com/emails\")",
+      "Bash(curl -s -X POST https://api.resend.com/emails -H 'Authorization: Bearer re_iZrdzsHX_2yrbYsc1NUhdhxLMd1jV9Zc5' -H 'Content-Type: application/json' -d '{ *)",
+      "Bash(git -C /Users/admin/Documents/Projects/Deve-projects/Zentry log --oneline -5)",
+      "Bash(git -C /Users/admin/Documents/Projects/Deve-projects/Zentry add apps/api/src/modules/orders/orders.service.ts apps/api/src/modules/services/dto/update-tenant-service.dto.ts apps/api/src/modules/tenant/tenant.service.ts 'apps/web/src/app/\\(admin\\)/admin/users/page.tsx' 'apps/web/src/app/\\(tenant-admin\\)/tenant/services/page.tsx' apps/web/src/hooks/use-platform-admin-tenants.ts apps/web/src/components/shared/accordion.tsx docs/ai-context/SESSION_LOG.md)",
+      "Bash(git -C /Users/admin/Documents/Projects/Deve-projects/Zentry commit -m ' *)",
+      "Bash(git -C /Users/admin/Documents/Projects/Deve-projects/Zentry add apps/api/src/modules/tenant/tenant.service.ts apps/web/src/hooks/use-platform-admin-tenants.ts apps/web/src/components/shared/detail-modal.tsx 'apps/web/src/app/\\(admin\\)/admin/users/page.tsx')",
+      "Bash(git -C /Users/admin/Documents/Projects/Deve-projects/Zentry status --short)",
+      "Bash(git -C /Users/admin/Documents/Projects/Deve-projects/Zentry add 'apps/web/src/app/\\(tenant-admin\\)/tenant/cbt-management/page.tsx' 'apps/web/src/app/\\(tenant-admin\\)/tenant/services/page.tsx' 'apps/web/src/app/\\(tenant-admin\\)/tenant/settings/page.tsx' 'apps/web/src/app/\\(tenant-admin\\)/tenant/users/page.tsx' apps/web/src/components/tenant/business-integrations-workspace.tsx)",
+      "Bash(git -C /Users/admin/Documents/Projects/Deve-projects/Zentry push)",
+      "Bash(git -C /Users/admin/Documents/Projects/Deve-projects/Zentry add 'apps/web/src/app/\\(tenant-admin\\)/tenant/dashboard/page.tsx' 'apps/web/src/app/\\(tenant-admin\\)/tenant/settings/page.tsx' 'apps/web/src/app/\\(tenant-admin\\)/tenant/services/page.tsx' apps/web/src/components/tenant/business-integrations-workspace.tsx)",
+      "Bash(pnpm --filter @zendocx/api typecheck)",
+      "Bash(pnpm --filter @zendocx/validators build)"
+    ]
+  }
+}
