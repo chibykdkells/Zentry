@@ -1365,13 +1365,17 @@ export class ServicesService {
 
   async updateTenantService(
     tenantId: string,
-    platformServiceId: string,
+    requestedServiceId: string,
     dto: UpdateTenantServiceDto,
   ) {
-    const platformService = await this.prisma.service.findFirst({
-      where: { id: platformServiceId, tenantId: null },
+    const requestedService = await this.prisma.service.findFirst({
+      where: {
+        id: requestedServiceId,
+        OR: [{ tenantId: null }, { tenantId }],
+      },
       select: {
         id: true,
+        tenantId: true,
         slug: true,
         categoryId: true,
         name: true,
@@ -1384,6 +1388,34 @@ export class ServicesService {
         providerServiceCode: true,
       },
     });
+
+    if (!requestedService) {
+      throw new NotFoundException('Service not found.');
+    }
+
+    const platformService =
+      requestedService.tenantId === null
+        ? requestedService
+        : await this.prisma.service.findFirst({
+            where: {
+              slug: requestedService.slug,
+              tenantId: null,
+            },
+            select: {
+              id: true,
+              tenantId: true,
+              slug: true,
+              categoryId: true,
+              name: true,
+              deliveryMode: true,
+              fulfillmentType: true,
+              platformFeePercent: true,
+              isActive: true,
+              sortOrder: true,
+              providerKey: true,
+              providerServiceCode: true,
+            },
+          });
 
     if (!platformService) {
       throw new NotFoundException('Service not found.');

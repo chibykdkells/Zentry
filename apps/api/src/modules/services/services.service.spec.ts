@@ -23,6 +23,7 @@ describe('ServicesService', () => {
       findUnique: jest.Mock;
       count: jest.Mock;
       create: jest.Mock;
+      upsert: jest.Mock;
       update: jest.Mock;
       delete: jest.Mock;
     };
@@ -76,6 +77,7 @@ describe('ServicesService', () => {
         findUnique: jest.fn(),
         count: jest.fn(),
         create: jest.fn(),
+        upsert: jest.fn(),
         update: jest.fn(),
         delete: jest.fn(),
       },
@@ -220,6 +222,86 @@ describe('ServicesService', () => {
       where: { id: 'svc-1' },
     });
     expect(result.message).toContain('deleted successfully');
+  });
+
+  it('updates a tenant service even when the request sends the tenant override id', async () => {
+    prisma.service.findFirst
+      .mockResolvedValueOnce({
+        id: 'tenant-svc-1',
+        tenantId: 'tenant-1',
+        slug: 'jamb-result',
+        categoryId: 'cat-1',
+        name: 'Jamb Result',
+        deliveryMode: ServiceDeliveryMode.CBT_MANUAL,
+        fulfillmentType: FulfillmentType.MANUAL,
+        platformFeePercent: 10,
+        isActive: true,
+        sortOrder: 0,
+        providerKey: null,
+        providerServiceCode: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'platform-svc-1',
+        tenantId: null,
+        slug: 'jamb-result',
+        categoryId: 'cat-1',
+        name: 'Jamb Result',
+        deliveryMode: ServiceDeliveryMode.CBT_MANUAL,
+        fulfillmentType: FulfillmentType.MANUAL,
+        platformFeePercent: 10,
+        isActive: true,
+        sortOrder: 0,
+        providerKey: null,
+        providerServiceCode: null,
+      });
+
+    prisma.service.upsert.mockResolvedValue({
+      id: 'tenant-svc-1',
+      name: 'Jamb Result',
+      slug: 'jamb-result',
+      description: 'Updated tenant copy',
+      isActive: true,
+      deliveryMode: ServiceDeliveryMode.CBT_MANUAL,
+      fulfillmentType: FulfillmentType.MANUAL,
+      providerCost: 50000n,
+      platformFee: 0n,
+      platformFeePercent: 10,
+      totalPrice: 300000n,
+      cbtCommission: 200000n,
+      providerKey: null,
+      providerServiceCode: null,
+      sortOrder: 0,
+      requiredFields: [],
+      requiredDocuments: [],
+      createdAt: new Date('2026-05-04T00:00:00.000Z'),
+      updatedAt: new Date('2026-05-04T00:00:00.000Z'),
+      category: {
+        id: 'cat-1',
+        name: 'JAMB Services',
+        slug: 'jamb-services',
+      },
+    });
+
+    const result = await service.updateTenantService('tenant-1', 'tenant-svc-1', {
+      description: 'Updated tenant copy',
+      totalPriceNaira: 3000,
+      cbtCommissionNaira: 2000,
+      tenantCommissionNaira: 500,
+      requiredFields: [],
+      requiredDocuments: [],
+    });
+
+    expect(prisma.service.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          slug_tenantId: {
+            slug: 'jamb-result',
+            tenantId: 'tenant-1',
+          },
+        },
+      }),
+    );
+    expect(result.message).toBe('Service configuration saved.');
   });
 
   it('prevents deleting a category that still has services', async () => {

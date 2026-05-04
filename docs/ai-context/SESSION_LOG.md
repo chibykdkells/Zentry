@@ -78,6 +78,59 @@
 
 ### Blockers / Notes for Next Session
 
+---
+
+## Session 2026-05-04 (continued) — Pricing remediation preview + tenant service configuration save fix
+
+**Phase:** Phase 10
+**AI Assistant:** Codex (GPT-5)
+
+### What Was Done
+
+**Production remediation preview for affected manual orders:**
+- Ran a read-only remediation preview against the live Fly production machine to inspect orders created from platform service rows instead of tenant overrides.
+- Confirmed there are exactly 3 affected production orders:
+  - `ZTR-20260503-0MXKYA`
+  - `ZTR-20260503-UOK6GD`
+  - `ZTR-20260503-5MMZXL`
+- Confirmed the safe auto-apply subset is empty: all 3 orders fall into `MANUAL_REVIEW`.
+- Verified the blockers are real production-state blockers, not tooling issues:
+  - tenant override pricing was updated after those orders were created
+  - requester wallet available balance is `0`
+  - requester wallet escrow balance is `0`
+  - one order already had escrow released
+
+**Tenant admin service configuration save fix:**
+- Traced the `Service not found.` error on `/tenant/services` to a tenant/platform ID mismatch in `updateTenantService`.
+- The tenant services management catalog correctly prefers tenant override records by slug, so after a tenant override exists, the configure modal can submit the tenant-scoped service ID on later edits.
+- Backend update logic previously only accepted a platform service ID (`tenantId: null`), which caused the save to fail on the second edit of an overridden service.
+- Updated `updateTenantService` to accept either:
+  - the platform service ID, or
+  - the tenant override ID
+- If a tenant override ID is submitted, the service now resolves the matching platform base service by slug first, then performs the normal tenant upsert.
+- Added a regression test for the exact case where the request sends the tenant override ID.
+
+### Files Created / Modified
+
+- `apps/api/src/modules/services/services.service.ts` — fixed tenant service update lookup to accept tenant override IDs and resolve back to the platform base service safely
+- `apps/api/src/modules/services/services.service.spec.ts` — added regression coverage for saving tenant service config via tenant override ID
+- `docs/ai-context/SESSION_LOG.md` — appended this session entry
+- `docs/ai-context/PHASES.md` — refreshed top-level status metadata
+
+### Decisions Made
+
+- No automatic remediation should be applied to the 3 affected production orders because the current dataset does not satisfy the safety rules for auto-fix.
+- Tenant service configuration saves must be tolerant of either platform IDs or tenant override IDs because the tenant management catalog intentionally dedupes in favor of tenant-scoped records.
+
+### Phase Checklist Updates
+
+- [x] Phase 10: Production remediation preview executed against live data
+- [x] Phase 10: Tenant service configuration save bug fixed for tenant override IDs
+
+### Blockers / Notes for Next Session
+
+- Manual remediation is still required for the 3 affected production orders because no eligible auto-fix subset exists.
+- After deploy, verify tenant admins can open `/tenant/services`, save required document changes, and receive `Service configuration saved.` instead of `Service not found.`
 - Paystack config still pending (user must do manually — see prior session notes).
 - Sentry Vercel env vars, `app.zendocx.net` CNAME, silent refresh browser test, PWA install still pending.
 

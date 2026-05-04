@@ -1,6 +1,6 @@
 # PHASES.md — ZenDocx Build Phase Tracker
 
-> Last updated: 2026-05-03
+> Last updated: 2026-05-04
 > This file tracks exactly what has been built and what has not.
 > AI assistants MUST check this before writing any code to avoid
 > building things out of phase or duplicating completed work.
@@ -12,8 +12,8 @@
 
 ```
 Active Phase  : Phase 10 — Admin Analytics, Security Audit & Launch (IN PROGRESS)
-Last Session  : 2026-05-04 (Wallet history sheet, layout/scroll fixes, services visibility fix, fund wallet redesign, accordion UX + URL deep link)
-Next Action   : Configure Paystack: set Callback URL + Webhook URL in dashboard, set PAYSTACK_WEBHOOK_SECRET on Fly. Then: Sentry Vercel env vars, app.zendocx.net CNAME, silent refresh, PWA install flow
+Last Session  : 2026-05-04 (Production remediation preview for affected manual orders; tenant service configuration save fix for tenant override IDs)
+Next Action   : Manually remediate the 3 affected production orders flagged by the pricing preview, then continue production-truth closeout: Paystack webhook verification, Sentry Vercel env vars, app.zendocx.net CNAME, silent refresh, PWA install flow
 ```
 
 ---
