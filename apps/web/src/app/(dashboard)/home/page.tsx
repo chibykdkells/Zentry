@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useAuthStore } from '@/stores/auth.store';
 import { useAuthProfile } from '@/hooks/use-auth-profile';
 import { useOrders } from '@/hooks/use-orders';
+import { useServiceCatalog } from '@/hooks/use-service-catalog';
 import { WalletCard } from '@/components/wallet/wallet-card';
 import { SkeletonBlock } from '@/components/shared/skeleton-loader';
 import { appendTenantContextToPath, resolveTenantSlugForRequest } from '@/lib/tenant-runtime';
@@ -16,20 +17,46 @@ function getGreeting(): string {
   return 'Good evening';
 }
 
-const serviceShortcuts = [
-  { label: 'JAMB', emoji: '🎓', bg: 'bg-[#F6F1E7]' },
-  { label: 'NIMC', emoji: '🪪', bg: 'bg-slate-100' },
-  { label: 'NECO', emoji: '📝', bg: 'bg-amber-50' },
-  { label: 'VTU', emoji: '⚡', bg: 'bg-sky-50' },
+// Slug-based emoji + background lookup. Matches on substring so
+// "jamb-registration" and "jamb" both resolve to the same entry.
+const CATEGORY_ICON_MAP: Array<{ match: string; emoji: string; bg: string }> = [
+  { match: 'jamb',       emoji: '🎓', bg: 'bg-[#F6F1E7]' },
+  { match: 'nimc',       emoji: '🪪', bg: 'bg-slate-100'  },
+  { match: 'neco',       emoji: '📝', bg: 'bg-amber-50'   },
+  { match: 'waec',       emoji: '📋', bg: 'bg-yellow-50'  },
+  { match: 'nabteb',     emoji: '🏫', bg: 'bg-blue-50'    },
+  { match: 'vtu',        emoji: '⚡', bg: 'bg-sky-50'     },
+  { match: 'airtime',    emoji: '📱', bg: 'bg-sky-50'     },
+  { match: 'data',       emoji: '📶', bg: 'bg-indigo-50'  },
+  { match: 'cable',      emoji: '📺', bg: 'bg-purple-50'  },
+  { match: 'electric',   emoji: '💡', bg: 'bg-yellow-50'  },
+  { match: 'identity',   emoji: '🪪', bg: 'bg-slate-100'  },
+  { match: 'passport',   emoji: '📘', bg: 'bg-blue-50'    },
+  { match: 'driving',    emoji: '🚗', bg: 'bg-green-50'   },
+  { match: 'birth',      emoji: '📜', bg: 'bg-rose-50'    },
+  { match: 'marriage',   emoji: '💍', bg: 'bg-pink-50'    },
+  { match: 'tax',        emoji: '🏛️', bg: 'bg-orange-50'  },
+  { match: 'cac',        emoji: '🏢', bg: 'bg-teal-50'    },
 ];
 
+const FALLBACK_ICONS = ['📂', '📌', '🗂️', '🔖', '📎', '🗃️'];
+
+function getCategoryIcon(slug: string, index: number): { emoji: string; bg: string } {
+  const lower = slug.toLowerCase();
+  const found = CATEGORY_ICON_MAP.find((entry) => lower.includes(entry.match));
+  if (found) return found;
+  const emoji = FALLBACK_ICONS[index % FALLBACK_ICONS.length] ?? '📂';
+  const fallbackBgs = ['bg-slate-100', 'bg-amber-50', 'bg-sky-50', 'bg-green-50', 'bg-purple-50', 'bg-rose-50'];
+  return { emoji, bg: fallbackBgs[index % fallbackBgs.length] ?? 'bg-slate-100' };
+}
+
 const statusStyles: Record<string, { cls: string; label: string }> = {
-  PENDING:     { cls: 'bg-amber-100 text-amber-700',   label: 'Pending' },
-  ASSIGNED:    { cls: 'bg-blue-100 text-blue-700',     label: 'Assigned' },
-  IN_PROGRESS: { cls: 'bg-cyan-100 text-cyan-700',     label: 'In Progress' },
+  PENDING:     { cls: 'bg-amber-100 text-amber-700',     label: 'Pending' },
+  ASSIGNED:    { cls: 'bg-blue-100 text-blue-700',       label: 'Assigned' },
+  IN_PROGRESS: { cls: 'bg-cyan-100 text-cyan-700',       label: 'In Progress' },
   COMPLETED:   { cls: 'bg-emerald-100 text-emerald-700', label: 'Completed' },
-  DISPUTED:    { cls: 'bg-rose-100 text-rose-700',     label: 'Disputed' },
-  CANCELLED:   { cls: 'bg-slate-100 text-slate-500',   label: 'Cancelled' },
+  DISPUTED:    { cls: 'bg-rose-100 text-rose-700',       label: 'Disputed' },
+  CANCELLED:   { cls: 'bg-slate-100 text-slate-500',     label: 'Cancelled' },
 };
 
 export default function HomePage() {
@@ -38,6 +65,13 @@ export default function HomePage() {
   const { orders, loading: ordersLoading } = useOrders();
   const tenantSlug =
     typeof window !== 'undefined' ? resolveTenantSlugForRequest() : null;
+
+  const { categories, loading: categoriesLoading } = useServiceCatalog({
+    tenantSlug: tenantSlug ?? undefined,
+  });
+
+  // Only show categories that have at least one service
+  const activeCategories = categories.filter((c) => c.serviceCount > 0);
 
   const wallet = profile?.wallet ?? { availableBalance: '0', escrowBalance: '0' };
   const firstName = profile?.firstName ?? user?.firstName ?? 'Welcome';
@@ -50,7 +84,9 @@ export default function HomePage() {
       <div className="pt-1">
         <p className="text-sm text-brand-muted">{getGreeting()}</p>
         <h1 className="mt-0.5 text-[1.65rem] font-bold leading-tight text-brand-ink">
-          {loading ? <span className="inline-block h-8 w-36 animate-pulse rounded-lg bg-slate-200" /> : `${firstName} 👋`}
+          {loading
+            ? <span className="inline-block h-8 w-36 animate-pulse rounded-lg bg-slate-200" />
+            : `${firstName} 👋`}
         </h1>
       </div>
 
@@ -75,21 +111,50 @@ export default function HomePage() {
 
       {/* Services */}
       <section>
-        <h2 className="mb-3 text-base font-bold text-brand-ink">Services</h2>
-        <div className="grid grid-cols-4 gap-2.5">
-          {serviceShortcuts.map(({ label, emoji, bg }) => (
-            <Link
-              key={label}
-              href={appendTenantContextToPath('/services', tenantSlug)}
-              className="flex flex-col items-center gap-2.5 rounded-2xl border border-brand-line bg-brand-surface py-4 transition hover:shadow-sm active:scale-95"
-            >
-              <span className={`flex h-11 w-11 items-center justify-center rounded-xl text-2xl ${bg}`}>
-                {emoji}
-              </span>
-              <span className="text-xs font-semibold text-brand-ink">{label}</span>
-            </Link>
-          ))}
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-base font-bold text-brand-ink">Services</h2>
+          <Link
+            href={appendTenantContextToPath('/services', tenantSlug)}
+            className="text-xs font-semibold text-brand-accent hover:underline"
+          >
+            See all
+          </Link>
         </div>
+
+        {categoriesLoading ? (
+          <div className="flex gap-2.5 overflow-x-auto pb-1">
+            {[1, 2, 3, 4].map((i) => (
+              <SkeletonBlock key={i} className="h-24 w-20 shrink-0 rounded-2xl" />
+            ))}
+          </div>
+        ) : activeCategories.length > 0 ? (
+          <div className="flex gap-2.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {activeCategories.map((category, index) => {
+              const { emoji, bg } = getCategoryIcon(category.slug, index);
+              return (
+                <Link
+                  key={category.id}
+                  href={appendTenantContextToPath(
+                    `/services?categorySlug=${category.slug}`,
+                    tenantSlug,
+                  )}
+                  className="flex w-20 shrink-0 flex-col items-center gap-2.5 rounded-2xl border border-brand-line bg-brand-surface py-4 transition hover:shadow-sm active:scale-95"
+                >
+                  <span className={`flex h-11 w-11 items-center justify-center rounded-xl text-2xl ${bg}`}>
+                    {emoji}
+                  </span>
+                  <span className="w-full truncate px-1 text-center text-xs font-semibold text-brand-ink">
+                    {category.name}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-brand-line bg-brand-surface p-5 text-center">
+            <p className="text-sm text-brand-muted">No services available yet.</p>
+          </div>
+        )}
       </section>
 
       {/* Recent Orders */}
