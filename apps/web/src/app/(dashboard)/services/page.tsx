@@ -18,8 +18,15 @@ import { ServiceDeliveryMode } from '@zendocx/types';
 
 export default function ServicesPage() {
   const [query, setQuery] = useState('');
-  const [activeCategory, setActiveCategory] = useState<string | 'ALL'>('ALL');
-  const [expandedSlugs, setExpandedSlugs] = useState<string[]>([]);
+  const [activeCategory, setActiveCategory] = useState<string | 'ALL'>(() => {
+    if (typeof window === 'undefined') return 'ALL';
+    return new URLSearchParams(window.location.search).get('categorySlug') ?? 'ALL';
+  });
+  const [expandedSlugs, setExpandedSlugs] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return [];
+    const slug = new URLSearchParams(window.location.search).get('categorySlug');
+    return slug ? [slug] : [];
+  });
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
@@ -60,7 +67,7 @@ export default function ServicesPage() {
     if (activeCategory !== 'ALL') return groupedServices.map((c) => c.slug);
     if (!groupedServices.length) return [];
     const valid = expandedSlugs.filter((slug) => groupedServices.some((c) => c.slug === slug));
-    return valid.length ? valid : [groupedServices[0].slug];
+    return valid;
   }, [activeCategory, expandedSlugs, groupedServices]);
 
   const selectedService = services.find((s) => s.id === selectedServiceId) ?? null;

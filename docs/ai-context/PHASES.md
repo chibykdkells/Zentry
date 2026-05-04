@@ -12,7 +12,7 @@
 
 ```
 Active Phase  : Phase 10 — Admin Analytics, Security Audit & Launch (IN PROGRESS)
-Last Session  : 2026-05-03 (CBT job delivery timer + extension request workflow; admin nav cleanup; wallet live-redirect fix)
+Last Session  : 2026-05-04 (Wallet history sheet, layout/scroll fixes, services visibility fix, fund wallet redesign, accordion UX + URL deep link)
 Next Action   : Configure Paystack: set Callback URL + Webhook URL in dashboard, set PAYSTACK_WEBHOOK_SECRET on Fly. Then: Sentry Vercel env vars, app.zendocx.net CNAME, silent refresh, PWA install flow
 ```
 
@@ -724,6 +724,12 @@ optimized. Production deployed.
 - [x] Wallet Paystack live payment redirect fixed — removed checkout=sandbox guard; POST /wallet/fund/confirm now fires for both sandbox and live redirects
 - [x] CBT job visibility fixed — buildSupportedCbtCategoryWhere([]) now returns {} instead of { in: [] } (which matched nothing in Prisma)
 - [x] Super admin CBT Centers nav removed — approval is tenant admin responsibility; /admin/cbt redirects to /admin/dashboard
+- [x] Wallet history sheet on home page — "History" button opens chooser sheet → /wallet?panel=report or /wallet?panel=history
+- [x] AccountPanel/ScrollCardBody scroll chain fixed at xl breakpoint; md:overflow-hidden → xl:overflow-hidden across all dashboard pages
+- [x] Support page quick-actions 3-col grid at lg breakpoint (was xl)
+- [x] Services visibility fix — new platform services auto-included for tenants with custom selection (lastSelectionSavedAt logic)
+- [x] Fund wallet modal fully redesigned — bottom sheet pattern, quick-select chips, navy result card
+- [x] Services page accordion default-closed + URL ?categorySlug deep link from home page category tiles
 - [ ] Confirm password reset email delivery in production (run fly logs --app zentry-api-prod)
 - [ ] Sentry Vercel env vars still needed: NEXT_PUBLIC_SENTRY_DSN, SENTRY_ORG=zendocx, SENTRY_PROJECT=zendocx-web
 - [ ] app.zendocx.net CNAME record in Cloudflare (add app → cname.vercel-dns.com)

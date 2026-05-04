@@ -17,7 +17,9 @@ import { UserRole, type JwtUser } from '@zendocx/types';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { TenantContext } from '../../common/decorators/tenant-context.decorator';
 import { CompleteCbtJobDto } from './dto/complete-cbt-job.dto';
+import { ApplyAdminOrderPricingRemediationDto } from './dto/apply-admin-order-pricing-remediation.dto';
 import { CleanupOrderUploadsDto } from './dto/cleanup-order-uploads.dto';
 import { CreateDisputeDto } from './dto/create-dispute.dto';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -103,6 +105,27 @@ export class OrdersController {
   @Get('admin/release-scheduler-preview')
   getAdminReleaseSchedulerPreview(@CurrentUser() user: JwtUser) {
     return this.ordersService.getAdminReleaseSchedulerPreview(user.tenantId);
+  }
+
+  @Roles(UserRole.SUPER_ADMIN)
+  @Get('admin/pricing-remediation-preview')
+  getAdminOrderPricingRemediationPreview(@CurrentUser() user: JwtUser) {
+    return this.ordersService.getAdminOrderPricingRemediationPreview(
+      user.tenantId,
+    );
+  }
+
+  @Roles(UserRole.SUPER_ADMIN)
+  @Post('admin/pricing-remediation/apply')
+  applyAdminOrderPricingRemediation(
+    @CurrentUser() user: JwtUser,
+    @Body() dto: ApplyAdminOrderPricingRemediationDto,
+  ) {
+    return this.ordersService.applyAdminOrderPricingRemediation(
+      user.sub,
+      dto,
+      user.tenantId,
+    );
   }
 
   @Roles(UserRole.SUPER_ADMIN)
@@ -302,7 +325,15 @@ export class OrdersController {
   }
 
   @Post()
-  createOrder(@CurrentUser() user: JwtUser, @Body() dto: CreateOrderDto) {
-    return this.ordersService.createOrder(user.sub, dto, user.tenantId);
+  createOrder(
+    @CurrentUser() user: JwtUser,
+    @Body() dto: CreateOrderDto,
+    @TenantContext() tenant: { id: string } | null,
+  ) {
+    return this.ordersService.createOrder(
+      user.sub,
+      dto,
+      user.tenantId ?? tenant?.id ?? null,
+    );
   }
 }

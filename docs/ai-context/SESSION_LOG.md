@@ -16,6 +16,73 @@
 
 ---
 
+## Session 2026-05-04 — Wallet history sheet, layout fixes, services visibility, accordion UX, fund wallet redesign
+
+**Phase:** Phase 10
+**AI Assistant:** Claude Sonnet 4.6
+
+### What Was Done
+
+**Wallet history chooser sheet (home page):**
+- Clicking "History" on the wallet card opens a bottom sheet (`HistoryChooserSheet`) with two tiles: "Wallet Report" (navy, ReceiptText icon) and "Transaction History" (teal, History icon).
+- Each tile navigates to `/wallet?panel=report` or `/wallet?panel=history`.
+- Wallet page reads the `?panel` param on mount via `useEffect`, opens the matching modal, then clears the param from the URL via `history.replaceState`.
+
+**Layout / scroll fixes across 11+ pages:**
+- `md:overflow-hidden` → `xl:overflow-hidden` on all dashboard pages that were clipping content at the md breakpoint before the xl scroll chain was active.
+- `AccountPanel` content div: added `flex flex-1 flex-col min-h-0` so flex children can fill height.
+- `ScrollCardBody` outer div: added `flex-1` to fill the AccountPanel content area and enable internal scroll.
+- Support page quick-actions grid: `xl:grid-cols-3` → `lg:grid-cols-3` (3-col layout at 1024px, not 1280px).
+
+**Services visibility fix (new platform services not appearing for tenants with custom selection):**
+- Added `lastSelectionSavedAt` tracking: the timestamp of the newest `TenantServiceSelection` row for the tenant.
+- `getCatalog` and `getTenantServiceManagementCatalog` now auto-include services created after `lastSelectionSavedAt`, so any service added by super admin after the tenant's last "Save" appears automatically.
+- Admin categories `_count` fixed to only count `isActive: true` services.
+
+**Fund wallet modal redesign:**
+- Full rewrite of `fund-wallet-modal.tsx` — bottom sheet pattern (slides from bottom on mobile, centered on desktop).
+- Step 1: Large ₦ prefix + number input, quick-select chips (₦500/1k/2k/5k/10k with active highlight), simple note, Cancel + "Fund Account" buttons.
+- Step 2: Navy card with formatted amount + gateway + Live/Test badges, reference row in monospace, amber "Pay with GATEWAY →" CTA, Cancel.
+
+**Services page accordion:**
+- Default state changed to all-collapsed (removed the `[groupedServices[0].slug]` fallback in `effectiveExpanded`).
+- Category header button toggles the accordion open/closed as before — no behavior change there.
+- `activeCategory` and `expandedSlugs` now initialized from URL `?categorySlug` param via lazy `useState` initializers, so clicking a category tile on the home page lands on the services page with that category pre-expanded and its chip selected.
+
+### Files Created / Modified
+
+- `apps/web/src/app/(dashboard)/home/page.tsx` — added `HistoryChooserSheet`, changed History button to open sheet
+- `apps/web/src/app/wallet/page.tsx` — `?panel` URL param deep-link on mount
+- `apps/web/src/components/shared/account-panel.tsx` — flex chain fix
+- `apps/web/src/components/shared/scroll-card-body.tsx` — `flex-1` on outer div
+- `apps/web/src/app/support/page.tsx` — `xl:overflow-hidden`, `lg:grid-cols-3`
+- `apps/web/src/app/disputes/page.tsx` — `xl:overflow-hidden`
+- `apps/web/src/app/notifications/page.tsx` — `xl:overflow-hidden`
+- 8 additional dashboard pages — same `xl:overflow-hidden` fix
+- `apps/web/src/components/wallet/fund-wallet-modal.tsx` — full redesign
+- `apps/web/src/app/(dashboard)/services/page.tsx` — accordion default-closed + URL param deep-link
+- `apps/api/src/modules/services/services.service.ts` — `lastSelectionSavedAt`, active-only count, auto-include new services
+
+### Decisions Made
+
+- Services custom-selection uses an "inclusive after last save" rule: tenants only lose auto-discovery when they have saved a custom selection AND the service predates it. Keeps new platform services visible without requiring a re-save.
+- Accordion default-closed is the right pattern for this services page because most users arrive via a category shortcut that pre-expands the right section; all-open-by-default would be visually noisy.
+
+### Phase Checklist Updates
+
+- [x] Phase 10: Wallet history sheet chooser
+- [x] Phase 10: Layout / scroll chain fixes across all pages
+- [x] Phase 10: Services visibility for new platform services
+- [x] Phase 10: Fund wallet modal redesign
+- [x] Phase 10: Services accordion default-closed + URL deep link
+
+### Blockers / Notes for Next Session
+
+- Paystack config still pending (user must do manually — see prior session notes).
+- Sentry Vercel env vars, `app.zendocx.net` CNAME, silent refresh browser test, PWA install still pending.
+
+---
+
 ## Session 2026-05-03 (continued 2) — CBT job delivery timer + extension request workflow
 
 **Phase:** Phase 4 / Phase 10

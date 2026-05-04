@@ -172,6 +172,7 @@ describe('OrdersService', () => {
     };
     service: {
       findFirst: jest.Mock;
+      findMany: jest.Mock;
     };
     order: {
       count: jest.Mock;
@@ -179,6 +180,9 @@ describe('OrdersService', () => {
       findFirst: jest.Mock;
       findUnique: jest.Mock;
       updateMany: jest.Mock;
+    };
+    cbtJobBlock: {
+      findUnique: jest.Mock;
     };
     wallet: {
       findUnique: jest.Mock;
@@ -197,6 +201,10 @@ describe('OrdersService', () => {
   let ordersReleaseQueueService: {
     scheduleReleaseForOrder: jest.Mock;
     removeScheduledReleaseForOrder: jest.Mock;
+  };
+  let ordersDeadlineQueueService: {
+    scheduleDeadline: jest.Mock;
+    cancelDeadline: jest.Mock;
   };
   let notificationsService: {
     broadcastWalletUpdated: jest.Mock;
@@ -224,6 +232,7 @@ describe('OrdersService', () => {
       },
       service: {
         findFirst: jest.fn(),
+        findMany: jest.fn(),
       },
       order: {
         count: jest.fn(),
@@ -231,6 +240,9 @@ describe('OrdersService', () => {
         findFirst: jest.fn(),
         findUnique: jest.fn(),
         updateMany: jest.fn(),
+      },
+      cbtJobBlock: {
+        findUnique: jest.fn().mockResolvedValue(null),
       },
       wallet: {
         findUnique: jest.fn(),
@@ -251,6 +263,11 @@ describe('OrdersService', () => {
     ordersReleaseQueueService = {
       scheduleReleaseForOrder: jest.fn(),
       removeScheduledReleaseForOrder: jest.fn(),
+    };
+
+    ordersDeadlineQueueService = {
+      scheduleDeadline: jest.fn(),
+      cancelDeadline: jest.fn(),
     };
 
     notificationsService = {
@@ -280,7 +297,7 @@ describe('OrdersService', () => {
       } as never,
       storageService as never,
       ordersReleaseQueueService as never,
-      {} as never,
+      ordersDeadlineQueueService as never,
       {} as never,
       notificationsService as never,
       emailService as never,
@@ -517,6 +534,318 @@ describe('OrdersService', () => {
     expect(result.message).toBe(
       'Order created successfully and payment moved into escrow.',
     );
+  });
+
+  it('prefers the tenant service override when an order is submitted with a platform service id', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+      email: 'ada@example.com',
+      phone: '+2348012345678',
+      wallet: {
+        id: 'wallet-1',
+        availableBalance: 500000n,
+        escrowBalance: 0n,
+      },
+    });
+    prisma.service.findFirst
+      .mockResolvedValueOnce({
+        id: 'service-platform',
+        tenantId: null,
+        name: 'Jamb Result',
+        slug: 'jamb-result',
+        totalPrice: 0n,
+        providerCost: 0n,
+        platformFee: 0n,
+        platformFeePercent: 10,
+        cbtCommission: 0n,
+        providerKey: null,
+        deliveryMode: ServiceDeliveryMode.CBT_MANUAL,
+        fulfillmentType: FulfillmentType.MANUAL,
+        isActive: true,
+        requiredFields: [],
+        requiredDocuments: [],
+        category: {
+          name: 'JAMB SERVICES',
+          slug: 'jamb-services',
+        },
+      })
+      .mockResolvedValueOnce({
+        id: 'service-tenant',
+        tenantId: 'tenant-1',
+        name: 'Jamb Result',
+        slug: 'jamb-result',
+        totalPrice: 300000n,
+        providerCost: 90000n,
+        platformFee: 21000n,
+        platformFeePercent: 10,
+        cbtCommission: 120000n,
+        providerKey: null,
+        deliveryMode: ServiceDeliveryMode.CBT_MANUAL,
+        fulfillmentType: FulfillmentType.MANUAL,
+        isActive: true,
+        requiredFields: [],
+        requiredDocuments: [],
+        category: {
+          name: 'JAMB SERVICES',
+          slug: 'jamb-services',
+        },
+      });
+
+    const tx = {
+      order: {
+        create: jest.fn().mockResolvedValue({
+          id: 'order-tenant',
+          orderNumber: 'ORD-TENANT',
+          status: OrderStatus.PENDING,
+          totalAmount: 300000n,
+          platformFee: 21000n,
+          cbtCommission: 120000n,
+          createdAt: new Date('2026-05-04T00:00:00.000Z'),
+          service: {
+            name: 'Jamb Result',
+            slug: 'jamb-result',
+            category: {
+              name: 'JAMB SERVICES',
+              slug: 'jamb-services',
+            },
+          },
+        }),
+      },
+      wallet: {
+        update: jest.fn().mockResolvedValue(undefined),
+      },
+      transaction: {
+        create: jest.fn().mockResolvedValue(undefined),
+      },
+      notification: {
+        create: jest.fn().mockResolvedValue(undefined),
+      },
+      auditLog: {
+        create: jest.fn().mockResolvedValue(undefined),
+      },
+    };
+
+    prisma.$transaction.mockImplementation(
+      async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx),
+    );
+
+    const result = await service.createOrder(
+      'user-1',
+      {
+        serviceId: 'service-platform',
+        submittedData: {},
+      },
+      'tenant-1',
+    );
+
+    expect(prisma.service.findFirst).toHaveBeenNthCalledWith(2, {
+      where: {
+        tenantId: 'tenant-1',
+        slug: 'jamb-result',
+      },
+      select: expect.any(Object),
+    });
+    expect(tx.order.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        serviceId: 'service-tenant',
+        totalAmount: 300000n,
+        cbtCommission: 120000n,
+      }),
+      select: expect.any(Object),
+    });
+    expect(notificationsService.broadcastNewJob).toHaveBeenCalledWith({
+      orderId: 'order-tenant',
+      serviceId: 'service-tenant',
+      serviceName: 'Jamb Result',
+      tenantId: 'tenant-1',
+    });
+    expect(result.data.totalAmount).toBe('300000');
+    expect(result.data.cbtCommission).toBe('120000');
+  });
+
+  it('flags affected orders for manual review when tenant pricing changed after the order was created', async () => {
+    prisma.order.findMany.mockResolvedValue([
+      {
+        id: 'order-1',
+        tenantId: 'tenant-1',
+        orderNumber: 'ORD-1',
+        status: OrderStatus.PENDING,
+        createdAt: new Date('2026-05-01T10:00:00.000Z'),
+        totalAmount: 0n,
+        platformFee: 0n,
+        cbtCommission: 0n,
+        escrowReleasedAt: null,
+        service: {
+          id: 'platform-service',
+          tenantId: null,
+          slug: 'jamb-result',
+          name: 'Jamb Result',
+        },
+        requester: {
+          id: 'user-1',
+          email: 'ada@example.com',
+          wallet: {
+            id: 'wallet-1',
+            availableBalance: 10000n,
+            escrowBalance: 0n,
+          },
+        },
+        dispute: null,
+        transactions: [],
+      },
+    ]);
+    prisma.service.findMany.mockResolvedValue([
+      {
+        id: 'tenant-service',
+        tenantId: 'tenant-1',
+        slug: 'jamb-result',
+        totalPrice: 300000n,
+        providerCost: 100000n,
+        platformFeePercent: 10,
+        cbtCommission: 150000n,
+        isActive: true,
+        updatedAt: new Date('2026-05-02T10:00:00.000Z'),
+      },
+    ]);
+
+    const result = await service.getAdminOrderPricingRemediationPreview(null);
+
+    expect(result.data.summary).toEqual({
+      affectedCount: 1,
+      autoFixCount: 0,
+      manualReviewCount: 1,
+    });
+    expect(result.data.candidates[0]).toMatchObject({
+      orderId: 'order-1',
+      action: 'MANUAL_REVIEW',
+    });
+    expect(result.data.candidates[0].reasons[0]).toContain(
+      'changed after this order was created',
+    );
+  });
+
+  it('applies pricing remediation by moving the missing amount into escrow and updating the order snapshot', async () => {
+    prisma.order.findMany.mockResolvedValue([
+      {
+        id: 'order-1',
+        tenantId: 'tenant-1',
+        orderNumber: 'ORD-1',
+        status: OrderStatus.PENDING,
+        createdAt: new Date('2026-05-03T10:00:00.000Z'),
+        totalAmount: 0n,
+        platformFee: 0n,
+        cbtCommission: 0n,
+        escrowReleasedAt: null,
+        service: {
+          id: 'platform-service',
+          tenantId: null,
+          slug: 'jamb-result',
+          name: 'Jamb Result',
+        },
+        requester: {
+          id: 'user-1',
+          email: 'ada@example.com',
+          wallet: {
+            id: 'wallet-1',
+            availableBalance: 500000n,
+            escrowBalance: 0n,
+          },
+        },
+        dispute: null,
+        transactions: [],
+      },
+    ]);
+    prisma.service.findMany.mockResolvedValue([
+      {
+        id: 'tenant-service',
+        tenantId: 'tenant-1',
+        slug: 'jamb-result',
+        totalPrice: 300000n,
+        providerCost: 100000n,
+        platformFeePercent: 10,
+        cbtCommission: 150000n,
+        isActive: true,
+        updatedAt: new Date('2026-05-01T09:00:00.000Z'),
+      },
+    ]);
+
+    const tx = {
+      order: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'order-1',
+          tenantId: 'tenant-1',
+          orderNumber: 'ORD-1',
+          status: OrderStatus.PENDING,
+          totalAmount: 0n,
+          platformFee: 0n,
+          cbtCommission: 0n,
+          serviceId: 'platform-service',
+          requester: {
+            id: 'user-1',
+            wallet: {
+              id: 'wallet-1',
+              availableBalance: 500000n,
+              escrowBalance: 0n,
+            },
+          },
+        }),
+        update: jest.fn().mockResolvedValue(undefined),
+      },
+      wallet: {
+        update: jest.fn().mockResolvedValue(undefined),
+      },
+      transaction: {
+        create: jest.fn().mockResolvedValue(undefined),
+      },
+      auditLog: {
+        create: jest.fn().mockResolvedValue(undefined),
+      },
+    };
+
+    prisma.$transaction.mockImplementation(
+      async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx),
+    );
+
+    const result = await service.applyAdminOrderPricingRemediation(
+      'admin-1',
+      { applyAllEligible: true },
+      null,
+    );
+
+    expect(tx.wallet.update).toHaveBeenCalledWith({
+      where: { id: 'wallet-1' },
+      data: {
+        availableBalance: 200000n,
+        escrowBalance: 300000n,
+      },
+    });
+    expect(tx.transaction.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        type: TransactionType.ESCROW_LOCK,
+        amount: 300000n,
+        orderId: 'order-1',
+        tenantId: 'tenant-1',
+      }),
+    });
+    expect(tx.order.update).toHaveBeenCalledWith({
+      where: { id: 'order-1' },
+      data: {
+        serviceId: 'tenant-service',
+        totalAmount: 300000n,
+        platformFee: 25000n,
+        cbtCommission: 150000n,
+      },
+    });
+    expect(tx.auditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        userId: 'admin-1',
+        action: 'ORDER_PRICING_REMEDIATED',
+        entityId: 'order-1',
+      }),
+    });
+    expect(result.data.summary.appliedCount).toBe(1);
   });
 
   it('creates disputes with uploaded evidence file metadata and pauses release scheduling', async () => {

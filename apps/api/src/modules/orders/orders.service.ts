@@ -115,6 +115,46 @@ type AutomatedServiceDefinition = {
   };
 };
 
+type PricingRemediationAction =
+  | 'UPDATE_ORDER_ONLY'
+  | 'ADJUST_ESCROW_AND_UPDATE_ORDER'
+  | 'MANUAL_REVIEW';
+
+type PricingRemediationCandidate = {
+  orderId: string;
+  orderNumber: string;
+  tenantId: string;
+  status: OrderStatus;
+  createdAt: Date;
+  action: PricingRemediationAction;
+  reasons: string[];
+  current: {
+    serviceId: string;
+    serviceSlug: string;
+    totalAmount: string;
+    platformFee: string;
+    cbtCommission: string;
+  };
+  expected: {
+    serviceId: string;
+    serviceSlug: string;
+    totalAmount: string;
+    platformFee: string;
+    cbtCommission: string;
+    serviceUpdatedAt: Date;
+  };
+  delta: {
+    totalAmount: string;
+  };
+  requester: {
+    userId: string;
+    email: string;
+    walletId: string | null;
+    availableBalance: string;
+    escrowBalance: string;
+  };
+};
+
 export type UploadedDocumentFile = {
   originalname: string;
   mimetype: string;
@@ -289,6 +329,81 @@ const orderDetailSelect = Prisma.validator<Prisma.OrderSelect>()({
     where: { status: 'PENDING' },
     select: { id: true, status: true, createdAt: true },
     take: 1,
+  },
+});
+
+const orderableServiceSelect = Prisma.validator<Prisma.ServiceSelect>()({
+  id: true,
+  tenantId: true,
+  name: true,
+  slug: true,
+  totalPrice: true,
+  platformFee: true,
+  platformFeePercent: true,
+  cbtCommission: true,
+  providerCost: true,
+  providerKey: true,
+  deliveryMode: true,
+  fulfillmentType: true,
+  isActive: true,
+  requiredFields: true,
+  requiredDocuments: true,
+  category: {
+    select: {
+      name: true,
+      slug: true,
+    },
+  },
+});
+
+const pricingRemediationOrderSelect = Prisma.validator<Prisma.OrderSelect>()({
+  id: true,
+  tenantId: true,
+  orderNumber: true,
+  status: true,
+  createdAt: true,
+  totalAmount: true,
+  platformFee: true,
+  cbtCommission: true,
+  escrowReleasedAt: true,
+  service: {
+    select: {
+      id: true,
+      tenantId: true,
+      slug: true,
+      name: true,
+    },
+  },
+  requester: {
+    select: {
+      id: true,
+      email: true,
+      wallet: {
+        select: {
+          id: true,
+          availableBalance: true,
+          escrowBalance: true,
+        },
+      },
+    },
+  },
+  dispute: {
+    select: {
+      id: true,
+      status: true,
+    },
+  },
+  transactions: {
+    select: {
+      id: true,
+      type: true,
+      status: true,
+      amount: true,
+      reference: true,
+    },
+    orderBy: {
+      createdAt: 'asc',
+    },
   },
 });
 
@@ -1572,6 +1687,123 @@ export class OrdersService {
         waitingCandidates: candidateBuckets.waiting,
         blockedCandidates: candidateBuckets.blocked,
       } satisfies AdminReleaseSchedulerPreviewData,
+    };
+  }
+
+  async getAdminOrderPricingRemediationPreview(tenantId: string | null) {
+    const candidates = await this.getOrderPricingRemediationCandidates(
+      tenantId,
+    );
+
+    return {
+      message: 'Admin order pricing remediation preview retrieved',
+      data: {
+        summary: {
+          affectedCount: candidates.length,
+          autoFixCount: candidates.filter(
+            (candidate) => candidate.action !== 'MANUAL_REVIEW',
+          ).length,
+          manualReviewCount: candidates.filter(
+            (candidate) => candidate.action === 'MANUAL_REVIEW',
+          ).length,
+        },
+        candidates,
+      },
+    };
+  }
+
+  async applyAdminOrderPricingRemediation(
+    adminUserId: string,
+    input: {
+      orderIds?: string[];
+      applyAllEligible?: boolean;
+    },
+    tenantId: string | null,
+  ) {
+    const candidates = await this.getOrderPricingRemediationCandidates(
+      tenantId,
+    );
+    const eligibleCandidates = candidates.filter(
+      (candidate) => candidate.action !== 'MANUAL_REVIEW',
+    );
+
+    const normalizedOrderIds = Array.from(
+      new Set((input.orderIds ?? []).map((orderId) => orderId.trim()).filter(Boolean)),
+    );
+    const selectedCandidates = input.applyAllEligible
+      ? eligibleCandidates
+      : eligibleCandidates.filter((candidate) =>
+          normalizedOrderIds.includes(candidate.orderId),
+        );
+
+    if (!input.applyAllEligible && normalizedOrderIds.length === 0) {
+      throw new BadRequestException(
+        'Choose at least one eligible order or set applyAllEligible to true.',
+      );
+    }
+
+    if (selectedCandidates.length === 0) {
+      throw new BadRequestException(
+        'No eligible affected orders matched this remediation request.',
+      );
+    }
+
+    const applied: Array<{
+      orderId: string;
+      orderNumber: string;
+      action: Exclude<PricingRemediationAction, 'MANUAL_REVIEW'>;
+      adjustmentReference: string | null;
+    }> = [];
+
+    for (const candidate of selectedCandidates) {
+      const adjustmentReference =
+        await this.applyPricingRemediationCandidate(
+          adminUserId,
+          candidate,
+        );
+
+      applied.push({
+        orderId: candidate.orderId,
+        orderNumber: candidate.orderNumber,
+        action: candidate.action as Exclude<
+          PricingRemediationAction,
+          'MANUAL_REVIEW'
+        >,
+        adjustmentReference,
+      });
+    }
+
+    const requestedManualReviewIds = input.applyAllEligible
+      ? new Set(
+          candidates
+            .filter((candidate) => candidate.action === 'MANUAL_REVIEW')
+            .map((candidate) => candidate.orderId),
+        )
+      : new Set(normalizedOrderIds);
+
+    const skipped = candidates
+      .filter(
+        (candidate) =>
+          candidate.action === 'MANUAL_REVIEW' &&
+          requestedManualReviewIds.has(candidate.orderId),
+      )
+      .map((candidate) => ({
+        orderId: candidate.orderId,
+        orderNumber: candidate.orderNumber,
+        action: candidate.action,
+        reasons: candidate.reasons,
+      }));
+
+    return {
+      message: 'Admin order pricing remediation completed.',
+      data: {
+        summary: {
+          appliedCount: applied.length,
+          skippedCount: skipped.length,
+        },
+        applied,
+        skipped,
+      },
     };
   }
 
@@ -3540,6 +3772,39 @@ export class OrdersService {
     }
   }
 
+  private async resolveOrderableService(
+    serviceId: string,
+    tenantId: string | null,
+  ) {
+    const requestedService = await this.prisma.service.findFirst({
+      where: {
+        id: serviceId,
+        ...(tenantId
+          ? { OR: [{ tenantId: null }, { tenantId }] }
+          : { tenantId: null }),
+      },
+      select: orderableServiceSelect,
+    });
+
+    if (!requestedService) {
+      return null;
+    }
+
+    if (!tenantId || requestedService.tenantId === tenantId) {
+      return requestedService;
+    }
+
+    const tenantOverride = await this.prisma.service.findFirst({
+      where: {
+        tenantId,
+        slug: requestedService.slug,
+      },
+      select: orderableServiceSelect,
+    });
+
+    return tenantOverride ?? requestedService;
+  }
+
   async createOrder(
     userId: string,
     dto: CreateOrderDto,
@@ -3573,36 +3838,10 @@ export class OrdersService {
         throw new NotFoundException('Wallet not found');
       }
 
-      const service = await this.prisma.service.findFirst({
-        where: {
-          id: dto.serviceId,
-          ...(tenantId
-            ? { OR: [{ tenantId: null }, { tenantId }] }
-            : { tenantId: null }),
-        },
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-          totalPrice: true,
-          platformFee: true,
-          platformFeePercent: true,
-          cbtCommission: true,
-          providerCost: true,
-          providerKey: true,
-          deliveryMode: true,
-          fulfillmentType: true,
-          isActive: true,
-          requiredFields: true,
-          requiredDocuments: true,
-          category: {
-            select: {
-              name: true,
-              slug: true,
-            },
-          },
-        },
-      });
+      const service = await this.resolveOrderableService(
+        dto.serviceId,
+        tenantId,
+      );
 
       if (!service || !service.isActive) {
         throw new NotFoundException('Service not found');
@@ -4755,6 +4994,402 @@ export class OrdersService {
       .replace(/\s+/g, '-')
       .replace(/[^a-zA-Z0-9._-]/g, '')
       .toLowerCase();
+  }
+
+  private async getOrderPricingRemediationCandidates(tenantId: string | null) {
+    const orders = await this.prisma.order.findMany({
+      where: {
+        fulfillmentType: FulfillmentType.MANUAL,
+        tenantId: tenantId ?? { not: null },
+        service: {
+          tenantId: null,
+        },
+        status: {
+          notIn: [OrderStatus.CANCELLED, OrderStatus.REFUNDED],
+        },
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
+      select: pricingRemediationOrderSelect,
+    });
+
+    if (orders.length === 0) {
+      return [];
+    }
+
+    const tenantIds = Array.from(
+      new Set(
+        orders
+          .map((order) => order.tenantId)
+          .filter((value): value is string => Boolean(value)),
+      ),
+    );
+    const serviceSlugs = Array.from(
+      new Set(orders.map((order) => order.service.slug)),
+    );
+
+    const tenantOverrides = await this.prisma.service.findMany({
+      where: {
+        tenantId: {
+          in: tenantIds,
+        },
+        slug: {
+          in: serviceSlugs,
+        },
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        slug: true,
+        totalPrice: true,
+        providerCost: true,
+        platformFeePercent: true,
+        cbtCommission: true,
+        isActive: true,
+        updatedAt: true,
+      },
+    });
+
+    const overrideMap = new Map(
+      tenantOverrides.map((service) => [
+        `${service.tenantId}:${service.slug}`,
+        service,
+      ]),
+    );
+
+    return orders
+      .map((order) => {
+        const resolvedTenantId = order.tenantId;
+        if (!resolvedTenantId) {
+          return null;
+        }
+
+        const override = overrideMap.get(
+          `${resolvedTenantId}:${order.service.slug}`,
+        );
+
+        return this.buildPricingRemediationCandidate(order, override ?? null);
+      })
+      .filter(
+        (candidate): candidate is PricingRemediationCandidate =>
+          candidate !== null,
+      );
+  }
+
+  private buildPricingRemediationCandidate(
+    order: Prisma.OrderGetPayload<{ select: typeof pricingRemediationOrderSelect }>,
+    override: {
+      id: string;
+      tenantId: string | null;
+      slug: string;
+      totalPrice: bigint;
+      providerCost: bigint;
+      platformFeePercent: number;
+      cbtCommission: bigint;
+      isActive: boolean;
+      updatedAt: Date;
+    } | null,
+  ): PricingRemediationCandidate | null {
+    if (!order.tenantId || !override) {
+      return null;
+    }
+
+    const expectedPlatformFee = BigInt(
+      Math.floor(
+        (Number(override.cbtCommission + override.providerCost) *
+          override.platformFeePercent) /
+          100,
+      ),
+    );
+    const delta = override.totalPrice - order.totalAmount;
+    const reasons: string[] = [];
+
+    if (!override.isActive) {
+      reasons.push(
+        'The tenant-specific service override is no longer active, so this order needs manual confirmation before repair.',
+      );
+    }
+
+    if (override.updatedAt > order.createdAt) {
+      reasons.push(
+        'The tenant service pricing changed after this order was created, so the intended historical price is no longer provable automatically.',
+      );
+    }
+
+    if (order.escrowReleasedAt) {
+      reasons.push(
+        'Escrow has already been released for this order, so automated pricing repair would conflict with settled payouts.',
+      );
+    }
+
+    if (order.dispute) {
+      reasons.push(
+        'A dispute is attached to this order, so pricing repair must be reviewed manually.',
+      );
+    }
+
+    const blockingTransactionTypes = new Set<TransactionType>([
+      TransactionType.ESCROW_RELEASE,
+      TransactionType.CBT_COMMISSION,
+      TransactionType.PLATFORM_COMMISSION,
+      TransactionType.REFUND,
+      TransactionType.PENALTY,
+    ]);
+
+    if (
+      order.transactions.some((transaction) =>
+        blockingTransactionTypes.has(transaction.type),
+      )
+    ) {
+      reasons.push(
+        'Financial settlement activity already exists on this order, so automated repair is blocked.',
+      );
+    }
+
+    const requesterWallet = order.requester.wallet;
+    if (!requesterWallet) {
+      reasons.push(
+        'The requester wallet could not be loaded for this order, so automated repair is blocked.',
+      );
+    } else if (delta > 0n && requesterWallet.availableBalance < delta) {
+      reasons.push(
+        'The requester wallet does not currently have enough available balance to lock the missing escrow difference automatically.',
+      );
+    } else if (delta < 0n && requesterWallet.escrowBalance < delta * -1n) {
+      reasons.push(
+        'The requester escrow balance no longer covers the refund difference, so manual review is required.',
+      );
+    }
+
+    const snapshotNeedsUpdate =
+      order.service.id !== override.id ||
+      order.totalAmount !== override.totalPrice ||
+      order.platformFee !== expectedPlatformFee ||
+      order.cbtCommission !== override.cbtCommission;
+
+    if (!snapshotNeedsUpdate) {
+      return null;
+    }
+
+    const action: PricingRemediationAction =
+      reasons.length > 0
+        ? 'MANUAL_REVIEW'
+        : delta === 0n
+          ? 'UPDATE_ORDER_ONLY'
+          : 'ADJUST_ESCROW_AND_UPDATE_ORDER';
+
+    return {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      tenantId: order.tenantId,
+      status: order.status,
+      createdAt: order.createdAt,
+      action,
+      reasons,
+      current: {
+        serviceId: order.service.id,
+        serviceSlug: order.service.slug,
+        totalAmount: order.totalAmount.toString(),
+        platformFee: order.platformFee.toString(),
+        cbtCommission: order.cbtCommission.toString(),
+      },
+      expected: {
+        serviceId: override.id,
+        serviceSlug: override.slug,
+        totalAmount: override.totalPrice.toString(),
+        platformFee: expectedPlatformFee.toString(),
+        cbtCommission: override.cbtCommission.toString(),
+        serviceUpdatedAt: override.updatedAt,
+      },
+      delta: {
+        totalAmount: delta.toString(),
+      },
+      requester: {
+        userId: order.requester.id,
+        email: order.requester.email,
+        walletId: requesterWallet?.id ?? null,
+        availableBalance:
+          requesterWallet?.availableBalance.toString() ?? '0',
+        escrowBalance: requesterWallet?.escrowBalance.toString() ?? '0',
+      },
+    };
+  }
+
+  private async applyPricingRemediationCandidate(
+    adminUserId: string,
+    candidate: PricingRemediationCandidate,
+  ) {
+    if (candidate.action === 'MANUAL_REVIEW') {
+      throw new BadRequestException(
+        `Order ${candidate.orderNumber} requires manual review and cannot be auto-remediated.`,
+      );
+    }
+
+    const shouldRescheduleRelease =
+      candidate.status === OrderStatus.COMPLETED;
+
+    if (shouldRescheduleRelease) {
+      await this.ordersReleaseQueueService
+        .removeScheduledReleaseForOrder(candidate.orderId)
+        .catch(() => undefined);
+    }
+
+    const delta = BigInt(candidate.delta.totalAmount);
+    const adjustmentReference =
+      delta !== 0n ? generateTransactionRef() : null;
+
+    await this.prisma.$transaction(async (tx) => {
+      const liveOrder = await tx.order.findUnique({
+        where: { id: candidate.orderId },
+        select: {
+          id: true,
+          tenantId: true,
+          orderNumber: true,
+          status: true,
+          totalAmount: true,
+          platformFee: true,
+          cbtCommission: true,
+          serviceId: true,
+          requester: {
+            select: {
+              id: true,
+              wallet: {
+                select: {
+                  id: true,
+                  availableBalance: true,
+                  escrowBalance: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!liveOrder?.requester.wallet) {
+        throw new NotFoundException(
+          'Requester wallet not found for pricing remediation.',
+        );
+      }
+
+      const wallet = liveOrder.requester.wallet;
+
+      if (delta > 0n && wallet.availableBalance < delta) {
+        throw new BadRequestException(
+          `Order ${candidate.orderNumber} no longer has enough available balance for automated escrow adjustment.`,
+        );
+      }
+
+      if (delta < 0n && wallet.escrowBalance < delta * -1n) {
+        throw new BadRequestException(
+          `Order ${candidate.orderNumber} no longer has enough escrow balance for automated refund adjustment.`,
+        );
+      }
+
+      if (delta > 0n) {
+        await tx.wallet.update({
+          where: { id: wallet.id },
+          data: {
+            availableBalance: wallet.availableBalance - delta,
+            escrowBalance: wallet.escrowBalance + delta,
+          },
+        });
+
+        await tx.transaction.create({
+          data: {
+            walletId: wallet.id,
+            userId: liveOrder.requester.id,
+            orderId: liveOrder.id,
+            tenantId: liveOrder.tenantId,
+            type: TransactionType.ESCROW_LOCK,
+            status: TransactionStatus.SUCCESS,
+            amount: delta,
+            balanceBefore: wallet.availableBalance,
+            balanceAfter: wallet.availableBalance - delta,
+            reference: adjustmentReference!,
+            description: `Escrow adjustment for pricing remediation on ${liveOrder.orderNumber}`,
+            metadata: {
+              remediation: 'tenant-service-override-backfill',
+              previousTotalAmount: liveOrder.totalAmount.toString(),
+              expectedTotalAmount: candidate.expected.totalAmount,
+            },
+          },
+        });
+      } else if (delta < 0n) {
+        const refundAmount = delta * -1n;
+
+        await tx.wallet.update({
+          where: { id: wallet.id },
+          data: {
+            availableBalance: wallet.availableBalance + refundAmount,
+            escrowBalance: wallet.escrowBalance - refundAmount,
+          },
+        });
+
+        await tx.transaction.create({
+          data: {
+            walletId: wallet.id,
+            userId: liveOrder.requester.id,
+            orderId: liveOrder.id,
+            tenantId: liveOrder.tenantId,
+            type: TransactionType.REFUND,
+            status: TransactionStatus.SUCCESS,
+            amount: refundAmount,
+            balanceBefore: wallet.availableBalance,
+            balanceAfter: wallet.availableBalance + refundAmount,
+            reference: adjustmentReference!,
+            description: `Escrow refund for pricing remediation on ${liveOrder.orderNumber}`,
+            metadata: {
+              remediation: 'tenant-service-override-backfill',
+              previousTotalAmount: liveOrder.totalAmount.toString(),
+              expectedTotalAmount: candidate.expected.totalAmount,
+              refundedFromEscrow: true,
+            },
+          },
+        });
+      }
+
+      await tx.order.update({
+        where: { id: liveOrder.id },
+        data: {
+          serviceId: candidate.expected.serviceId,
+          totalAmount: BigInt(candidate.expected.totalAmount),
+          platformFee: BigInt(candidate.expected.platformFee),
+          cbtCommission: BigInt(candidate.expected.cbtCommission),
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId: adminUserId,
+          tenantId: liveOrder.tenantId,
+          action: 'ORDER_PRICING_REMEDIATED',
+          entity: 'Order',
+          entityId: liveOrder.id,
+          oldValues: {
+            serviceId: liveOrder.serviceId,
+            totalAmount: liveOrder.totalAmount.toString(),
+            platformFee: liveOrder.platformFee.toString(),
+            cbtCommission: liveOrder.cbtCommission.toString(),
+          },
+          newValues: {
+            serviceId: candidate.expected.serviceId,
+            totalAmount: candidate.expected.totalAmount,
+            platformFee: candidate.expected.platformFee,
+            cbtCommission: candidate.expected.cbtCommission,
+            adjustmentReference,
+          },
+        },
+      });
+    });
+
+    if (shouldRescheduleRelease) {
+      await this.ordersReleaseQueueService
+        .scheduleReleaseForOrder(candidate.orderId)
+        .catch(() => undefined);
+    }
+
+    return adjustmentReference;
   }
 
   private buildOrderMetrics(status: OrderStatus) {

@@ -1,18 +1,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import toast from 'react-hot-toast';
-import { Loader2, Wallet } from 'lucide-react';
+import { ArrowRight, Loader2, Wallet, X } from 'lucide-react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import {
   InitiateWalletFundingInput,
   InitiateWalletFundingSchema,
 } from '@zendocx/validators';
-import { FeedbackBanner } from '@/components/shared/feedback-banner';
 import apiClient from '@/lib/api-client';
 import { getApiErrorMessage } from '@/lib/api-error';
+import { formatNaira } from '@/lib/format';
 import { cn } from '@/lib/utils';
+
+const QUICK_AMOUNTS = [500, 1_000, 2_000, 5_000, 10_000];
 
 interface FundWalletModalProps {
   open: boolean;
@@ -30,11 +31,7 @@ interface FundingInitResponse {
   checkoutMode: 'live' | 'sandbox';
 }
 
-export function FundWalletModal({
-  open,
-  onClose,
-  onSuccess,
-}: FundWalletModalProps) {
+export function FundWalletModal({ open, onClose, onSuccess }: FundWalletModalProps) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<FundingInitResponse | null>(null);
   const [inlineError, setInlineError] = useState<string | null>(null);
@@ -43,155 +40,186 @@ export function FundWalletModal({
     register,
     handleSubmit,
     reset,
+    setValue,
+    watch,
     formState: { errors },
   } = useForm<InitiateWalletFundingInput>({
     resolver: zodResolver(InitiateWalletFundingSchema),
-    defaultValues: { amountNaira: 1000 },
+    defaultValues: { amountNaira: 1_000 },
   });
+
+  const currentAmount = watch('amountNaira');
 
   useEffect(() => {
     if (!open) {
       setResult(null);
       setInlineError(null);
-      reset({ amountNaira: 1000 });
+      reset({ amountNaira: 1_000 });
     }
   }, [open, reset]);
 
   const onSubmit = async (values: InitiateWalletFundingInput) => {
     setLoading(true);
     setInlineError(null);
-
     try {
       const response = await apiClient.post<{
         data: FundingInitResponse;
         message: string;
       }>('/wallet/fund', values);
-
       setResult(response.data.data);
-      toast.success(response.data.message);
       onSuccess?.();
     } catch (error: unknown) {
-      const message = getApiErrorMessage(
-        error,
-        'Could not initialize wallet funding right now.',
+      setInlineError(
+        getApiErrorMessage(error, 'Could not initialize wallet funding right now.'),
       );
-      setInlineError(message);
-      toast.error(message);
     } finally {
       setLoading(false);
     }
   };
 
-  if (!open) {
-    return null;
-  }
+  if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/50 px-4 py-6">
-      <div className="w-full max-w-lg rounded-[2rem] border border-slate-200 bg-white p-6 shadow-2xl">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-semibold text-slate-900">
-              Fund your wallet
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-slate-500">
-              Initialize a funding session with the active payment gateway. Webhook-based balance crediting lands in the next Phase 2 batch.
-            </p>
-          </div>
+    <div className="fixed inset-0 z-[80] flex items-end justify-center sm:items-center">
+      <div
+        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+        onClick={onClose}
+      />
+
+      <div className="relative w-full max-w-sm rounded-t-[2rem] bg-white px-5 pb-8 pt-5 shadow-2xl sm:rounded-[2rem] sm:px-6 sm:py-6">
+        {/* drag pill — mobile only */}
+        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-slate-200 sm:hidden" />
+
+        {/* Header */}
+        <div className="mb-5 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-brand-ink">
+            {result ? 'Ready to pay' : 'Add funds'}
+          </h2>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition hover:bg-slate-200"
           >
-            ✕
+            <X size={15} />
           </button>
         </div>
 
         {result ? (
-          <div className="mt-6 space-y-4">
-            <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-4">
-              <p className="text-sm font-semibold text-emerald-700">
-                Funding session created
+          /* ── Success / ready state ─────────────────────────────── */
+          <div className="space-y-3">
+            {/* Amount hero card */}
+            <div className="rounded-2xl bg-brand-navy px-5 py-4 text-white">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-white/50">
+                Amount
               </p>
-              <p className="mt-2 text-sm text-emerald-700/90">
-                Reference: {result.reference}
+              <p className="mt-1 text-3xl font-bold tracking-tight">
+                {formatNaira(result.amountKobo)}
               </p>
-              <p className="mt-1 text-sm text-emerald-700/90">
-                Gateway: {result.gateway}
-              </p>
-              <p className="mt-1 text-sm text-emerald-700/90">
-                Mode: {result.checkoutMode === 'sandbox' ? 'Sandbox checkout' : 'Live checkout'}
-              </p>
+              <div className="mt-3 flex items-center gap-2">
+                <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold text-white/90">
+                  {result.gateway}
+                </span>
+                <span
+                  className={cn(
+                    'rounded-full px-3 py-1 text-[11px] font-semibold',
+                    result.checkoutMode === 'live'
+                      ? 'bg-emerald-400/20 text-emerald-300'
+                      : 'bg-amber-400/20 text-amber-300',
+                  )}
+                >
+                  {result.checkoutMode === 'live' ? 'Live' : 'Test'}
+                </span>
+              </div>
             </div>
 
-            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-sm text-slate-600">
-                Continue to checkout to complete funding. In local development,
-                this returns to your wallet automatically through the sandbox
-                confirmation path until real gateway credentials are configured.
-              </p>
-              <button
-                type="button"
-                onClick={() => {
-                  window.location.assign(result.paymentUrl);
-                }}
-                className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-brand-navy px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand-navy-strong"
-              >
-                <Wallet size={16} />
-                Continue to checkout
-              </button>
+            {/* Reference row */}
+            <div className="flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+              <span className="text-xs text-slate-400">Ref</span>
+              <span className="font-mono text-xs font-semibold text-slate-700">
+                {result.reference}
+              </span>
             </div>
+
+            {/* Primary CTA */}
+            <button
+              type="button"
+              onClick={() => window.location.assign(result.paymentUrl)}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-accent px-4 py-3.5 text-sm font-bold text-white transition hover:bg-brand-accent/90 active:scale-[0.98]"
+            >
+              Pay with {result.gateway}
+              <ArrowRight size={16} />
+            </button>
 
             <button
               type="button"
               onClick={onClose}
-              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
             >
-              Close
+              Cancel
             </button>
           </div>
         ) : (
-          <form onSubmit={handleSubmit(onSubmit)} className="mt-6 space-y-5">
+          /* ── Input form ────────────────────────────────────────── */
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             {inlineError ? (
-              <FeedbackBanner tone="error" title="Funding could not start" message={inlineError} />
+              <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                {inlineError}
+              </div>
             ) : null}
 
+            {/* Amount input */}
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">
-                Funding amount
-              </label>
-              <div className="relative">
-                <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">
-                  ₦
-                </span>
+              <div
+                className={cn(
+                  'flex items-center gap-2 rounded-2xl border bg-white px-4 py-3 transition',
+                  'focus-within:border-brand-navy focus-within:ring-2 focus-within:ring-brand-navy/10',
+                  errors.amountNaira ? 'border-rose-300' : 'border-slate-200',
+                )}
+              >
+                <span className="text-base font-bold text-slate-400">₦</span>
                 <input
                   type="number"
                   min={100}
                   step="100"
-                  className={cn(
-                    'w-full rounded-2xl border bg-white px-4 py-3 pl-9 text-sm outline-none transition',
-                    'focus:border-brand-navy focus:ring-2 focus:ring-brand-navy/10',
-                    errors.amountNaira
-                      ? 'border-red-300 bg-red-50'
-                      : 'border-slate-200',
-                  )}
+                  placeholder="0"
+                  className="flex-1 bg-transparent text-2xl font-bold text-brand-ink outline-none placeholder:text-slate-200"
                   {...register('amountNaira', { valueAsNumber: true })}
                 />
               </div>
               {errors.amountNaira ? (
-                <p className="mt-1 text-xs text-red-500">
+                <p className="mt-1 text-xs text-rose-500">
                   {errors.amountNaira.message}
                 </p>
               ) : null}
             </div>
 
-            <FeedbackBanner
-              tone="info"
-              title="What happens next"
-              message="This starts checkout only. Your wallet balance updates after confirmation returns from the payment flow."
-            />
+            {/* Quick-select amounts */}
+            <div className="flex flex-wrap gap-2">
+              {QUICK_AMOUNTS.map((amount) => (
+                <button
+                  key={amount}
+                  type="button"
+                  onClick={() =>
+                    setValue('amountNaira', amount, { shouldValidate: true })
+                  }
+                  className={cn(
+                    'rounded-xl border px-3.5 py-1.5 text-sm font-semibold transition',
+                    currentAmount === amount
+                      ? 'border-brand-navy bg-brand-navy text-white'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-brand-navy/30 hover:bg-slate-50',
+                  )}
+                >
+                  {amount >= 1_000 ? `₦${amount / 1_000}k` : `₦${amount}`}
+                </button>
+              ))}
+            </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row">
+            <p className="text-xs text-slate-400">
+              You&apos;ll be redirected to complete payment. Balance updates once confirmed.
+            </p>
+
+            {/* Actions */}
+            <div className="flex gap-2.5">
               <button
                 type="button"
                 onClick={onClose}
@@ -202,10 +230,14 @@ export function FundWalletModal({
               <button
                 type="submit"
                 disabled={loading}
-                className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-brand-navy px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand-navy-strong disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex flex-[2] items-center justify-center gap-2 rounded-2xl bg-brand-navy px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand-navy-strong disabled:opacity-60"
               >
-                {loading ? <Loader2 size={16} className="animate-spin" /> : null}
-                {loading ? 'Initializing...' : 'Continue'}
+                {loading ? (
+                  <Loader2 size={15} className="animate-spin" />
+                ) : (
+                  <Wallet size={15} />
+                )}
+                {loading ? 'Please wait…' : 'Fund Account'}
               </button>
             </div>
           </form>

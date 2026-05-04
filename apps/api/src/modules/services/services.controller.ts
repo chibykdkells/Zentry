@@ -13,6 +13,7 @@ import { UserRole } from '@zendocx/types';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { TenantContext } from '../../common/decorators/tenant-context.decorator';
 import { CreateServiceCategoryDto } from './dto/create-service-category.dto';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { GetAdminServicesQueryDto } from './dto/get-admin-services.dto';
@@ -172,8 +173,12 @@ export class ServicesController {
   getCatalog(
     @Query() query: GetServiceCatalogQueryDto,
     @CurrentUser() user: JwtUser | undefined,
+    @TenantContext() tenant: { id: string } | null,
   ) {
-    return this.servicesService.getCatalog(query, user?.tenantId ?? null);
+    return this.servicesService.getCatalog(
+      query,
+      user?.tenantId ?? tenant?.id ?? null,
+    );
   }
 
   @Get('vtu/data-plans/:serviceId')
