@@ -18,7 +18,7 @@ import { AdminDisputeReviewPanel } from '@/components/admin/admin-dispute-review
 import { MobileSheet } from '@/components/shared/mobile-sheet';
 import { EmptyState } from '@/components/shared/empty-state';
 import { FilePreviewGallery } from '@/components/shared/file-preview-gallery';
-import { PageHero } from '@/components/shared/page-hero';
+import { PageHeader } from '@/components/shared/page-header';
 import {
   SkeletonBlock,
   SkeletonLine,
@@ -404,16 +404,15 @@ export default function AdminOrdersPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 md:flex md:h-full md:flex-col md:overflow-hidden md:p-8">
-      <PageHero
-        eyebrow="Admin Orders"
-        title="Review order flow across the whole platform"
-        description="See the full order picture first, then narrow it by business, requester type, fulfillment mode, or release state."
+      <PageHeader
+        title="Orders"
+        description="Review order flow across the whole platform."
         actions={
           <Link
             href="/admin/users"
-            className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-white"
+            className="inline-flex items-center justify-center rounded-2xl border border-brand-line bg-brand-surface px-4 py-2.5 text-sm font-semibold text-brand-ink transition hover:shadow-sm"
           >
-            Open admin users
+            Users
           </Link>
         }
       />

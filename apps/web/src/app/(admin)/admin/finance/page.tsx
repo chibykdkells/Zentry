@@ -7,7 +7,7 @@ import { TransactionStatus, TransactionType, UserRole } from '@zendocx/types';
 import { AdminWithdrawalReview } from '@/components/admin/admin-withdrawal-review';
 import { AccountPanel } from '@/components/shared/account-panel';
 import { EmptyState } from '@/components/shared/empty-state';
-import { PageHero } from '@/components/shared/page-hero';
+import { PageHeader } from '@/components/shared/page-header';
 import { ScrollCardBody } from '@/components/shared/scroll-card-body';
 import { useAdminWalletTransactions } from '@/hooks/use-admin-wallet-transactions';
 import {
@@ -157,16 +157,15 @@ export default function AdminFinancePage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 md:flex md:h-full md:flex-col md:overflow-hidden md:p-8">
-      <PageHero
-        eyebrow="Finance Control"
-        title="See what money is ready, locked, or waiting for payout"
-        description="Use this page to separate Zendocx earnings from customer money, check which businesses still hold funds, and review payout activity without translating internal finance terms."
+      <PageHeader
+        title="Finance"
+        description="Platform earnings, customer funds, business balances, and payout activity."
         actions={
           <Link
             href="/admin/dashboard"
-            className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-white"
+            className="inline-flex items-center justify-center rounded-2xl border border-brand-line bg-brand-surface px-4 py-2.5 text-sm font-semibold text-brand-ink transition hover:shadow-sm"
           >
-            Return to dashboard
+            Dashboard
           </Link>
         }
       />

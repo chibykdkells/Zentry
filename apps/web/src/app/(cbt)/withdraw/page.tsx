@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { ArrowRight, Banknote, Clock3, ShieldAlert, WalletCards } from 'lucide-react';
 import { AccountPanel } from '@/components/shared/account-panel';
 import { EmptyState } from '@/components/shared/empty-state';
-import { PageHero } from '@/components/shared/page-hero';
+import { PageHeader } from '@/components/shared/page-header';
 import { ScrollCardBody } from '@/components/shared/scroll-card-body';
 import { SkeletonLine } from '@/components/shared/skeleton-loader';
 import { WithdrawalRequestForm } from '@/components/wallet/withdrawal-request-form';
@@ -49,16 +49,15 @@ export default function WithdrawPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 md:flex md:h-full md:flex-col md:overflow-hidden md:p-8">
-      <PageHero
-        eyebrow="Withdraw"
-        title="Prepare for payout requests and payout tracking"
-        description="This workspace now shows real payout readiness so CBT operators can see what is withdrawable, what is still pending release, and what is blocked by disputes."
+      <PageHeader
+        title="Withdraw"
+        description="See what's withdrawable, pending release, and blocked by disputes."
         actions={
           <Link
             href="/earnings"
-            className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-white"
+            className="inline-flex items-center justify-center rounded-2xl border border-brand-line bg-brand-surface px-4 py-2.5 text-sm font-semibold text-brand-ink transition hover:shadow-sm"
           >
-            Back to earnings
+            Earnings
           </Link>
         }
       />

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { AlertCircle, Banknote, Clock3, TrendingUp, WalletCards } from 'lucide-react';
 import { AccountPanel } from '@/components/shared/account-panel';
 import { EmptyState } from '@/components/shared/empty-state';
-import { PageHero } from '@/components/shared/page-hero';
+import { PageHeader } from '@/components/shared/page-header';
 import { ScrollCardBody } from '@/components/shared/scroll-card-body';
 import { SkeletonLine } from '@/components/shared/skeleton-loader';
 import { useCbtEarnings } from '@/hooks/use-cbt-earnings';
@@ -39,14 +39,13 @@ export default function EarningsPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 md:flex md:h-full md:flex-col md:overflow-hidden md:p-8">
-      <PageHero
-        eyebrow="Earnings"
+      <PageHeader
         title="Monitor release timing and payout readiness"
         description="Released commissions, pending release windows, and blocked payouts now all stay visible in one workspace."
         actions={
           <Link
             href="/withdraw"
-            className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-white"
+            className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-brand-line bg-brand-surface px-4 py-3 text-sm font-semibold text-brand-ink transition hover:bg-white"
           >
             Open withdraw
           </Link>

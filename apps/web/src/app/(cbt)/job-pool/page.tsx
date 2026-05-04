@@ -8,7 +8,7 @@ import { Briefcase, Loader2, Search } from 'lucide-react';
 import { MobileSheet } from '@/components/shared/mobile-sheet';
 import { EmptyState } from '@/components/shared/empty-state';
 import { FilePreviewGallery } from '@/components/shared/file-preview-gallery';
-import { PageHero } from '@/components/shared/page-hero';
+import { PageHeader } from '@/components/shared/page-header';
 import { SkeletonBlock, SkeletonLine } from '@/components/shared/skeleton-loader';
 import {
   useCbtJobDetail,
@@ -173,16 +173,15 @@ export default function JobPoolPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-5 p-4 md:flex md:h-full md:flex-col md:overflow-hidden md:space-y-6 md:p-8">
-      <PageHero
-        eyebrow="Job Pool"
-        title="Review available requests for your center"
-        description="Review eligible manual requests, inspect uploaded files, and claim the next job your center can handle."
+      <PageHeader
+        title="Job Pool"
+        description="Review eligible manual requests, inspect files, and claim jobs for your center."
         actions={
           <Link
             href="/my-jobs"
-            className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-white"
+            className="inline-flex items-center justify-center rounded-2xl border border-brand-line bg-brand-surface px-4 py-2.5 text-sm font-semibold text-brand-ink transition hover:shadow-sm"
           >
-            Open my jobs
+            My Jobs
           </Link>
         }
       />

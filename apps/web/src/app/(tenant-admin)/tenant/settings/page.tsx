@@ -22,7 +22,7 @@ import {
 } from '@/hooks/use-tenant-admin';
 import { DetailModal } from '@/components/shared/detail-modal';
 import { FeedbackBanner } from '@/components/shared/feedback-banner';
-import { PageHero } from '@/components/shared/page-hero';
+import { PageHeader } from '@/components/shared/page-header';
 import { SkeletonBlock } from '@/components/shared/skeleton-loader';
 import { EmptyState } from '@/components/shared/empty-state';
 import { InfoHint } from '@/components/shared/info-hint';
@@ -315,10 +315,9 @@ export default function TenantSettingsPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-8">
-      <PageHero
-        eyebrow="Business workspace"
-        title="Portal settings"
-        description="Configure brand details, domain, homepage content, and admin access for this business portal."
+      <PageHeader
+        title="Portal Settings"
+        description="Brand details, domain, homepage content, and admin access for this business."
       />
 
       {/* Tile grid */}

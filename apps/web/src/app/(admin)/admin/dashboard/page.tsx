@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Activity, AlertCircle, Briefcase, Building2, Clock3, DollarSign, Receipt, Users } from 'lucide-react';
 import { DetailModal } from '@/components/shared/detail-modal';
 import { EmptyState } from '@/components/shared/empty-state';
-import { PageHero } from '@/components/shared/page-hero';
+import { PageHeader } from '@/components/shared/page-header';
 import { SkeletonBlock } from '@/components/shared/skeleton-loader';
 import { StatCard } from '@/components/shared/stat-card';
 import { useAdminOperationsOverview } from '@/hooks/use-admin-operations';
@@ -103,25 +103,24 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-8">
-      <PageHero
-        eyebrow="Platform admin dashboard"
-        title="Run the platform from one operating view"
-        description="See business growth, money pressure, support load, and payout readiness without jumping across multiple screens."
+      <PageHeader
+        title="Platform Overview"
+        description="Business growth, money pressure, support load, and payout readiness in one view."
         actions={
-          <>
+          <div className="flex gap-2">
             <Link
               href="/admin/users"
-              className="inline-flex items-center justify-center rounded-2xl bg-[#0D1B3E] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#132754]"
+              className="inline-flex items-center justify-center rounded-2xl bg-brand-navy px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-navy-strong"
             >
-              Open business and user control
+              Users
             </Link>
             <Link
               href="/admin/finance"
-              className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-white"
+              className="inline-flex items-center justify-center rounded-2xl border border-brand-line bg-brand-surface px-4 py-2.5 text-sm font-semibold text-brand-ink transition hover:shadow-sm"
             >
-              Open finance
+              Finance
             </Link>
-          </>
+          </div>
         }
       />
 

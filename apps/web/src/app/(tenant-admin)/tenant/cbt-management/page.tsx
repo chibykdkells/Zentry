@@ -6,7 +6,7 @@ import { CbtApprovalStatus } from '@zendocx/types';
 import { AlertTriangle, CheckCircle2, ExternalLink, Loader2, ShieldCheck, XCircle } from 'lucide-react';
 import { DetailModal } from '@/components/shared/detail-modal';
 import { EmptyState } from '@/components/shared/empty-state';
-import { PageHero } from '@/components/shared/page-hero';
+import { PageHeader } from '@/components/shared/page-header';
 import { SkeletonBlock } from '@/components/shared/skeleton-loader';
 import {
   useAdminCbtApplications,
@@ -150,10 +150,9 @@ export default function TenantCbtManagementPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-4 md:p-8">
-      <PageHero
-        eyebrow="CBT operator management"
-        title="Registered CBT centers"
-        description="Review applications, assign supported service categories, and approve or reject licensed fulfillers registered in this business portal."
+      <PageHeader
+        title="CBT Centers"
+        description="Review applications, assign service categories, and approve or reject licensed fulfillers."
       />
 
       {/* Tab switcher */}

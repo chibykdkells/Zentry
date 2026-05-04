@@ -12,6 +12,7 @@ import { useMediaQuery } from '@/hooks/use-media-query';
 import { useServiceCatalog } from '@/hooks/use-service-catalog';
 import { formatNaira } from '@/lib/format';
 import { catalogCategoriesMeta } from '@/lib/service-catalog';
+import { resolveTenantSlugForRequest } from '@/lib/tenant-runtime';
 import { cn } from '@/lib/utils';
 import { ServiceDeliveryMode } from '@zendocx/types';
 
@@ -23,10 +24,13 @@ export default function ServicesPage() {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const isMobile = useMediaQuery('(max-width: 767px)');
+  const tenantSlug =
+    typeof window !== 'undefined' ? resolveTenantSlugForRequest() : null;
 
   const { categories, services, loading, error, reload } = useServiceCatalog({
     search: query,
     categorySlug: activeCategory === 'ALL' ? undefined : activeCategory,
+    tenantSlug: tenantSlug ?? undefined,
   });
   const { reload: reloadOrders } = useOrders();
 

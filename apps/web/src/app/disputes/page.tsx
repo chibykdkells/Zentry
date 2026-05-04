@@ -10,7 +10,7 @@ import {
 import { ProtectedShell } from '@/components/layout/protected-shell';
 import { EmptyState } from '@/components/shared/empty-state';
 import { AccountPanel } from '@/components/shared/account-panel';
-import { PageHero } from '@/components/shared/page-hero';
+import { PageHeader } from '@/components/shared/page-header';
 import { ScrollCardBody } from '@/components/shared/scroll-card-body';
 import {
   SkeletonLine,
@@ -36,25 +36,24 @@ export default function DisputesPage() {
   return (
     <ProtectedShell title="Disputes">
       <div className="mx-auto max-w-6xl space-y-6 p-4 md:flex md:h-full md:flex-col md:overflow-hidden md:p-8">
-        <PageHero
-          eyebrow="Disputes"
-          title="Track active dispute cases from your completed orders"
-          description="Disputes are now live for CBT-fulfilled orders that already have a result. Open a case from the orders workspace, then follow the review status here. When funds are still on hold, requester-favor resolutions can now return funds directly to the wallet."
+        <PageHeader
+          title="Disputes"
+          description="Track active dispute cases from your completed orders."
           actions={
-            <>
+            <div className="flex gap-2">
               <Link
                 href="/orders"
-                className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-white"
+                className="inline-flex items-center justify-center rounded-2xl border border-brand-line bg-brand-surface px-4 py-2.5 text-sm font-semibold text-brand-ink transition hover:shadow-sm"
               >
-                Open orders
+                Orders
               </Link>
               <Link
                 href="/support"
-                className="inline-flex min-h-11 items-center justify-center rounded-2xl bg-[#0D1B3E] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#132754]"
+                className="inline-flex items-center justify-center rounded-2xl bg-brand-navy px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-navy-strong"
               >
-                Support workspace
+                Support
               </Link>
-            </>
+            </div>
           }
         />
 

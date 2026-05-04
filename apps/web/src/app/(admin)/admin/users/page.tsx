@@ -18,7 +18,7 @@ import { UserRole } from '@zendocx/types';
 import { DetailModal } from '@/components/shared/detail-modal';
 import { EmptyState } from '@/components/shared/empty-state';
 import { FeedbackBanner } from '@/components/shared/feedback-banner';
-import { PageHero } from '@/components/shared/page-hero';
+import { PageHeader } from '@/components/shared/page-header';
 import { SkeletonBlock } from '@/components/shared/skeleton-loader';
 import {
   useCreateTenantAdmin,
@@ -452,16 +452,15 @@ export default function AdminUsersPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-8">
-      <PageHero
-        eyebrow="Business Access"
-        title="Create businesses and manage the people inside them"
-        description="Open a new business, set up its admin, and inspect who belongs to each business."
+      <PageHeader
+        title="Users & Businesses"
+        description="Create businesses, set up admins, and manage platform users."
         actions={
           <Link
             href="/admin/dashboard"
-            className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-white"
+            className="inline-flex items-center justify-center rounded-2xl border border-brand-line bg-brand-surface px-4 py-2.5 text-sm font-semibold text-brand-ink transition hover:shadow-sm"
           >
-            Return to dashboard
+            Dashboard
           </Link>
         }
       />

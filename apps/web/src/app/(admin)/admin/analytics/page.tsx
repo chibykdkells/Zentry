@@ -15,7 +15,7 @@ import {
 } from 'recharts';
 import { Download, RefreshCw, TrendingUp, Users, Wallet, Briefcase } from 'lucide-react';
 import { EmptyState } from '@/components/shared/empty-state';
-import { PageHero } from '@/components/shared/page-hero';
+import { PageHeader } from '@/components/shared/page-header';
 import { SkeletonBlock } from '@/components/shared/skeleton-loader';
 import {
   useAnalyticsOverview,
@@ -111,16 +111,15 @@ export default function AdminAnalyticsPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-8">
-      <PageHero
-        eyebrow="Analytics"
-        title="Platform performance overview"
-        description="Revenue trends, service demand, CBT output, and user growth across your platform."
+      <PageHeader
+        title="Analytics"
+        description="Revenue trends, service demand, CBT output, and user growth."
         actions={
           <div className="flex gap-2">
             <button
               type="button"
               onClick={() => handleExport('orders')}
-              className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              className="inline-flex items-center gap-2 rounded-2xl border border-brand-line bg-brand-surface px-4 py-2.5 text-sm font-semibold text-brand-ink transition hover:shadow-sm"
             >
               <Download size={14} />
               Orders CSV
@@ -128,7 +127,7 @@ export default function AdminAnalyticsPage() {
             <button
               type="button"
               onClick={() => handleExport('transactions')}
-              className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              className="inline-flex items-center gap-2 rounded-2xl border border-brand-line bg-brand-surface px-4 py-2.5 text-sm font-semibold text-brand-ink transition hover:shadow-sm"
             >
               <Download size={14} />
               Transactions CSV

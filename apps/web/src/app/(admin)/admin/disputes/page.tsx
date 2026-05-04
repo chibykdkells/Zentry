@@ -10,7 +10,7 @@ import {
 import { AdminDisputeReviewPanel } from '@/components/admin/admin-dispute-review-panel';
 import { AccountPanel } from '@/components/shared/account-panel';
 import { EmptyState } from '@/components/shared/empty-state';
-import { PageHero } from '@/components/shared/page-hero';
+import { PageHeader } from '@/components/shared/page-header';
 import { ScrollCardBody } from '@/components/shared/scroll-card-body';
 import {
   SkeletonBlock,
@@ -103,10 +103,9 @@ export default function AdminDisputesPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 md:flex md:h-full md:flex-col md:overflow-hidden md:p-8">
-      <PageHero
-        eyebrow="Admin Disputes"
-        title="Review disputed orders, redo requests, and financial exposure"
-        description="This workspace brings live dispute cases into one place so admin decisions stay consistent with release protection and future refund or penalty handling."
+      <PageHeader
+        title="Disputes"
+        description="Live dispute cases, redo requests, and financial exposure in one place."
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import toast from 'react-hot-toast';
 import { Check, Loader2, RefreshCw, Settings2 } from 'lucide-react';
 import { EmptyState } from '@/components/shared/empty-state';
-import { PageHero } from '@/components/shared/page-hero';
+import { PageHeader } from '@/components/shared/page-header';
 import { SkeletonBlock } from '@/components/shared/skeleton-loader';
 import { useSystemConfig, useUpdateSystemConfig } from '@/hooks/use-system-config';
 import { getApiErrorMessage } from '@/lib/api-error';
@@ -102,15 +102,14 @@ export default function AdminSystemConfigPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-4 md:p-8">
-      <PageHero
-        eyebrow="System Config"
-        title="Platform settings"
-        description="Control the dispute window, withdrawal limits, and commission rates. Changes take effect immediately for new orders."
+      <PageHeader
+        title="Platform Settings"
+        description="Dispute window, withdrawal limits, and commission rates. Changes apply to new orders."
         actions={
           <button
             type="button"
             onClick={() => void reload()}
-            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            className="inline-flex items-center gap-2 rounded-2xl border border-brand-line bg-brand-surface px-4 py-2.5 text-sm font-semibold text-brand-ink transition hover:shadow-sm"
           >
             <RefreshCw size={14} />
             Refresh

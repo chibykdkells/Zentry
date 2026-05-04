@@ -15,7 +15,7 @@ import {
 import { AccountPanel } from '@/components/shared/account-panel';
 import { DetailModal } from '@/components/shared/detail-modal';
 import { EmptyState } from '@/components/shared/empty-state';
-import { PageHero } from '@/components/shared/page-hero';
+import { PageHeader } from '@/components/shared/page-header';
 import { SkeletonBlock } from '@/components/shared/skeleton-loader';
 import { StatCard } from '@/components/shared/stat-card';
 import { useTenantOverview } from '@/hooks/use-tenant-admin';
@@ -96,37 +96,24 @@ export default function TenantDashboardPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-8">
-      <PageHero
-        eyebrow="Business command center"
-        title={`${overview.tenant.name} at a glance`}
-        description="Track this business's customers, operators, active work, and payout posture from one operating view."
+      <PageHeader
+        title={`${overview.tenant.name}`}
+        description="Customers, operators, active work, and payout posture at a glance."
         actions={
-          <>
+          <div className="flex flex-wrap gap-2">
             <Link
               href="/tenant/users"
-              className="inline-flex items-center gap-2 rounded-2xl bg-brand-button px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand-button-strong"
+              className="inline-flex items-center rounded-2xl bg-brand-navy px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-navy-strong"
             >
-              Manage users
+              Users
             </Link>
             <Link
               href="/tenant/services"
-              className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-white"
+              className="inline-flex items-center rounded-2xl border border-brand-line bg-brand-surface px-4 py-2.5 text-sm font-semibold text-brand-ink transition hover:shadow-sm"
             >
-              Business services
+              Services
             </Link>
-            <Link
-              href="/wallet"
-              className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-white"
-            >
-              Open wallet
-            </Link>
-            <Link
-              href="/tenant/providers"
-              className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-white"
-            >
-              API integrations
-            </Link>
-          </>
+          </div>
         }
       />
 

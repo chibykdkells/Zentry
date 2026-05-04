@@ -8,7 +8,7 @@ import { MobileSheet } from '@/components/shared/mobile-sheet';
 import { EmptyState } from '@/components/shared/empty-state';
 import { FilePreviewGallery } from '@/components/shared/file-preview-gallery';
 import { FilterChipGroup } from '@/components/shared/filter-chip-group';
-import { PageHero } from '@/components/shared/page-hero';
+import { PageHeader } from '@/components/shared/page-header';
 import { SkeletonBlock, SkeletonLine } from '@/components/shared/skeleton-loader';
 import {
   useCbtJobDetail,
@@ -288,16 +288,15 @@ export default function MyJobsPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-5 p-4 md:flex md:h-full md:flex-col md:overflow-hidden md:space-y-6 md:p-8">
-      <PageHero
-        eyebrow="My Jobs"
-        title="Track work your center has claimed or been assigned"
-        description="Follow each claimed job, review uploaded files, and submit finished work from one place."
+      <PageHeader
+        title="My Jobs"
+        description="Follow each claimed job, review files, and submit finished work."
         actions={
           <Link
             href="/job-pool"
-            className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-white"
+            className="inline-flex items-center justify-center rounded-2xl border border-brand-line bg-brand-surface px-4 py-2.5 text-sm font-semibold text-brand-ink transition hover:shadow-sm"
           >
-            Return to job pool
+            Job Pool
           </Link>
         }
       />

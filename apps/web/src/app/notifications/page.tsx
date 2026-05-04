@@ -6,7 +6,7 @@ import { ProtectedShell } from '@/components/layout/protected-shell';
 import { EmptyState } from '@/components/shared/empty-state';
 import { AccountPanel } from '@/components/shared/account-panel';
 import { FilterChipGroup } from '@/components/shared/filter-chip-group';
-import { PageHero } from '@/components/shared/page-hero';
+import { PageHeader } from '@/components/shared/page-header';
 import { ScrollCardBody } from '@/components/shared/scroll-card-body';
 import {
   useMarkAllNotificationsRead,
@@ -75,19 +75,16 @@ export default function NotificationsPage() {
   return (
     <ProtectedShell title="Notifications">
       <div className="mx-auto max-w-5xl space-y-5 p-4 md:flex md:h-full md:flex-col md:overflow-hidden md:space-y-6 md:p-8">
-        <PageHero
-          eyebrow="Notifications"
-          title="Stay on top of account, wallet, and order updates"
-          description="Notifications are delivered in real time and synced across all your sessions."
+        <PageHeader
+          title="Notifications"
+          description="Account, wallet, and order updates in real time."
           actions={
-            <div className="flex flex-col items-stretch gap-3 md:items-end">
+            <div className="flex flex-wrap items-center gap-2">
               {browserPermission === 'default' ? (
                 <button
                   type="button"
-                  onClick={() => {
-                    void enableBrowserAlerts();
-                  }}
-                  className="rounded-2xl border border-[#0D1B3E]/10 bg-white px-4 py-2.5 text-sm font-semibold text-[#0D1B3E] transition hover:bg-slate-50"
+                  onClick={() => { void enableBrowserAlerts(); }}
+                  className="rounded-2xl border border-brand-line bg-brand-surface px-4 py-2.5 text-sm font-semibold text-brand-ink transition hover:shadow-sm"
                 >
                   Enable browser alerts
                 </button>
@@ -96,26 +93,20 @@ export default function NotificationsPage() {
                 pushStatus?.isSubscribed ? (
                   <button
                     type="button"
-                    onClick={() => {
-                      void disablePush.mutateAsync();
-                    }}
+                    onClick={() => { void disablePush.mutateAsync(); }}
                     disabled={disablePush.isPending}
                     className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-50"
                   >
-                    Disable background push
+                    Disable push
                   </button>
                 ) : (
                   <button
                     type="button"
-                    onClick={() => {
-                      if (pushConfig.publicKey) {
-                        void enablePush.mutateAsync(pushConfig.publicKey);
-                      }
-                    }}
+                    onClick={() => { if (pushConfig.publicKey) { void enablePush.mutateAsync(pushConfig.publicKey); } }}
                     disabled={enablePush.isPending || !pushConfig.publicKey}
-                    className="rounded-2xl border border-[#0D1B3E]/10 bg-[#0D1B3E] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#10224d] disabled:opacity-50"
+                    className="rounded-2xl bg-brand-navy px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-navy-strong disabled:opacity-50"
                   >
-                    Enable background push
+                    Enable push
                   </button>
                 )
               ) : null}
@@ -125,10 +116,7 @@ export default function NotificationsPage() {
                 options={[
                   { id: 'all', label: `All (${totalCount})` },
                   { id: 'unread', label: `Unread (${unreadCount})` },
-                  {
-                    id: 'read',
-                    label: `Read (${Math.max(totalCount - unreadCount, 0)})`,
-                  },
+                  { id: 'read', label: `Read (${Math.max(totalCount - unreadCount, 0)})` },
                 ]}
               />
             </div>

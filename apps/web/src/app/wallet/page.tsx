@@ -17,7 +17,7 @@ import { ProtectedShell } from '@/components/layout/protected-shell';
 import { DetailModal } from '@/components/shared/detail-modal';
 import { EmptyState } from '@/components/shared/empty-state';
 import { FeedbackBanner } from '@/components/shared/feedback-banner';
-import { PageHero } from '@/components/shared/page-hero';
+import { PageHeader } from '@/components/shared/page-header';
 import { ScrollCardBody } from '@/components/shared/scroll-card-body';
 import {
   SkeletonBlock,
@@ -259,14 +259,13 @@ export default function WalletPage() {
           onSuccess={reload}
         />
 
-        <PageHero
-          eyebrow="Wallet"
+        <PageHeader
           title={
             isTenantAdmin
-              ? 'Business wallet'
+              ? 'Business Wallet'
               : isPlatformOwner
-                ? 'Platform wallet'
-              : 'Wallet workspace'
+                ? 'Platform Wallet'
+              : 'Wallet'
           }
           description={walletHeroDescription}
         />

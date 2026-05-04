@@ -25,7 +25,7 @@ const PASTEL_PALETTES = [
 
 export function TenantPortalHome({ tenantSlug }: TenantPortalHomeProps) {
   const tenant = useTenantStore((state) => state.tenant);
-  const { services, loading } = useServiceCatalog({});
+  const { services, loading } = useServiceCatalog({ tenantSlug });
 
   const brandName = tenant?.name ?? 'This business';
   const heading =

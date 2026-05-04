@@ -15,7 +15,7 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { FilePreviewGallery } from '@/components/shared/file-preview-gallery';
 import { FilterChipGroup } from '@/components/shared/filter-chip-group';
 import { MobileSheet } from '@/components/shared/mobile-sheet';
-import { PageHero } from '@/components/shared/page-hero';
+import { PageHeader } from '@/components/shared/page-header';
 import {
   SkeletonBlock,
   SkeletonLine,
@@ -493,10 +493,9 @@ export default function OrdersPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-5 p-4 md:flex md:h-full md:flex-col md:overflow-hidden md:space-y-6 md:p-8">
-      <PageHero
-        eyebrow="Orders Workspace"
-        title="Track requests from submission to completion"
-        description="Review submitted details, uploaded files, finished work, and payment movement without leaving this page."
+      <PageHeader
+        title="Orders"
+        description="Track your service requests from submission to completion."
         actions={
           <Link
             href="/services"
@@ -845,13 +844,17 @@ function canRaiseDispute(
 
 function StatusBadge({ status }: { status: OrderStatus }) {
   const tone =
-    status === OrderStatus.COMPLETED
-      ? 'bg-emerald-50 text-emerald-700'
-      : status === OrderStatus.PENDING
-        ? 'bg-amber-50 text-amber-700'
-        : status === OrderStatus.DISPUTED || status === OrderStatus.REFUNDED
-          ? 'bg-rose-50 text-rose-700'
-          : 'bg-slate-100 text-slate-600';
+    status === OrderStatus.PENDING
+      ? 'bg-amber-100 text-amber-700'
+      : status === OrderStatus.ASSIGNED
+        ? 'bg-blue-100 text-blue-700'
+        : status === OrderStatus.IN_PROGRESS
+          ? 'bg-cyan-100 text-cyan-700'
+          : status === OrderStatus.COMPLETED
+            ? 'bg-emerald-100 text-emerald-700'
+            : status === OrderStatus.DISPUTED
+              ? 'bg-rose-100 text-rose-700'
+              : 'bg-slate-100 text-slate-500';
 
   return (
     <span className={`rounded-full px-3 py-1 text-xs font-semibold ${tone}`}>

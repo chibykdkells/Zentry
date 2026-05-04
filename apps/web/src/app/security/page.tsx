@@ -22,7 +22,7 @@ import {
 import { ProtectedShell } from '@/components/layout/protected-shell';
 import { EmptyState } from '@/components/shared/empty-state';
 import { AccountPanel } from '@/components/shared/account-panel';
-import { PageHero } from '@/components/shared/page-hero';
+import { PageHeader } from '@/components/shared/page-header';
 import { useAuthProfile } from '@/hooks/use-auth-profile';
 import apiClient from '@/lib/api-client';
 import { getApiErrorMessage } from '@/lib/api-error';
@@ -70,21 +70,20 @@ export default function SecurityPage() {
   return (
     <ProtectedShell title="Security">
       <div className="mx-auto max-w-6xl space-y-5 p-4 md:space-y-6 md:p-8">
-        <PageHero
-          eyebrow="Security"
-          title="Protect your account and wallet access"
-          description="This page now reflects the real auth and wallet-protection capabilities already available in the backend."
-          aside={
-            <>
+        <PageHeader
+          title="Security"
+          description="Protect your account and wallet access."
+          actions={
+            <div className="flex gap-2">
               <SecurityBadge
-                label="Email status"
+                label="Email"
                 value={profile.isEmailVerified ? 'Verified' : 'Pending'}
               />
               <SecurityBadge
                 label="Wallet PIN"
-                value={profile.hasWalletPin ? 'Configured' : 'Not set'}
+                value={profile.hasWalletPin ? 'Set' : 'Not set'}
               />
-            </>
+            </div>
           }
         />
 
