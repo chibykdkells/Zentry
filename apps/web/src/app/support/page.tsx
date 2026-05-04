@@ -15,7 +15,7 @@ import {
 export default function SupportPage() {
   return (
     <ProtectedShell title="Support">
-      <div className="mx-auto max-w-6xl space-y-6 p-4 md:flex md:h-full md:flex-col md:overflow-hidden md:p-8">
+      <div className="mx-auto max-w-6xl space-y-6 p-4 md:flex md:h-full md:flex-col md:p-8 xl:overflow-hidden">
         <PageHeader
           title="Support"
           description="Find help, recovery guidance, and next steps."
@@ -29,7 +29,7 @@ export default function SupportPage() {
           }
         />
 
-        <section className="grid gap-4 xl:grid-cols-3">
+        <section className="grid gap-4 lg:grid-cols-3">
           {supportQuickActions.map((action) => (
             <article
               key={action.title}

@@ -1,6 +1,8 @@
 'use client';
 
 import Link from 'next/link';
+import { useState } from 'react';
+import { History, ReceiptText, X } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth.store';
 import { useAuthProfile } from '@/hooks/use-auth-profile';
 import { useOrders } from '@/hooks/use-orders';
@@ -63,6 +65,7 @@ export default function HomePage() {
   const user = useAuthStore((s) => s.user);
   const { profile, loading } = useAuthProfile();
   const { orders, loading: ordersLoading } = useOrders();
+  const [historyOpen, setHistoryOpen] = useState(false);
   const tenantSlug =
     typeof window !== 'undefined' ? resolveTenantSlugForRequest() : null;
 
@@ -103,8 +106,7 @@ export default function HomePage() {
           actionLabel="Fund Account"
           secondaryAction={{
             label: 'History',
-            onClick: () =>
-              window.location.assign(appendTenantContextToPath('/wallet', tenantSlug)),
+            onClick: () => setHistoryOpen(true),
           }}
         />
       )}
@@ -213,6 +215,97 @@ export default function HomePage() {
           </div>
         )}
       </section>
+
+      <HistoryChooserSheet
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        tenantSlug={tenantSlug}
+      />
+    </div>
+  );
+}
+
+function HistoryChooserSheet({
+  open,
+  onClose,
+  tenantSlug,
+}: {
+  open: boolean;
+  onClose: () => void;
+  tenantSlug: string | null;
+}) {
+  if (!open) return null;
+
+  function go(panel: 'report' | 'history') {
+    const path = appendTenantContextToPath(`/wallet?panel=${panel}`, tenantSlug);
+    window.location.assign(path);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
+      {/* backdrop */}
+      <div
+        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+        onClick={onClose}
+      />
+
+      {/* sheet */}
+      <div className="relative w-full max-w-sm rounded-t-[2rem] bg-white px-5 pb-8 pt-5 shadow-2xl sm:rounded-[2rem]">
+        {/* drag pill (mobile) */}
+        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-slate-200 sm:hidden" />
+
+        <div className="mb-5 flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-bold text-brand-ink">Wallet</h2>
+            <p className="mt-0.5 text-xs text-brand-muted">Choose what to view</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition hover:bg-slate-200"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() => go('report')}
+            className="group flex flex-col gap-3 rounded-[1.5rem] border border-slate-200 bg-white p-4 text-left transition hover:border-slate-300 hover:shadow-sm active:scale-[0.97]"
+          >
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#0D1B3E] text-white">
+              <ReceiptText size={20} />
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                Wallet Report
+              </p>
+              <p className="mt-0.5 text-sm font-bold text-slate-900">
+                Filter &amp; search
+              </p>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => go('history')}
+            className="group flex flex-col gap-3 rounded-[1.5rem] border border-slate-200 bg-white p-4 text-left transition hover:border-slate-300 hover:shadow-sm active:scale-[0.97]"
+          >
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-600 text-white">
+              <History size={20} />
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                Transaction History
+              </p>
+              <p className="mt-0.5 text-sm font-bold text-slate-900">
+                Recent activity
+              </p>
+            </div>
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

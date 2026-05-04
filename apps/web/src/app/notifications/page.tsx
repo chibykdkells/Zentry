@@ -74,7 +74,7 @@ export default function NotificationsPage() {
 
   return (
     <ProtectedShell title="Notifications">
-      <div className="mx-auto max-w-5xl space-y-5 p-4 md:flex md:h-full md:flex-col md:overflow-hidden md:space-y-6 md:p-8">
+      <div className="mx-auto max-w-5xl space-y-5 p-4 md:flex md:h-full md:flex-col md:space-y-6 md:p-8 xl:overflow-hidden">
         <PageHeader
           title="Notifications"
           description="Account, wallet, and order updates in real time."

@@ -287,7 +287,7 @@ export default function MyJobsPage() {
   );
 
   return (
-    <div className="mx-auto max-w-7xl space-y-5 p-4 md:flex md:h-full md:flex-col md:overflow-hidden md:space-y-6 md:p-8">
+    <div className="mx-auto max-w-7xl space-y-5 p-4 md:flex md:h-full md:flex-col xl:overflow-hidden md:space-y-6 md:p-8">
       <PageHeader
         title="My Jobs"
         description="Follow each claimed job, review files, and submit finished work."

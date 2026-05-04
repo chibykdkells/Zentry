@@ -35,7 +35,7 @@ export default function DisputesPage() {
 
   return (
     <ProtectedShell title="Disputes">
-      <div className="mx-auto max-w-6xl space-y-6 p-4 md:flex md:h-full md:flex-col md:overflow-hidden md:p-8">
+      <div className="mx-auto max-w-6xl space-y-6 p-4 md:flex md:h-full md:flex-col md:p-8 xl:overflow-hidden">
         <PageHeader
           title="Disputes"
           description="Track active dispute cases from your completed orders."

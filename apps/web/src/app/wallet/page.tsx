@@ -87,6 +87,15 @@ export default function WalletPage() {
   } = useMyWithdrawalRequests({ page: 1, limit: 6, status: 'ALL' });
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const panel = new URLSearchParams(window.location.search).get('panel');
+    if (panel === 'report' || panel === 'history') {
+      setOpenTile(panel);
+      window.history.replaceState({}, '', '/wallet');
+    }
+  }, []);
+
+  useEffect(() => {
     if (typeof window === 'undefined') {
       return;
     }

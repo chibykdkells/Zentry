@@ -403,7 +403,7 @@ export default function AdminOrdersPage() {
   );
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-4 md:flex md:h-full md:flex-col md:overflow-hidden md:p-8">
+    <div className="mx-auto max-w-7xl space-y-6 p-4 md:flex md:h-full md:flex-col xl:overflow-hidden md:p-8">
       <PageHeader
         title="Orders"
         description="Review order flow across the whole platform."

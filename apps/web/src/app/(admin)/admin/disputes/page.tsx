@@ -102,7 +102,7 @@ export default function AdminDisputesPage() {
   );
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-4 md:flex md:h-full md:flex-col md:overflow-hidden md:p-8">
+    <div className="mx-auto max-w-7xl space-y-6 p-4 md:flex md:h-full md:flex-col xl:overflow-hidden md:p-8">
       <PageHeader
         title="Disputes"
         description="Live dispute cases, redo requests, and financial exposure in one place."

@@ -48,7 +48,7 @@ export default function WithdrawPage() {
   ];
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 md:flex md:h-full md:flex-col md:overflow-hidden md:p-8">
+    <div className="mx-auto max-w-6xl space-y-6 p-4 md:flex md:h-full md:flex-col xl:overflow-hidden md:p-8">
       <PageHeader
         title="Withdraw"
         description="See what's withdrawable, pending release, and blocked by disputes."

@@ -156,7 +156,7 @@ export default function AdminFinancePage() {
     : [];
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 md:flex md:h-full md:flex-col md:overflow-hidden md:p-8">
+    <div className="mx-auto max-w-6xl space-y-6 p-4 md:flex md:h-full md:flex-col xl:overflow-hidden md:p-8">
       <PageHeader
         title="Finance"
         description="Platform earnings, customer funds, business balances, and payout activity."

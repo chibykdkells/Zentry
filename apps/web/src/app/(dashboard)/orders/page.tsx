@@ -492,7 +492,7 @@ export default function OrdersPage() {
   );
 
   return (
-    <div className="mx-auto max-w-7xl space-y-5 p-4 md:flex md:h-full md:flex-col md:overflow-hidden md:space-y-6 md:p-8">
+    <div className="mx-auto max-w-7xl space-y-5 p-4 md:flex md:h-full md:flex-col xl:overflow-hidden md:space-y-6 md:p-8">
       <PageHeader
         title="Orders"
         description="Track your service requests from submission to completion."

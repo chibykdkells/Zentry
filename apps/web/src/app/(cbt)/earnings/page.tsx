@@ -38,7 +38,7 @@ export default function EarningsPage() {
   ];
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 md:flex md:h-full md:flex-col md:overflow-hidden md:p-8">
+    <div className="mx-auto max-w-6xl space-y-6 p-4 md:flex md:h-full md:flex-col xl:overflow-hidden md:p-8">
       <PageHeader
         title="Monitor release timing and payout readiness"
         description="Released commissions, pending release windows, and blocked payouts now all stay visible in one workspace."

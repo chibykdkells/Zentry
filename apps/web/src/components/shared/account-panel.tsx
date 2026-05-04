@@ -48,7 +48,7 @@ export function AccountPanel({
         </div>
       ) : null}
 
-      <div className={cn('min-h-0 px-4 py-4 sm:px-6 sm:py-6', contentClassName)}>
+      <div className={cn('flex flex-1 flex-col min-h-0 px-4 py-4 sm:px-6 sm:py-6', contentClassName)}>
         {children}
       </div>
     </section>
