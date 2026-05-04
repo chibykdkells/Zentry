@@ -153,6 +153,7 @@
 - Confirmed the live API was generating Paystack callback URLs from `FRONTEND_URL=https://app.zendocx.net`.
 - Confirmed active user traffic for the wallet flow is occurring on `https://zendocx.net`, so Paystack was redirecting users back to the wrong frontend host after successful payment.
 - Confirmed multiple recent Paystack funding transactions were still stuck in `PENDING`, which is consistent with the callback-confirm step never completing on the correct host.
+- Confirmed a second bug after the host fix: the wallet page could try `POST /wallet/fund/confirm` before `AuthBootstrap` had restored the access token after the full-page Paystack redirect, so the confirm request failed once and never retried.
 
 **Backend fix for callback host mismatch:**
 - Updated wallet funding initialization so the callback URL is built from the real browser `Origin` header when present, instead of always using the static `FRONTEND_URL`.
@@ -161,6 +162,10 @@
   - `FRONTEND_URL`
   - `http://localhost:3000`
 - Stored the resolved callback URL in transaction metadata for easier production debugging on future funding attempts.
+
+**Frontend fix for redirect/auth race:**
+- Updated `/wallet` so payment confirmation waits for auth-store hydration, a persisted user, and a restored access token before it calls `POST /wallet/fund/confirm`.
+- This allows the confirm step to happen after the full-page redirect has finished rebuilding client auth state, instead of racing it.
 
 **Regression coverage:**
 - Added wallet service tests covering:
@@ -173,6 +178,7 @@
 - `apps/api/src/modules/wallet/wallet.controller.ts` — passes request origin into wallet funding init
 - `apps/api/src/modules/wallet/wallet.service.ts` — builds callback URL from live request origin with safe fallback
 - `apps/api/src/modules/wallet/wallet.service.spec.ts` — new regression coverage for callback-origin handling
+- `apps/web/src/app/wallet/page.tsx` — waits for auth restoration before confirming redirected Paystack funding references
 - `docs/ai-context/SESSION_LOG.md` — appended this session entry
 
 ### Decisions Made
@@ -184,6 +190,7 @@
 
 - [x] Phase 10: Production Paystack callback-host mismatch diagnosed
 - [x] Phase 10: Wallet funding callback origin fix implemented and covered by tests
+- [x] Phase 10: Wallet redirect confirmation waits for auth restoration after Paystack return
 
 ### Blockers / Notes for Next Session
 

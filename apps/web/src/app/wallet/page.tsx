@@ -58,6 +58,8 @@ const transactionStatusOptions: Array<{
 
 export default function WalletPage() {
   const user = useAuthStore((state) => state.user);
+  const accessToken = useAuthStore((state) => state.accessToken);
+  const hasHydrated = useAuthStore((state) => state.hasHydrated);
   const { wallet, loading, error, reload } = useWallet();
   const [fundingOpen, setFundingOpen] = useState(false);
   const [openTile, setOpenTile] = useState<string | null>(null);
@@ -103,7 +105,7 @@ export default function WalletPage() {
     const searchParams = new URLSearchParams(window.location.search);
     const reference = searchParams.get('reference');
 
-    if (!reference) {
+    if (!reference || !hasHydrated || !user || !accessToken) {
       return;
     }
 
@@ -145,7 +147,7 @@ export default function WalletPage() {
     return () => {
       cancelled = true;
     };
-  }, [reload, reloadTransactions]);
+  }, [accessToken, hasHydrated, reload, reloadTransactions, user]);
 
   if (loading) {
     return (
