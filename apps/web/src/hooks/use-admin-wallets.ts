@@ -1,7 +1,7 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
-import { UserRole } from '@zendocx/types';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { PaymentGateway, TransactionStatus, UserRole } from '@zendocx/types';
 import apiClient from '@/lib/api-client';
 import { getApiErrorMessage } from '@/lib/api-error';
 
@@ -197,6 +197,37 @@ interface AdminWalletListResponse {
   };
 }
 
+export interface AdminFundingReconciliationPreview {
+  reference: string;
+  canApply: boolean;
+  reasons: string[];
+  transaction: {
+    id: string;
+    status: TransactionStatus;
+    gateway: PaymentGateway | null;
+    gatewayRef: string | null;
+    amountKobo: string;
+    callbackUrl: string | null;
+    checkoutMode: string | null;
+    createdAt: string;
+  };
+  user: {
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    role: UserRole;
+    tenantId: string | null;
+  };
+  verification: {
+    success: boolean;
+    amountKobo: string | null;
+    gatewayRef: string | null;
+    paidAt: string | null;
+    error: string | null;
+  };
+}
+
 export function useAdminWalletOverview() {
   const query = useQuery({
     queryKey: ['wallet', 'admin', 'overview'] as const,
@@ -303,4 +334,48 @@ export function useAdminWallets(filters: AdminWalletFilters) {
       void query.refetch();
     },
   };
+}
+
+export function useAdminFundingReconciliationPreview() {
+  return useMutation({
+    mutationFn: async (reference: string) => {
+      const response = await apiClient.get<{ data: AdminFundingReconciliationPreview }>(
+        `/wallet/admin/funding-reconciliation?reference=${encodeURIComponent(reference.trim())}`,
+      );
+
+      return response.data.data;
+    },
+  });
+}
+
+export function useAdminFundingReconciliationApply() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (reference: string) => {
+      const response = await apiClient.post<{
+        message: string;
+        data: {
+          reference: string;
+          status: TransactionStatus;
+          amountKobo: string;
+          gateway: PaymentGateway | null;
+          gatewayRef: string | null;
+          balanceAfter?: string;
+          reconciledByAdmin: boolean;
+        };
+      }>('/wallet/admin/funding-reconciliation', {
+        reference: reference.trim(),
+      });
+
+      return response.data;
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['wallet', 'admin', 'overview'] }),
+        queryClient.invalidateQueries({ queryKey: ['wallet', 'admin', 'wallets'] }),
+        queryClient.invalidateQueries({ queryKey: ['wallet', 'admin', 'transactions'] }),
+      ]);
+    },
+  });
 }

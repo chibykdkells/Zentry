@@ -12,8 +12,8 @@
 
 ```
 Active Phase  : Phase 10 — Admin Analytics, Security Audit & Launch (IN PROGRESS)
-Last Session  : 2026-05-04 (Paystack wallet redirect diagnosis; callback-origin fix; auth-restore confirmation fix; production pending funding analysis)
-Next Action   : Reconcile already-pending Paystack funding references if verification succeeds, then finish production-truth closeout: Paystack webhook verification, Sentry Vercel env vars, app.zendocx.net CNAME, silent refresh, PWA install flow
+Last Session  : 2026-05-04 (Paystack callback-origin fix; wallet redirect confirmation race fix; platform-admin funding reconciliation tool built)
+Next Action   : Use the new admin funding reconciliation tool on already-pending successful references, then finish production-truth closeout: Paystack webhook verification, Sentry Vercel env vars, app.zendocx.net CNAME, silent refresh, PWA install flow
 ```
 
 ---
@@ -730,6 +730,7 @@ optimized. Production deployed.
 - [x] Services visibility fix — new platform services auto-included for tenants with custom selection (lastSelectionSavedAt logic)
 - [x] Fund wallet modal fully redesigned — bottom sheet pattern, quick-select chips, navy result card
 - [x] Services page accordion default-closed + URL ?categorySlug deep link from home page category tiles
+- [x] Platform-admin funding reconciliation tool — /admin/finance can preview a stuck funding reference against the active gateway and safely credit it through the normal ledger flow
 - [ ] Confirm password reset email delivery in production (run fly logs --app zentry-api-prod)
 - [ ] Sentry Vercel env vars still needed: NEXT_PUBLIC_SENTRY_DSN, SENTRY_ORG=zendocx, SENTRY_PROJECT=zendocx-web
 - [ ] app.zendocx.net CNAME record in Cloudflare (add app → cname.vercel-dns.com)

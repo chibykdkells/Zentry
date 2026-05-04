@@ -8,3 +8,4 @@ export * from './create-withdrawal-request.dto';
 export * from './get-my-withdrawals.dto';
 export * from './get-admin-withdrawals.dto';
 export * from './review-withdrawal-request.dto';
+export * from './admin-funding-reconciliation.dto';

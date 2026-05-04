@@ -17,6 +17,8 @@ import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import {
+  ApplyAdminFundingReconciliationDto,
+  GetAdminFundingReconciliationPreviewDto,
   ConfirmWalletFundingDto,
   CreateWithdrawalRequestDto,
   GetAdminWithdrawalsQueryDto,
@@ -62,6 +64,28 @@ export class WalletController {
     @CurrentUser() user: JwtUser,
   ) {
     return this.walletService.getAdminTransactions(query, user.tenantId);
+  }
+
+  @Roles(UserRole.SUPER_ADMIN)
+  @Get('admin/funding-reconciliation')
+  getAdminFundingReconciliationPreview(
+    @Query() query: GetAdminFundingReconciliationPreviewDto,
+  ) {
+    return this.walletService.getAdminFundingReconciliationPreview(
+      query.reference,
+    );
+  }
+
+  @Roles(UserRole.SUPER_ADMIN)
+  @Post('admin/funding-reconciliation')
+  applyAdminFundingReconciliation(
+    @CurrentUser() user: JwtUser,
+    @Body() dto: ApplyAdminFundingReconciliationDto,
+  ) {
+    return this.walletService.applyAdminFundingReconciliation(
+      dto.reference,
+      user.sub,
+    );
   }
 
   @Roles(UserRole.SUPER_ADMIN)

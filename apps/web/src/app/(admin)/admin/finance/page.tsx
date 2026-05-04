@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { LineChart, Search, ShieldCheck, Wallet } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { TransactionStatus, TransactionType, UserRole } from '@zendocx/types';
 import { AdminWithdrawalReview } from '@/components/admin/admin-withdrawal-review';
 import { AccountPanel } from '@/components/shared/account-panel';
@@ -11,12 +12,16 @@ import { PageHeader } from '@/components/shared/page-header';
 import { ScrollCardBody } from '@/components/shared/scroll-card-body';
 import { useAdminWalletTransactions } from '@/hooks/use-admin-wallet-transactions';
 import {
+  type AdminFundingReconciliationPreview,
+  useAdminFundingReconciliationApply,
+  useAdminFundingReconciliationPreview,
   useAdminCbtEarningsOverview,
   useAdminWalletOverview,
   useAdminWallets,
 } from '@/hooks/use-admin-wallets';
 import { usePlatformAdminTenants } from '@/hooks/use-platform-admin-tenants';
 import { WithdrawalRequestForm } from '@/components/wallet/withdrawal-request-form';
+import { getApiErrorMessage } from '@/lib/api-error';
 import { formatDate, formatNaira, formatTimeUntil } from '@/lib/format';
 
 const ALL_ROLE_FILTER = 'ALL';
@@ -86,6 +91,9 @@ export default function AdminFinancePage() {
     startDate: '',
     endDate: '',
   });
+  const [reconciliationReference, setReconciliationReference] = useState('');
+  const [previewResult, setPreviewResult] =
+    useState<AdminFundingReconciliationPreview | null>(null);
   const { overview, loading, error, reload } = useAdminWalletOverview();
   const { tenants } = usePlatformAdminTenants({ page: 1, limit: 100 });
   const {
@@ -124,6 +132,8 @@ export default function AdminFinancePage() {
     startDate: transactionFilters.startDate,
     endDate: transactionFilters.endDate,
   });
+  const previewFunding = useAdminFundingReconciliationPreview();
+  const applyFunding = useAdminFundingReconciliationApply();
 
   const statCards = overview
     ? [
@@ -362,6 +372,190 @@ export default function AdminFinancePage() {
           <WithdrawalRequestForm />
         </AccountPanel>
       </div>
+
+      <AccountPanel
+        title="Funding reconciliation"
+        description="Use this when Paystack or another gateway says a funding payment succeeded but the wallet still shows the transaction as pending."
+        contentClassName="space-y-4"
+      >
+        <div className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3 text-sm text-slate-500">
+          This tool verifies the reference with the active payment gateway first. It only credits the wallet through the normal ledger path when the provider confirms success and the amount matches the pending funding record.
+        </div>
+
+        <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto]">
+          <label className="space-y-2">
+            <span className="block text-sm font-medium text-slate-700">
+              Transaction reference
+            </span>
+            <input
+              value={reconciliationReference}
+              onChange={(event) => setReconciliationReference(event.target.value)}
+              placeholder="ZDX-TXN-..."
+              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-brand-navy focus:ring-2 focus:ring-brand-navy/10"
+            />
+          </label>
+
+          <button
+            type="button"
+            onClick={() => {
+              const normalized = reconciliationReference.trim();
+              if (!normalized) {
+                toast.error('Enter a funding reference first.');
+                return;
+              }
+
+              previewFunding.mutate(normalized, {
+                onSuccess: (data) => {
+                  setPreviewResult(data);
+                },
+                onError: (error: unknown) => {
+                  setPreviewResult(null);
+                  toast.error(
+                    getApiErrorMessage(
+                      error,
+                      'Could not preview that funding reference right now.',
+                    ),
+                  );
+                },
+              });
+            }}
+            disabled={previewFunding.isPending}
+            className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 lg:self-end"
+          >
+            {previewFunding.isPending ? 'Checking…' : 'Preview'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              const normalized = reconciliationReference.trim();
+              if (!normalized) {
+                toast.error('Enter a funding reference first.');
+                return;
+              }
+
+              applyFunding.mutate(normalized, {
+                onSuccess: (response) => {
+                  toast.success(response.message);
+                  void Promise.all([
+                    reload(),
+                    reloadWallets(),
+                    reloadTransactions(),
+                  ]);
+                  previewFunding.mutate(normalized, {
+                    onSuccess: (data) => {
+                      setPreviewResult(data);
+                    },
+                  });
+                },
+                onError: (error: unknown) => {
+                  toast.error(
+                    getApiErrorMessage(
+                      error,
+                      'Could not reconcile that funding reference right now.',
+                    ),
+                  );
+                },
+              });
+            }}
+            disabled={
+              applyFunding.isPending ||
+              previewFunding.isPending ||
+              !previewResult?.canApply ||
+              previewResult.reference !== reconciliationReference.trim()
+            }
+            className="rounded-2xl bg-brand-button px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand-button-strong disabled:cursor-not-allowed disabled:opacity-50 lg:self-end"
+          >
+            {applyFunding.isPending ? 'Reconciling…' : 'Credit wallet'}
+          </button>
+        </div>
+
+        {previewResult ? (
+          <div className="space-y-4 rounded-[1.5rem] border border-slate-200 bg-white p-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">
+                  {previewResult.user.firstName} {previewResult.user.lastName}
+                </p>
+                <p className="mt-1 text-sm text-slate-500">
+                  {previewResult.user.email} · {previewResult.reference}
+                </p>
+                <p className="mt-1 text-xs text-slate-400">
+                  Initiated {formatDate(previewResult.transaction.createdAt)}
+                </p>
+              </div>
+              <span
+                className={`rounded-full px-3 py-1.5 text-sm font-semibold ${
+                  previewResult.canApply
+                    ? 'bg-emerald-50 text-emerald-700'
+                    : 'bg-amber-50 text-amber-700'
+                }`}
+              >
+                {previewResult.canApply ? 'Safe to reconcile' : 'Needs review'}
+              </span>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <WalletMetric
+                label="Current status"
+                value={previewResult.transaction.status}
+              />
+              <WalletMetric
+                label="Pending amount"
+                value={formatNaira(previewResult.transaction.amountKobo)}
+              />
+              <WalletMetric
+                label="Gateway"
+                value={previewResult.transaction.gateway ?? 'Not set'}
+              />
+              <WalletMetric
+                label="Verified amount"
+                value={
+                  previewResult.verification.amountKobo
+                    ? formatNaira(previewResult.verification.amountKobo)
+                    : 'Not verified'
+                }
+              />
+            </div>
+
+            <div className="grid gap-3 xl:grid-cols-[1fr_1fr]">
+              <div className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.16em] text-slate-400">
+                  Callback URL
+                </p>
+                <p className="mt-2 break-all text-sm font-medium text-slate-700">
+                  {previewResult.transaction.callbackUrl ?? 'Not recorded'}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.16em] text-slate-400">
+                  Gateway verification
+                </p>
+                <p className="mt-2 text-sm font-medium text-slate-700">
+                  {previewResult.verification.error
+                    ? previewResult.verification.error
+                    : previewResult.verification.success
+                      ? `Confirmed${previewResult.verification.paidAt ? ` · ${formatDate(previewResult.verification.paidAt)}` : ''}`
+                      : 'Not confirmed yet'}
+                </p>
+              </div>
+            </div>
+
+            {previewResult.reasons.length ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+                <p className="text-sm font-semibold text-amber-800">
+                  Why this cannot be auto-credited yet
+                </p>
+                <div className="mt-2 space-y-2 text-sm text-amber-700">
+                  {previewResult.reasons.map((reason) => (
+                    <p key={reason}>{reason}</p>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </AccountPanel>
 
       <AccountPanel
         title="CBT payout readiness"

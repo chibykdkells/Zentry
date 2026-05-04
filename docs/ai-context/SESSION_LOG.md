@@ -199,6 +199,76 @@
 
 ---
 
+## Session 2026-05-04 (continued) — Platform admin funding reconciliation tool
+
+**Phase:** Phase 10
+**AI Assistant:** Codex (GPT-5)
+
+### What Was Done
+
+**Backend reconciliation workflow:**
+- Added a platform-admin preview endpoint for stuck wallet funding references:
+  - `GET /wallet/admin/funding-reconciliation?reference=...`
+- Added a platform-admin apply endpoint:
+  - `POST /wallet/admin/funding-reconciliation`
+- The preview verifies the reference with the active gateway, shows the current funding transaction state, the owner, callback URL, verified amount, and whether automatic reconciliation is safe.
+- Automatic reconciliation is blocked when:
+  - gateway verification fails
+  - the provider has not confirmed success
+  - the confirmed amount does not match the pending funding record
+  - the transaction was initialized on a different gateway than the one currently active
+  - the transaction is already marked failed
+- The apply path uses the existing wallet-funding ledger flow instead of a manual balance edit, so wallet balance, transaction state, notifications, and audit logs stay consistent.
+- Added an extra admin audit log entry for successful reconciliation actions.
+
+**Platform admin finance UI:**
+- Added a new "Funding reconciliation" panel to `/admin/finance`.
+- Admins can:
+  - enter a funding reference
+  - preview the gateway verification state
+  - see whether the reference is safe to auto-credit
+  - apply reconciliation directly from the finance screen
+- On success, the platform overview, wallet list, and wallet transaction feed are invalidated and refreshed.
+
+**Coverage and verification:**
+- Added focused wallet service tests for:
+  - eligible preview when gateway verification matches
+  - blocked preview when gateway amount mismatches
+- Verified:
+  - `pnpm --filter @zendocx/api test -- --runInBand src/modules/wallet/wallet.service.spec.ts`
+  - `pnpm --filter @zendocx/api exec tsc --noEmit`
+  - `pnpm --filter @zendocx/web exec eslint 'src/app/(admin)/admin/finance/page.tsx' 'src/hooks/use-admin-wallets.ts'`
+  - `pnpm --filter @zendocx/web build`
+
+### Files Created / Modified
+
+- `apps/api/src/modules/wallet/dto/admin-funding-reconciliation.dto.ts` — admin preview/apply DTOs
+- `apps/api/src/modules/wallet/dto/index.ts` — exported reconciliation DTOs
+- `apps/api/src/modules/wallet/wallet.controller.ts` — added admin reconciliation routes
+- `apps/api/src/modules/wallet/wallet.service.ts` — added preview/apply reconciliation logic
+- `apps/api/src/modules/wallet/wallet.service.spec.ts` — added reconciliation safety tests
+- `apps/web/src/hooks/use-admin-wallets.ts` — added admin preview/apply mutations and invalidation
+- `apps/web/src/app/(admin)/admin/finance/page.tsx` — added reconciliation panel to platform finance UI
+- `docs/ai-context/SESSION_LOG.md` — appended this session entry
+- `docs/ai-context/PHASES.md` — refreshed top-level status metadata
+
+### Decisions Made
+
+- Platform admins should never manually edit wallet balances for stuck successful payments. Reconciliation must always run through the existing wallet funding ledger path.
+- The admin tool is reference-driven, not user-driven, to reduce the chance of crediting the wrong wallet when support is handling payment complaints.
+
+### Phase Checklist Updates
+
+- [x] Phase 10: Platform-admin funding reconciliation tool built
+- [x] Phase 10: Finance UI can preview and reconcile stuck successful funding references safely
+
+### Blockers / Notes for Next Session
+
+- The admin tool is ready, but already-stuck successful references still need to be reconciled case by case after gateway verification succeeds.
+- Paystack webhook delivery still needs production-truth verification so fewer payments depend on redirect confirmation alone.
+
+---
+
 ## Session 2026-05-03 (continued 2) — CBT job delivery timer + extension request workflow
 
 **Phase:** Phase 4 / Phase 10

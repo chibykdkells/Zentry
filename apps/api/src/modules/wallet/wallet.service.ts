@@ -176,14 +176,33 @@ type FundingTransactionRecord = Prisma.TransactionGetPayload<{
     gateway: true;
     gatewayRef: true;
     metadata: true;
+    createdAt: true;
     wallet: {
       select: {
         id: true;
         availableBalance: true;
       };
     };
+    user: {
+      select: {
+        id: true;
+        email: true;
+        firstName: true;
+        lastName: true;
+        role: true;
+        tenantId: true;
+      };
+    };
   };
 }>;
+
+type FundingVerificationPreview = {
+  success: boolean;
+  amountKobo: string | null;
+  gatewayRef: string | null;
+  paidAt: string | null;
+  error: string | null;
+};
 
 type WithdrawalRequestRecord = Prisma.WithdrawalRequestGetPayload<{
   select: {
@@ -1847,6 +1866,168 @@ export class WalletService {
     };
   }
 
+  async getAdminFundingReconciliationPreview(reference: string) {
+    const normalizedReference = reference.trim();
+    const transaction = await this.findFundingTransaction(normalizedReference);
+    const checkoutMode = this.getCheckoutMode(transaction);
+    const callbackUrl = this.getFundingCallbackUrl(transaction);
+    const reasons: string[] = [];
+
+    if (
+      transaction.gateway &&
+      transaction.gateway !==
+        (this.paymentService.gatewayName as PaymentGateway)
+    ) {
+      reasons.push(
+        `This funding was initialized on ${transaction.gateway}, but the current active gateway is ${this.paymentService.gatewayName}. Switch the active gateway before reconciling this reference automatically.`,
+      );
+    }
+
+    if (transaction.status === TransactionStatus.FAILED) {
+      reasons.push(
+        'This funding transaction is already marked failed and should be reviewed manually before any credit attempt.',
+      );
+    }
+
+    const verification =
+      process.env.NODE_ENV === 'development' && checkoutMode === 'sandbox'
+        ? {
+            success: true,
+            amountKobo: transaction.amount.toString(),
+            gatewayRef: transaction.gatewayRef ?? `sandbox-${transaction.reference}`,
+            paidAt: null,
+            error: null,
+          }
+        : await this.paymentService
+            .verifyPayment(normalizedReference)
+            .then(
+              (result): FundingVerificationPreview => ({
+                success: result.success,
+                amountKobo: result.amountKobo.toString(),
+                gatewayRef: result.gatewayRef,
+                paidAt: result.paidAt?.toISOString() ?? null,
+                error: null,
+              }),
+            )
+            .catch((error: unknown): FundingVerificationPreview => ({
+              success: false,
+              amountKobo: null,
+              gatewayRef: null,
+              paidAt: null,
+              error:
+                error instanceof Error
+                  ? error.message
+                  : 'Gateway verification failed.',
+            }));
+
+    if (verification.error) {
+      reasons.push(
+        'Gateway verification could not be completed for this reference. Confirm the payment in the provider dashboard before trying again.',
+      );
+    } else if (!verification.success) {
+      reasons.push(
+        'The payment provider has not confirmed this reference as successful yet.',
+      );
+    } else if (verification.amountKobo !== transaction.amount.toString()) {
+      reasons.push(
+        'The provider confirmed a different amount than the pending wallet funding record.',
+      );
+    }
+
+    return {
+      message: 'Admin funding reconciliation preview retrieved',
+      data: {
+        reference: transaction.reference,
+        canApply: reasons.length === 0,
+        reasons,
+        transaction: {
+          id: transaction.id,
+          status: transaction.status,
+          gateway: transaction.gateway,
+          gatewayRef: transaction.gatewayRef,
+          amountKobo: transaction.amount.toString(),
+          callbackUrl,
+          checkoutMode,
+          createdAt: transaction.createdAt.toISOString(),
+        },
+        user: {
+          id: transaction.user.id,
+          email: transaction.user.email,
+          firstName: transaction.user.firstName,
+          lastName: transaction.user.lastName,
+          role: transaction.user.role,
+          tenantId: transaction.user.tenantId,
+        },
+        verification,
+      },
+    };
+  }
+
+  async applyAdminFundingReconciliation(reference: string, adminUserId: string) {
+    const normalizedReference = reference.trim();
+    const preview = await this.getAdminFundingReconciliationPreview(
+      normalizedReference,
+    );
+
+    if (!preview.data.canApply) {
+      throw new ConflictException(
+        preview.data.reasons[0] ??
+          'This funding reference is not eligible for automatic reconciliation.',
+      );
+    }
+
+    const transaction = await this.findFundingTransaction(normalizedReference);
+    const checkoutMode = this.getCheckoutMode(transaction);
+
+    const verification =
+      process.env.NODE_ENV === 'development' && checkoutMode === 'sandbox'
+        ? {
+            success: true,
+            amountKobo: transaction.amount,
+            gatewayRef: transaction.gatewayRef ?? `sandbox-${transaction.reference}`,
+          }
+        : await this.paymentService.verifyPayment(normalizedReference);
+
+    if (!verification.success) {
+      throw new BadRequestException(
+        'The payment provider has not confirmed this reference as successful yet.',
+      );
+    }
+
+    const result = await this.completeFundingTransaction({
+      transaction,
+      amountKobo: verification.amountKobo,
+      gatewayRef: verification.gatewayRef,
+      source: 'admin-reconciliation',
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId: adminUserId,
+        action: 'ADMIN_WALLET_FUNDING_RECONCILED',
+        entity: 'Transaction',
+        entityId: transaction.id,
+        newValues: {
+          reference: transaction.reference,
+          amountKobo: transaction.amount.toString(),
+          gateway: transaction.gateway,
+          gatewayRef: verification.gatewayRef,
+        },
+      },
+    });
+
+    return {
+      message:
+        result.message === 'Wallet funding already confirmed.'
+          ? 'Funding reference was already credited.'
+          : 'Funding reference reconciled successfully.',
+      data: {
+        ...result.data,
+        reconciledByAdmin: true,
+      },
+    };
+  }
+
   async getMyTransactions(
     userId: string,
     query: GetWalletTransactionsQueryDto,
@@ -2895,10 +3076,21 @@ export class WalletService {
         gateway: true,
         gatewayRef: true,
         metadata: true,
+        createdAt: true,
         wallet: {
           select: {
             id: true,
             availableBalance: true,
+          },
+        },
+        user: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            role: true,
+            tenantId: true,
           },
         },
       },
@@ -3003,6 +3195,11 @@ export class WalletService {
     return null;
   }
 
+  private getFundingCallbackUrl(transaction: FundingTransactionRecord) {
+    const callbackUrl = this.toMetadataRecord(transaction.metadata).callbackUrl;
+    return typeof callbackUrl === 'string' ? callbackUrl : null;
+  }
+
   private async completeFundingTransaction({
     transaction,
     amountKobo,
@@ -3012,7 +3209,11 @@ export class WalletService {
     transaction: FundingTransactionRecord;
     amountKobo: bigint;
     gatewayRef: string;
-    source: 'payment-webhook' | 'gateway-verification' | 'sandbox-confirmation';
+    source:
+      | 'payment-webhook'
+      | 'gateway-verification'
+      | 'sandbox-confirmation'
+      | 'admin-reconciliation';
   }) {
     if (transaction.status === TransactionStatus.SUCCESS) {
       return {

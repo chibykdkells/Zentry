@@ -1,4 +1,4 @@
-import { PaymentGateway, TransactionStatus, TransactionType } from '@prisma/client';
+import { PaymentGateway, TransactionStatus, TransactionType, UserRole } from '@prisma/client';
 import { WalletService } from './wallet.service';
 
 describe('WalletService', () => {
@@ -8,19 +8,32 @@ describe('WalletService', () => {
     user: {
       findUnique: jest.Mock;
     };
+    wallet: {
+      findUnique: jest.Mock;
+      update: jest.Mock;
+    };
     transaction: {
       create: jest.Mock;
       update: jest.Mock;
+      findUnique: jest.Mock;
+      updateMany: jest.Mock;
     };
     auditLog: {
       create: jest.Mock;
     };
+    notification: {
+      create: jest.Mock;
+    };
+    $transaction: jest.Mock;
   };
   let paymentService: {
     gatewayName: string;
     initiatePayment: jest.Mock;
+    verifyPayment: jest.Mock;
   };
-  let notificationsService: Record<string, never>;
+  let notificationsService: {
+    broadcastWalletUpdated: jest.Mock;
+  };
   let emailService: Record<string, never>;
   let service: WalletService;
 
@@ -31,21 +44,34 @@ describe('WalletService', () => {
       user: {
         findUnique: jest.fn(),
       },
+      wallet: {
+        findUnique: jest.fn(),
+        update: jest.fn(),
+      },
       transaction: {
         create: jest.fn(),
         update: jest.fn(),
+        findUnique: jest.fn(),
+        updateMany: jest.fn(),
       },
       auditLog: {
         create: jest.fn(),
       },
+      notification: {
+        create: jest.fn(),
+      },
+      $transaction: jest.fn(),
     };
 
     paymentService = {
       gatewayName: PaymentGateway.PAYSTACK,
       initiatePayment: jest.fn(),
+      verifyPayment: jest.fn(),
     };
 
-    notificationsService = {};
+    notificationsService = {
+      broadcastWalletUpdated: jest.fn(),
+    };
     emailService = {};
 
     service = new WalletService(
@@ -191,6 +217,97 @@ describe('WalletService', () => {
           type: TransactionType.WALLET_FUNDING,
         }),
       }),
+    );
+  });
+
+  it('previews a funding reference as eligible when gateway verification matches', async () => {
+    prisma.transaction.findUnique.mockResolvedValue({
+      id: 'tx-1',
+      walletId: 'wallet-1',
+      userId: 'user-1',
+      type: TransactionType.WALLET_FUNDING,
+      status: TransactionStatus.PENDING,
+      amount: 10000n,
+      reference: 'ZDX-TXN-123',
+      gateway: PaymentGateway.PAYSTACK,
+      gatewayRef: 'gateway-ref-1',
+      metadata: {
+        callbackUrl: 'https://zendocx.net/wallet',
+        checkoutMode: 'live',
+      },
+      createdAt: new Date('2026-05-04T18:00:00.000Z'),
+      wallet: {
+        id: 'wallet-1',
+        availableBalance: 0n,
+      },
+      user: {
+        id: 'user-1',
+        email: 'user@example.com',
+        firstName: 'Ada',
+        lastName: 'Lovelace',
+        role: UserRole.INDIVIDUAL,
+        tenantId: 'tenant-1',
+      },
+    });
+    paymentService.verifyPayment.mockResolvedValue({
+      success: true,
+      amountKobo: 10000n,
+      reference: 'ZDX-TXN-123',
+      gatewayRef: 'gateway-ref-1',
+      paidAt: new Date('2026-05-04T18:05:00.000Z'),
+    });
+
+    const result = await service.getAdminFundingReconciliationPreview('ZDX-TXN-123');
+
+    expect(result.data.canApply).toBe(true);
+    expect(result.data.reasons).toEqual([]);
+    expect(result.data.transaction.callbackUrl).toBe('https://zendocx.net/wallet');
+    expect(result.data.verification.success).toBe(true);
+    expect(result.data.verification.amountKobo).toBe('10000');
+  });
+
+  it('blocks reconciliation preview when the verified amount does not match', async () => {
+    prisma.transaction.findUnique.mockResolvedValue({
+      id: 'tx-2',
+      walletId: 'wallet-1',
+      userId: 'user-1',
+      type: TransactionType.WALLET_FUNDING,
+      status: TransactionStatus.PENDING,
+      amount: 10000n,
+      reference: 'ZDX-TXN-456',
+      gateway: PaymentGateway.PAYSTACK,
+      gatewayRef: 'gateway-ref-2',
+      metadata: {
+        callbackUrl: 'https://zendocx.net/wallet',
+        checkoutMode: 'live',
+      },
+      createdAt: new Date('2026-05-04T18:10:00.000Z'),
+      wallet: {
+        id: 'wallet-1',
+        availableBalance: 0n,
+      },
+      user: {
+        id: 'user-1',
+        email: 'user@example.com',
+        firstName: 'Ada',
+        lastName: 'Lovelace',
+        role: UserRole.INDIVIDUAL,
+        tenantId: 'tenant-1',
+      },
+    });
+    paymentService.verifyPayment.mockResolvedValue({
+      success: true,
+      amountKobo: 15000n,
+      reference: 'ZDX-TXN-456',
+      gatewayRef: 'gateway-ref-2',
+      paidAt: new Date('2026-05-04T18:11:00.000Z'),
+    });
+
+    const result = await service.getAdminFundingReconciliationPreview('ZDX-TXN-456');
+
+    expect(result.data.canApply).toBe(false);
+    expect(result.data.reasons).toContain(
+      'The provider confirmed a different amount than the pending wallet funding record.',
     );
   });
 });
