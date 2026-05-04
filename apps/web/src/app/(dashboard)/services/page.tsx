@@ -18,10 +18,7 @@ import { ServiceDeliveryMode } from '@zendocx/types';
 
 export default function ServicesPage() {
   const [query, setQuery] = useState('');
-  const [activeCategory, setActiveCategory] = useState<string | 'ALL'>(() => {
-    if (typeof window === 'undefined') return 'ALL';
-    return new URLSearchParams(window.location.search).get('categorySlug') ?? 'ALL';
-  });
+  const [activeCategory, setActiveCategory] = useState<string | 'ALL'>('ALL');
   const [expandedSlugs, setExpandedSlugs] = useState<string[]>(() => {
     if (typeof window === 'undefined') return [];
     const slug = new URLSearchParams(window.location.search).get('categorySlug');
