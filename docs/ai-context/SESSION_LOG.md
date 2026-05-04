@@ -136,6 +136,62 @@
 
 ---
 
+## Session 2026-05-04 (continued) — Paystack wallet redirect diagnosis + callback-origin fix
+
+**Phase:** Phase 10
+**AI Assistant:** Codex (GPT-5)
+
+### What Was Done
+
+**Deep production analysis of failed wallet funding confirmation:**
+- Traced the wallet funding path end to end:
+  - frontend `/wallet` callback confirmation flow
+  - backend `POST /wallet/fund`
+  - backend `POST /wallet/fund/confirm`
+  - live Fly environment values
+  - recent production Paystack funding transactions
+- Confirmed the live API was generating Paystack callback URLs from `FRONTEND_URL=https://app.zendocx.net`.
+- Confirmed active user traffic for the wallet flow is occurring on `https://zendocx.net`, so Paystack was redirecting users back to the wrong frontend host after successful payment.
+- Confirmed multiple recent Paystack funding transactions were still stuck in `PENDING`, which is consistent with the callback-confirm step never completing on the correct host.
+
+**Backend fix for callback host mismatch:**
+- Updated wallet funding initialization so the callback URL is built from the real browser `Origin` header when present, instead of always using the static `FRONTEND_URL`.
+- Added a safe fallback chain:
+  - current request origin
+  - `FRONTEND_URL`
+  - `http://localhost:3000`
+- Stored the resolved callback URL in transaction metadata for easier production debugging on future funding attempts.
+
+**Regression coverage:**
+- Added wallet service tests covering:
+  - callback URL uses current frontend origin
+  - invalid/missing origin falls back to `FRONTEND_URL`
+  - funding init still records the payment gateway and pending funding state correctly
+
+### Files Created / Modified
+
+- `apps/api/src/modules/wallet/wallet.controller.ts` — passes request origin into wallet funding init
+- `apps/api/src/modules/wallet/wallet.service.ts` — builds callback URL from live request origin with safe fallback
+- `apps/api/src/modules/wallet/wallet.service.spec.ts` — new regression coverage for callback-origin handling
+- `docs/ai-context/SESSION_LOG.md` — appended this session entry
+
+### Decisions Made
+
+- Wallet payment callback URLs must follow the actual frontend host the user started from, not a single global frontend URL, because ZenDocx is now used across multiple entry hosts/domains.
+- Funding transaction metadata should persist the callback URL chosen at init time so production payment-path debugging is easier.
+
+### Phase Checklist Updates
+
+- [x] Phase 10: Production Paystack callback-host mismatch diagnosed
+- [x] Phase 10: Wallet funding callback origin fix implemented and covered by tests
+
+### Blockers / Notes for Next Session
+
+- Already-created pending Paystack funding transactions still need reconciliation if Paystack marked them successful but the old callback host prevented confirmation.
+- Paystack dashboard callback/webhook settings should still be verified against the live API and frontend domains after deploy.
+
+---
+
 ## Session 2026-05-03 (continued 2) — CBT job delivery timer + extension request workflow
 
 **Phase:** Phase 4 / Phase 10

@@ -2262,7 +2262,36 @@ export class WalletService {
     };
   }
 
-  async initiateFunding(userId: string, dto: InitiateWalletFundingDto) {
+  private normalizeFrontendOrigin(value: string | null | undefined) {
+    if (!value?.trim()) {
+      return null;
+    }
+
+    try {
+      const url = new URL(value.trim());
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+        return null;
+      }
+      return url.origin;
+    } catch {
+      return null;
+    }
+  }
+
+  private buildFundingCallbackUrl(requestOrigin?: string | null) {
+    const baseOrigin =
+      this.normalizeFrontendOrigin(requestOrigin) ??
+      this.normalizeFrontendOrigin(process.env.FRONTEND_URL) ??
+      'http://localhost:3000';
+
+    return `${baseOrigin.replace(/\/$/, '')}/wallet`;
+  }
+
+  async initiateFunding(
+    userId: string,
+    dto: InitiateWalletFundingDto,
+    requestOrigin?: string | null,
+  ) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -2285,8 +2314,7 @@ export class WalletService {
 
     const amountKobo = BigInt(Math.round(dto.amountNaira * 100));
     const reference = generateTransactionRef();
-    const callbackBaseUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
-    const callbackUrl = `${callbackBaseUrl.replace(/\/$/, '')}/wallet`;
+    const callbackUrl = this.buildFundingCallbackUrl(requestOrigin);
 
     await this.prisma.transaction.create({
       data: {
@@ -2301,6 +2329,7 @@ export class WalletService {
         description: 'Wallet funding initiated',
         metadata: {
           initiatedVia: 'wallet-page',
+          callbackUrl,
           requester: {
             name: `${user.firstName} ${user.lastName}`.trim(),
             email: user.email,
@@ -2330,6 +2359,7 @@ export class WalletService {
             initiatedVia: 'wallet-page',
             checkoutMode: initiation.mode ?? 'live',
             paymentUrl: initiation.paymentUrl,
+            callbackUrl,
           },
         },
       });

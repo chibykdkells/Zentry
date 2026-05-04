@@ -140,10 +140,15 @@ export class WalletController {
 
   @Post('fund')
   initiateFunding(
+    @Req() request: Request,
     @CurrentUser() user: JwtUser,
     @Body() dto: InitiateWalletFundingDto,
   ) {
-    return this.walletService.initiateFunding(user.sub, dto);
+    return this.walletService.initiateFunding(
+      user.sub,
+      dto,
+      request.headers.origin ?? null,
+    );
   }
 
   @Post('fund/confirm')
