@@ -121,7 +121,9 @@ export class ServicesService {
         sortOrder: true,
         _count: {
           select: {
-            services: true,
+            services: {
+              where: { isActive: true },
+            },
           },
         },
       },
@@ -227,6 +229,7 @@ export class ServicesService {
           platformFeePercent: true,
           requiredFields: true,
           requiredDocuments: true,
+          createdAt: true,
           category: {
             select: {
               id: true,
@@ -247,6 +250,7 @@ export class ServicesService {
       tenantId,
     );
     const selectedSlugs = selectionState.selectedServiceSlugs;
+    const { lastSelectionSavedAt } = selectionState;
 
     return {
       message: 'Tenant service management catalog retrieved',
@@ -291,7 +295,9 @@ export class ServicesService {
             : [],
           eta: this.getEtaForDeliveryMode(service.deliveryMode),
           isSelected: selectionState.usesCustomSelection
-            ? selectedSlugs.has(service.slug)
+            ? selectedSlugs.has(service.slug) ||
+              (lastSelectionSavedAt !== null &&
+                service.createdAt > lastSelectionSavedAt)
             : true,
           category: {
             id: service.category.id,
@@ -1535,6 +1541,7 @@ export class ServicesService {
           cbtCommission: true,
           requiredFields: true,
           requiredDocuments: true,
+          createdAt: true,
           category: {
             select: {
               id: true,
@@ -1549,15 +1556,22 @@ export class ServicesService {
     ]);
 
     const visibleServices = this.dedupeTenantScopedBySlug(services, tenantId);
-    const hasActiveCustomSelection =
+    // A service is included when:
+    // 1. Custom selection is off → show everything
+    // 2. Custom selection is on AND the service is in the selection list
+    // 3. Custom selection is on AND the service was created AFTER the selection
+    //    was last saved (newly-added platform services appear automatically)
+    const selectedVisibleServices =
       tenantId &&
       selectionState?.usesCustomSelection &&
-      selectionState.selectedServiceSlugs.size > 0;
-    const selectedVisibleServices = hasActiveCustomSelection
-      ? visibleServices.filter((service) =>
-          selectionState.selectedServiceSlugs.has(service.slug),
-        )
-      : visibleServices;
+      selectionState.selectedServiceSlugs.size > 0
+        ? visibleServices.filter(
+            (service) =>
+              selectionState.selectedServiceSlugs.has(service.slug) ||
+              (selectionState.lastSelectionSavedAt !== null &&
+                service.createdAt > selectionState.lastSelectionSavedAt),
+          )
+        : visibleServices;
     const visibleCategories = this.buildCatalogCategories(
       categories,
       selectedVisibleServices,
@@ -2073,6 +2087,7 @@ export class ServicesService {
         serviceSelections: {
           select: {
             serviceSlug: true,
+            createdAt: true,
           },
         },
       },
@@ -2082,11 +2097,22 @@ export class ServicesService {
       throw new NotFoundException('Tenant not found.');
     }
 
+    const selections = tenant.serviceSelections;
+    // Track when the selection was last saved so newly-added platform services
+    // that post-date the save can be auto-included (opt-out friendly).
+    const lastSelectionSavedAt =
+      selections.length > 0
+        ? new Date(
+            Math.max(...selections.map((s) => s.createdAt.getTime())),
+          )
+        : null;
+
     return {
       usesCustomSelection: tenant.usesCustomServiceSelection,
       selectedServiceSlugs: new Set(
-        tenant.serviceSelections.map((selection) => selection.serviceSlug),
+        selections.map((s) => s.serviceSlug),
       ),
+      lastSelectionSavedAt,
     };
   }
 
