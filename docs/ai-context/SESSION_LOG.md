@@ -80,6 +80,62 @@ Completed the CBT job delivery timer feature end-to-end:
 
 ---
 
+## Session 2026-05-03 (continued 3) — Full dashboard UI redesign + dynamic service shortcuts
+
+**Phase:** Phase 10
+**AI Assistant:** Claude Sonnet 4.6
+
+### What Was Done
+
+**Full UI redesign across all dashboard roles:**
+- Replaced `PageHero` component with new `PageHeader` component across all 27+ pages in individual, CBT, tenant admin, and super admin dashboards.
+- `PageHeader` renders as a clean inline `h1` + subtitle + optional `actions` slot — no bordered card treatment, more native app-like appearance.
+- Button styles unified to `border-brand-line bg-brand-surface` (was `border-slate-200 bg-slate-50`).
+
+**Individual home page (`/home`) redesign:**
+- Personal greeting with time-of-day salutation + first name.
+- WalletCard hero with Fund Account + History action buttons.
+- Service shortcut tiles as horizontal scrollable row (hidden scrollbar).
+- Recent orders inline feed with status badges.
+
+**Dynamic service shortcuts:**
+- Replaced hardcoded 4-tile `serviceShortcuts` array with live data from `useServiceCatalog` hook.
+- Slug-based emoji + background mapping (`CATEGORY_ICON_MAP`, 17 entries) using `includes()` for flexible substring matching.
+- Fallback icons/colors cycle through 6 options for unknown category slugs.
+- Each tile links to `/services?categorySlug=${slug}` for pre-filtered service browse.
+- Skeleton loading states while categories fetch.
+- Active categories only — filters `serviceCount > 0`.
+
+**CBT dashboard redesign:**
+- Personal greeting + center name, linked `StatTile` cards, quick action grid, live job pool preview.
+
+### Files Created / Modified
+
+**New:**
+- `apps/web/src/components/shared/page-header.tsx` — new `PageHeader` component
+
+**Modified:**
+- `apps/web/src/app/(dashboard)/home/page.tsx` — full rewrite with dynamic shortcuts
+- `apps/web/src/app/(cbt)/dashboard/page.tsx` — full rewrite with new design language
+- All 27+ pages across 4 roles: `PageHero` → `PageHeader` migration
+
+### Decisions Made
+
+- `PageHero` deprecated in favor of `PageHeader` — simpler, no card border, more mobile-native.
+- Category emoji mapping uses slug `includes()` matching (not exact) so slug variations like `jamb-registration` and `jamb-utme` both resolve to the same icon.
+
+### Phase Checklist Updates
+
+- [x] Phase 10: UI redesign across all dashboard roles
+- [x] Phase 10: Dynamic service shortcuts wired to API
+
+### Blockers / Notes for Next Session
+
+- **Paystack config (user must do manually):** Set Live Callback URL to `https://<vercel-url>/wallet`. Set Live Webhook URL to `https://zentry-api-prod.fly.dev/wallet/webhooks/payment`. Run `fly secrets set PAYSTACK_WEBHOOK_SECRET=sk_live_... -a zentry-api-prod`.
+- Remaining: Sentry Vercel env vars, `app.zendocx.net` CNAME, silent refresh browser test, PWA install flow.
+
+---
+
 ## Session 2026-05-02 (continued 4) — Service creation split: super admin vs tenant admin
 
 **Phase:** Phase 10 — Admin Analytics, Security Audit & Launch
