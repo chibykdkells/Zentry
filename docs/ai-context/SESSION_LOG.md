@@ -199,6 +199,128 @@
 
 ---
 
+## Session 2026-05-05 (continued) — Paystack webhook truth pass
+
+**Phase:** Phase 10
+**AI Assistant:** Codex (GPT-5)
+
+### What Was Done
+
+**Verified Paystack’s documented webhook-signing behavior:**
+- Checked Paystack’s official webhook docs and confirmed that the `x-paystack-signature` header is signed with the Paystack **secret key**.
+
+**Established live Fly production truth:**
+- Queried the live app env and found:
+  - `PAYSTACK_SECRET_KEY` prefix: `sk_live_`
+  - `PAYSTACK_WEBHOOK_SECRET` prefix: `ssk_live`
+  - values were **not equal**
+- This means the live API was validating incoming Paystack webhooks with a different secret than the one Paystack documents for signature generation.
+
+**Confirmed the remaining pending wallet fundings directly against Paystack:**
+- Queried Paystack verify for the unreconciled references and confirmed they were all `abandoned`, not successful:
+  - `ZDX-TXN-MORAB5PS-ZY35B7`
+  - `ZDX-TXN-MOR6PVZ8-L5FNW0`
+  - `ZDX-TXN-MOR3M2AE-WWRKL6`
+  - `ZDX-TXN-MOR2DCEJ-09PAFC`
+  - `ZDX-TXN-MOPLSME3-SM9LGJ`
+- So those references were correctly blocked by the admin reconciliation preview and should not be auto-credited.
+
+**Immediate production mitigation applied:**
+- Updated live Fly secret:
+  - `PAYSTACK_WEBHOOK_SECRET = PAYSTACK_SECRET_KEY`
+- Fly reported the machine update succeeded and health returned to `1/1`.
+
+**Code hardening added locally:**
+- Updated `PaystackProvider` so webhook validation prefers `PAYSTACK_SECRET_KEY` first and only falls back to `PAYSTACK_WEBHOOK_SECRET` if the secret key is unavailable.
+- Added focused provider tests to lock that behavior in.
+
+### Files Created / Modified
+
+- `apps/api/src/providers/payment/paystack.provider.ts` — webhook validation now prefers `PAYSTACK_SECRET_KEY`
+- `apps/api/src/providers/payment/paystack.provider.spec.ts` — new focused webhook signature tests
+- `docs/ai-context/PHASES.md` — updated live production truth and next action
+- `docs/ai-context/SESSION_LOG.md` — appended this session entry
+
+### Verification
+
+- `pnpm --filter @zendocx/api test -- --runInBand src/providers/payment/paystack.provider.spec.ts`
+- `pnpm --filter @zendocx/api exec tsc --noEmit`
+- Live Fly secret alignment completed successfully; machine became healthy after update.
+
+### Decisions Made
+
+- Remaining Paystack `abandoned` references should stay unreconciled.
+- Paystack webhook validation should be keyed off the Paystack secret key by default, because that matches the official Paystack documentation and the live signature format.
+
+### Next Steps
+
+1. Commit, push, and deploy the webhook-validation code fix so the source of truth matches the live secret alignment.
+2. Continue the remaining production-truth closeout:
+   - Sentry Vercel env vars
+   - `app.zendocx.net` CNAME
+   - browser verification for silent refresh and PWA install
+
+---
+
+## Session 2026-05-05 — Production funding reconciliation pass
+
+**Phase:** Phase 10
+**AI Assistant:** Codex (GPT-5)
+
+### What Was Done
+
+**Used the new live admin reconciliation flow against production wallet funding references:**
+- Called the deployed admin preview endpoint:
+  - `GET /api/v1/wallet/admin/funding-reconciliation?reference=...`
+- Confirmed `ZDX-TXN-MORIQWAW-DXFJNW` was safe to auto-credit:
+  - transaction status was still `PENDING`
+  - Paystack verification returned `success: true`
+  - verified amount matched the pending funding record (`10000` kobo)
+  - callback URL on the record was `https://www.zendocx.net/wallet`
+- Applied reconciliation through the live admin endpoint:
+  - `POST /api/v1/wallet/admin/funding-reconciliation`
+  - result: transaction moved to `SUCCESS`, gateway ref normalized to `6111392934`, wallet balance after credit returned as `10000`
+
+**Continued the same pass across the other production Paystack pending rows:**
+- Queried live production for remaining `WALLET_FUNDING + PENDING + PAYSTACK` references.
+- Previewed all remaining references through the live admin route.
+- Two more references were safely creditable and were reconciled successfully:
+  - `ZDX-TXN-MOR0I1QN-B7USF6`
+  - `ZDX-TXN-MOPT62DM-4I651X`
+- Four references were intentionally left untouched because the provider preview still returned:
+  - `The payment provider has not confirmed this reference as successful yet.`
+
+### Production Truth Established
+
+**Reconciled successfully on 2026-05-05:**
+- `ZDX-TXN-MORIQWAW-DXFJNW`
+- `ZDX-TXN-MOR0I1QN-B7USF6`
+- `ZDX-TXN-MOPT62DM-4I651X`
+
+**Still `PENDING` and not safe to auto-credit as of 2026-05-05:**
+- `ZDX-TXN-MORAB5PS-ZY35B7`
+- `ZDX-TXN-MOR6PVZ8-L5FNW0`
+- `ZDX-TXN-MOR3M2AE-WWRKL6`
+- `ZDX-TXN-MOR2DCEJ-09PAFC`
+- `ZDX-TXN-MOPLSME3-SM9LGJ`
+
+**Important observation:**
+- Some older pending funding rows have `callbackUrl: null` in transaction metadata, which is consistent with them being created before the callback-origin fix shipped.
+- The remaining blocker for the untouched references is not the reconciliation tool; it is that Paystack verification does not currently report them as successful.
+
+### Decisions Made
+
+- Only references that pass the live preview with `canApply: true` should be credited.
+- References that Paystack does not confirm as successful must remain pending until webhook/dashboard truth is resolved.
+
+### Next Steps
+
+1. Verify `PAYSTACK_WEBHOOK_SECRET` against the Paystack dashboard and inspect webhook delivery history for the 5 still-pending references.
+2. Decide whether those 5 references represent abandoned/failed payments or successful payments with provider-state mismatch.
+3. Continue the broader production-truth closeout after the Paystack webhook check.
+
+---
+
 ## Session 2026-05-04 (continued) — Platform admin funding reconciliation tool
 
 **Phase:** Phase 10

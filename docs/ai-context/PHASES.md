@@ -12,8 +12,8 @@
 
 ```
 Active Phase  : Phase 10 — Admin Analytics, Security Audit & Launch (IN PROGRESS)
-Last Session  : 2026-05-04 (Paystack callback-origin fix; wallet redirect confirmation race fix; platform-admin funding reconciliation tool built)
-Next Action   : Use the new admin funding reconciliation tool on already-pending successful references, then finish production-truth closeout: Paystack webhook verification, Sentry Vercel env vars, app.zendocx.net CNAME, silent refresh, PWA install flow
+Last Session  : 2026-05-05 (Paystack webhook truth pass — live webhook secret mismatch found; 5 remaining pending references confirmed abandoned on Paystack; live secret aligned)
+Next Action   : Deploy the Paystack webhook validation code fix, then close out the remaining production-truth items: Sentry Vercel env vars, app.zendocx.net CNAME, silent refresh, and PWA install flow
 ```
 
 ---
@@ -731,10 +731,11 @@ optimized. Production deployed.
 - [x] Fund wallet modal fully redesigned — bottom sheet pattern, quick-select chips, navy result card
 - [x] Services page accordion default-closed + URL ?categorySlug deep link from home page category tiles
 - [x] Platform-admin funding reconciliation tool — /admin/finance can preview a stuck funding reference against the active gateway and safely credit it through the normal ledger flow
+- [x] Production funding reconciliation pass completed for confirmed-success Paystack references — `ZDX-TXN-MORIQWAW-DXFJNW`, `ZDX-TXN-MOR0I1QN-B7USF6`, and `ZDX-TXN-MOPT62DM-4I651X` were previewed as safe and credited through the admin reconciliation flow on 2026-05-05
+- [x] Paystack webhook production truth pass — official docs confirmed signatures are signed with the Paystack secret key; live Fly `PAYSTACK_WEBHOOK_SECRET` was mismatched from `PAYSTACK_SECRET_KEY`; 5 still-pending wallet fundings were confirmed as `abandoned` directly from Paystack verify responses; live `PAYSTACK_WEBHOOK_SECRET` was updated to match the secret key on 2026-05-05
 - [ ] Confirm password reset email delivery in production (run fly logs --app zentry-api-prod)
 - [ ] Sentry Vercel env vars still needed: NEXT_PUBLIC_SENTRY_DSN, SENTRY_ORG=zendocx, SENTRY_PROJECT=zendocx-web
 - [ ] app.zendocx.net CNAME record in Cloudflare (add app → cname.vercel-dns.com)
-- [ ] Paystack webhook production truth pass — verify PAYSTACK_WEBHOOK_SECRET on Fly matches Paystack dashboard secret exactly
 - [ ] Manual browser verification: silent refresh on 401 and PWA install flow
 - [ ] Load testing: simulate 500 concurrent users
 - [ ] Launch checklist signed off

@@ -28,7 +28,10 @@ export class PaystackProvider implements IPaymentProvider {
 
   constructor(private readonly config: ConfigService) {
     this.secretKey = config.get<string>('PAYSTACK_SECRET_KEY', '');
-    this.webhookSecret = config.get<string>('PAYSTACK_WEBHOOK_SECRET', '');
+    const configuredWebhookSecret =
+      config.get<string>('PAYSTACK_WEBHOOK_SECRET', '');
+    this.webhookSecret =
+      this.secretKey.trim() || configuredWebhookSecret.trim();
   }
 
   async initiatePayment(
@@ -168,7 +171,7 @@ export class PaystackProvider implements IPaymentProvider {
 
     if (!this.webhookSecret) {
       this.logger.warn(
-        'PAYSTACK_WEBHOOK_SECRET not configured — rejecting webhook',
+        'Neither PAYSTACK_WEBHOOK_SECRET nor PAYSTACK_SECRET_KEY is configured — rejecting webhook',
       );
       return empty;
     }
