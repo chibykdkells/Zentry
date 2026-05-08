@@ -8234,3 +8234,58 @@ Per product decision: CBT center approval is the tenant admin's responsibility, 
 
 - Production-truth pass still pending: Sentry env vars, `app.zendocx.net` CNAME, silent refresh browser test, PWA install flow.
 - No outstanding commission distribution bugs. Next completed order (after fix) will credit tenant correctly at release.
+
+---
+
+## Session 2026-05-08 (continuation 2) — Result delivery UX improvements
+
+**Phase:** Phase 3 / Phase 7
+**AI Assistant:** Claude Sonnet 4.6
+
+### What Was Done
+
+**Investigated result delivery completeness:**
+- Confirmed manual orders: single `resultFileUrl` stored as Cloudinary publicId, API builds signed proxy URL (`/api/v1/orders/files/:orderId/result`), frontend renders via `FilePreviewGallery`. File opens in new tab (view + save).
+- Confirmed automated VTU: `providerResponse` JSON stored on order, all delivery fields (`token`, `planName`, `bouquetName`, `smartcardNumber`, `phone`, etc.) serialised to the frontend.
+- Identified gaps: (1) electricity token had no copy button — user had to manually select and copy; (2) CBT notes (`cbtNotes` field) were stored and returned in API but never rendered in the requester's order detail; (3) automated delivery section was all MetricPills with no visual hierarchy — token buried alongside unimportant provider metadata.
+
+**Result delivery UX — frontend improvements (requester orders page):**
+
+1. **Electricity token copy card**: when `providerResponse.token` is present, renders a white card with the token in large monospace `tracking-widest` text and a `CopyButton` that flips to "Copied ✓" for 2 seconds using `navigator.clipboard`. Units shown below if available.
+
+2. **Cable TV subscription card**: when `smartcardNumber` is present without a token, shows the bouquet name (if any) prominently + smartcard number with a `CopyButton`.
+
+3. **Data plan activated card**: when `planName` is present without a token, shows the plan name prominently + "Delivered to [phone]" line.
+
+4. **Secondary MetricPills** (network, disco, meter number, customer name, provider status, amount) remain below the primary card — still accessible but de-emphasised.
+
+5. **CBT notes visible to requester**: the `detail.cbtNotes` field is now rendered in the "Result available" section as a "Note from CBT center" card. Was stored and returned from API but never displayed.
+
+6. **Updated instructional copy**: changed "Your CBT center has uploaded the result for this request. Review it before the dispute window closes." to "Your CBT center has uploaded the result. Open or download it below, and raise a dispute if anything is wrong before the window closes."
+
+7. **`CopyButton` helper component** added to the file (named function component at file scope, uses local `useState` for copied state).
+
+**Backend confirmation (no backend changes needed):**
+- `completeCbtJob` already sends an in-app `ORDER_COMPLETED` notification and real-time socket event (`order:completed`) to the requester on CBT upload — notifications were already wired.
+- `buildResultFileAccessUrl` generates a signed, time-limited proxy URL via `GET /api/v1/orders/files/:orderId/result` which redirects to a Cloudinary signed URL.
+
+### Files Created / Modified
+
+- `apps/web/src/app/(dashboard)/orders/page.tsx` — `CopyButton` component; automated delivery redesign with token/smartcard/plan highlight cards and copy buttons; CBT notes rendered for requester; updated instructional text
+- `docs/ai-context/SESSION_LOG.md` — this entry
+- `docs/ai-context/PHASES.md` — last session description updated
+
+### Decisions Made
+
+- No backend download endpoint changes: the existing signed-URL redirect approach (opens in new tab → view/save) is sufficient for the current scope. A `?download=1` parameter with `fl_attachment` Cloudinary flag is a future enhancement if explicitly requested.
+- `CopyButton` uses `navigator.clipboard` (HTTPS-only) — acceptable for production PWA; no fallback needed since the token is also visible as text.
+
+### Phase Checklist Updates
+
+- [x] Phase 3: Requester can view CBT notes from completed manual orders.
+- [x] Phase 7: Automated VTU delivery (electricity token, data plan, cable TV) shown in user-friendly format with copy support.
+
+### Blockers / Notes for Next Session
+
+- Production-truth pass still pending: Sentry env vars, `app.zendocx.net` CNAME, silent refresh browser test, PWA install flow.
+- Multi-file result upload (CBT currently limited to one file) not addressed — future enhancement if needed.

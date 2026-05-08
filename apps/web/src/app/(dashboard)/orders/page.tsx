@@ -5,7 +5,9 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import {
   ArrowRight,
+  CheckCircle,
   ClipboardList,
+  Copy,
   FolderClock,
   PackageCheck,
   ReceiptText,
@@ -184,20 +186,85 @@ export default function OrdersPage() {
 
           {detail.fulfillmentType === 'AUTOMATED' && detail.providerResponse ? (
             <div className="rounded-3xl border border-emerald-100 bg-emerald-50/60 p-5">
-              <h3 className="text-sm font-semibold text-slate-900">
-                Provider delivery
+              <h3 className="text-sm font-semibold text-emerald-900">
+                Your delivery
               </h3>
+              <p className="mt-1 text-sm text-emerald-700">
+                Your service has been delivered. See the details below.
+              </p>
+
+              {/* Prominent token card for electricity */}
+              {typeof detail.providerResponse.token === 'string' ? (
+                <div className="mt-4 rounded-2xl border border-emerald-200 bg-white px-4 py-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-600">
+                    Electricity token
+                  </p>
+                  <div className="mt-2 flex items-start justify-between gap-3">
+                    <p className="break-all font-mono text-lg font-bold tracking-widest text-slate-900">
+                      {String(detail.providerResponse.token)}
+                    </p>
+                    <CopyButton value={String(detail.providerResponse.token)} />
+                  </div>
+                  {typeof detail.providerResponse.units === 'number' ? (
+                    <p className="mt-2 text-xs text-emerald-700">
+                      {String(detail.providerResponse.units)} units
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {/* Smartcard/IUC number for cable TV — copyable */}
+              {typeof detail.providerResponse.smartcardNumber === 'string' &&
+              typeof detail.providerResponse.token !== 'string' ? (
+                <div className="mt-4 rounded-2xl border border-emerald-200 bg-white px-4 py-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-600">
+                    {typeof detail.providerResponse.bouquetName === 'string'
+                      ? 'Cable TV subscription'
+                      : 'Smartcard / IUC'}
+                  </p>
+                  {typeof detail.providerResponse.bouquetName === 'string' ? (
+                    <p className="mt-2 text-base font-bold text-slate-900">
+                      {String(detail.providerResponse.bouquetName)}
+                    </p>
+                  ) : null}
+                  <div className="mt-2 flex items-center gap-2">
+                    <p className="font-mono text-sm text-slate-700">
+                      {String(detail.providerResponse.smartcardNumber)}
+                    </p>
+                    <CopyButton
+                      value={String(detail.providerResponse.smartcardNumber)}
+                    />
+                  </div>
+                </div>
+              ) : null}
+
+              {/* Plan confirmation for data */}
+              {typeof detail.providerResponse.planName === 'string' &&
+              typeof detail.providerResponse.token !== 'string' ? (
+                <div className="mt-4 rounded-2xl border border-emerald-200 bg-white px-4 py-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-600">
+                    Data plan activated
+                  </p>
+                  <p className="mt-2 text-base font-bold text-slate-900">
+                    {String(detail.providerResponse.planName)}
+                  </p>
+                  {typeof detail.providerResponse.phone === 'string' ? (
+                    <p className="mt-1 text-sm text-slate-500">
+                      Delivered to{' '}
+                      <span className="font-medium text-slate-700">
+                        {String(detail.providerResponse.phone)}
+                      </span>
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {/* Secondary details */}
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 {detail.providerReference ? (
                   <MetricPill
                     label="Provider reference"
                     value={detail.providerReference}
-                  />
-                ) : null}
-                {typeof detail.providerResponse.providerStatus === 'string' ? (
-                  <MetricPill
-                    label="Provider status"
-                    value={String(detail.providerResponse.providerStatus)}
                   />
                 ) : null}
                 {typeof detail.providerResponse.network === 'string' ? (
@@ -206,46 +273,23 @@ export default function OrdersPage() {
                     value={String(detail.providerResponse.network)}
                   />
                 ) : null}
-                {typeof detail.providerResponse.providerKey === 'string' ? (
-                  <MetricPill
-                    label="Provider"
-                    value={String(detail.providerResponse.providerKey)}
-                  />
-                ) : null}
                 {typeof detail.providerResponse.disco === 'string' ? (
                   <MetricPill
                     label="Disco"
                     value={String(detail.providerResponse.disco)}
                   />
                 ) : null}
-                {typeof detail.providerResponse.planName === 'string' ? (
-                  <MetricPill
-                    label="Plan"
-                    value={String(detail.providerResponse.planName)}
-                  />
-                ) : null}
-                {typeof detail.providerResponse.bouquetName === 'string' ? (
-                  <MetricPill
-                    label="Bouquet"
-                    value={String(detail.providerResponse.bouquetName)}
-                  />
-                ) : null}
                 {typeof detail.providerResponse.customerName === 'string' ? (
                   <MetricPill
-                    label="Customer"
+                    label="Customer name"
                     value={String(detail.providerResponse.customerName)}
                   />
                 ) : null}
-                {typeof detail.providerResponse.phone === 'string' ? (
+                {typeof detail.providerResponse.phone === 'string' &&
+                typeof detail.providerResponse.planName !== 'string' ? (
                   <MetricPill
                     label="Delivered to"
                     value={String(detail.providerResponse.phone)}
-                  />
-                ) : null}
-                {typeof detail.providerResponse.smartcardNumber === 'string' ? (
-                  <MetricPill
-                    label="Smartcard / IUC"
-                    value={String(detail.providerResponse.smartcardNumber)}
                   />
                 ) : null}
                 {typeof detail.providerResponse.meterNumber === 'string' ? (
@@ -260,24 +304,18 @@ export default function OrdersPage() {
                     value={String(detail.providerResponse.meterType)}
                   />
                 ) : null}
-                {typeof detail.providerResponse.token === 'string' ? (
-                  <MetricPill
-                    label="Token"
-                    value={String(detail.providerResponse.token)}
-                  />
-                ) : null}
                 {typeof detail.providerResponse.amountKobo === 'string' ? (
                   <MetricPill
-                    label="Provider amount"
+                    label="Amount paid to provider"
                     value={formatNaira(
                       String(detail.providerResponse.amountKobo),
                     )}
                   />
                 ) : null}
-                {typeof detail.providerResponse.units === 'number' ? (
+                {typeof detail.providerResponse.providerStatus === 'string' ? (
                   <MetricPill
-                    label="Units"
-                    value={String(detail.providerResponse.units)}
+                    label="Provider status"
+                    value={String(detail.providerResponse.providerStatus)}
                   />
                 ) : null}
               </div>
@@ -373,9 +411,22 @@ export default function OrdersPage() {
                 Result available
               </h3>
               <p className="mt-2 text-sm leading-6 text-emerald-800">
-                Your CBT center has uploaded the result for this request.
-                Review it before the dispute window closes.
+                Your CBT center has uploaded the result. Open or download it
+                below, and raise a dispute if anything is wrong before the
+                window closes.
               </p>
+
+              {detail.cbtNotes ? (
+                <div className="mt-4 rounded-2xl border border-emerald-200 bg-white px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-600">
+                    Note from CBT center
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-slate-700">
+                    {detail.cbtNotes}
+                  </p>
+                </div>
+              ) : null}
+
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <MetricPill
                   label="Release state"
@@ -871,6 +922,26 @@ function MetricPill({ label, value }: { label: string; value: string }) {
       </p>
       <p className="mt-2 text-sm font-semibold text-slate-900">{value}</p>
     </div>
+  );
+}
+
+function CopyButton({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        void navigator.clipboard.writeText(value).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        });
+      }}
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 active:scale-95"
+    >
+      {copied ? <CheckCircle size={13} /> : <Copy size={13} />}
+      {copied ? 'Copied' : 'Copy'}
+    </button>
   );
 }
 
