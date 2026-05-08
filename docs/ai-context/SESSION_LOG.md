@@ -8157,5 +8157,80 @@ Per product decision: CBT center approval is the tenant admin's responsibility, 
 
 ### Blockers / Notes for Next Session
 
-- Old orders in production have `tenantFee = 0` — they will release correctly (platform gets remainder), but tenant wallets were never credited for historical completed orders. A one-time backfill may be needed.
+- ~~Old orders in production have `tenantFee = 0` — a one-time backfill may be needed.~~ **Resolved — see continuation entry below.**
 - Production-truth pass still pending: Sentry env vars, CNAME, Paystack webhook secret, silent refresh, PWA install.
+
+---
+
+## Session 2026-05-08 (continued) — Tenant commission visibility + live production reconciliation
+
+**Phase:** Phase 5 / Phase 10
+**AI Assistant:** Claude Sonnet 4.6
+
+### What Was Done
+
+**Root-cause analysis of tenant wallet showing ₦0:**
+- Confirmed the `createOrder` code correctly sets `order.tenantFee = service.providerCost` and `order.platformFee = floor(providerCost * platformFeePercent / 100)` for new orders after commit `e7e6e92`.
+- Traced that released orders were all created *before* the fix (tenantFee defaulted to 0), so platform received the full ₦20 on every release and tenant received ₦0. New orders work correctly.
+- Identified that tenant admin had zero visibility into commission pending in the 2-hour dispute window.
+
+**Tenant commission visibility (backend + frontend):**
+- `getTenantOverviewForAdmin`: added `pendingTenantEarningsAggregate` query summing `tenantFee` and `platformFee` on completed unreleased orders; returns `pendingTenantCommission = tenantFeeSum - platformFeeSum`.
+- Release queue: added `tenantFee` and `platformFee` to order select; API now returns `tenantEarning` (net per order) alongside `cbtCommission`.
+- `use-tenant-admin.ts`: added `pendingTenantCommission: string` to metrics type and `tenantEarning: string` to release queue item type.
+- Tenant dashboard page: new amber **"Your earnings awaiting release"** stat card; per-order **"Your earnings"** line in the completed job queue; amber row in the wallet modal.
+
+**Live production reconciliation (one-time backfill):**
+- Queried production DB — found 2 released orders with `tenantFee = 0` for ASSODA DIGITAL:
+  - `ZTR-20260503-UOK6GD`: service had `providerCost = 0` at creation → nothing owed, skipped.
+  - `ZTR-20260507-ZB1DO3`: ₦100 order — platform over-credited ₦14 (₦20 instead of correct ₦6).
+- Applied correction in a single Prisma transaction:
+  - Tenant wallet credited **+1400 kobo (₦14)** → `availableBalance: 1400`, `totalEarned: 1400`.
+  - Platform wallet debited **-1400 kobo** → `availableBalance: 600 (₦6)`.
+  - `TENANT_COMMISSION` transaction created for the tenant (retroactive, description: "Retroactive tenant commission for ZTR-20260507-ZB1DO3").
+  - `PLATFORM_COMMISSION` correction transaction created (negative amount, description: "Platform commission correction for ZTR-20260507-ZB1DO3 (tenant share returned)").
+  - `order.tenantFee` and `order.platformFee` on that order updated to the correct values so future audit queries reflect truth.
+- Reconciliation script saved at `scripts/reconcile-tenant-commission.mjs` (not committed — one-time use).
+
+**Deployment status:**
+- All 5 session commits pushed to `main` and fully deployed:
+  - **Vercel (web)**: latest deployment 1h after last commit — ✅ Ready.
+  - **Fly (API)**: machine `7849236f167d58` healthy, version 48 — ✅ Running.
+
+### Files Created / Modified
+
+- `apps/api/src/modules/tenant/tenant.service.ts` — pending tenant commission aggregate, tenantFee in queue select, new metrics field
+- `apps/web/src/hooks/use-tenant-admin.ts` — `pendingTenantCommission` and `tenantEarning` types
+- `apps/web/src/app/(tenant-admin)/tenant/dashboard/page.tsx` — awaiting-release stat card, per-order earnings line, wallet modal row
+- `scripts/reconcile-tenant-commission.mjs` — one-time reconciliation script (untracked, run and done)
+
+### Commits This Session (all pushed and deployed)
+
+- `8bfae6b` — Fix CBT earnings transparency and tenant wallet accuracy
+- `e7e6e92` — Wire tenant commission into order creation and escrow release
+- `423527c` — Fix analytics raw SQL: cast enum columns to text for comparisons
+- `40ff57d` — Fix platform commission formula, wallet UX improvements, modal scroll fix
+- `7366d3b` — Show tenant pending commission and per-order earnings on dashboard
+
+### Production Data Changes (direct DB — not via migration)
+
+- `Order.ZTR-20260507-ZB1DO3`: `tenantFee` corrected to 2000, `platformFee` corrected to 600.
+- ASSODA DIGITAL tenant wallet: `availableBalance` 0 → 1400 kobo, `totalEarned` 0 → 1400 kobo.
+- Platform wallet: `availableBalance` 2000 → 600 kobo.
+- Two new Transaction records created (TENANT_COMMISSION + PLATFORM_COMMISSION correction).
+
+### Decisions Made
+
+- Retroactive commission fix applied directly via Prisma transaction (not a migration) — appropriate for a single-order correction.
+- `platformActual` formula for future orders: `totalAmount - cbtCommission - tenantNet`. Guarantees `CBT + Tenant + Platform = totalAmount` always.
+- `pendingTenantCommission` is computed server-side as aggregate sum rather than client-side calculation — keeps the display consistent with the DB state.
+
+### Phase Checklist Updates
+
+- [x] Phase 5: Tenant commission retroactive production reconciliation complete.
+- [x] Phase 10: Tenant admin earnings transparency (pending commission + per-order breakdown) added.
+
+### Blockers / Notes for Next Session
+
+- Production-truth pass still pending: Sentry env vars, `app.zendocx.net` CNAME, silent refresh browser test, PWA install flow.
+- No outstanding commission distribution bugs. Next completed order (after fix) will credit tenant correctly at release.
