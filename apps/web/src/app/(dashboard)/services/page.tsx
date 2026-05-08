@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowRight, ChevronDown, Search, Zap, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { CreateOrderModal } from '@/components/orders/create-order-modal';
@@ -19,11 +19,15 @@ import { ServiceDeliveryMode } from '@zendocx/types';
 export default function ServicesPage() {
   const [query, setQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string | 'ALL'>('ALL');
-  const [expandedSlugs, setExpandedSlugs] = useState<string[]>(() => {
-    if (typeof window === 'undefined') return [];
+  const [expandedSlugs, setExpandedSlugs] = useState<string[]>([]);
+
+  useEffect(() => {
     const slug = new URLSearchParams(window.location.search).get('categorySlug');
-    return slug ? [slug] : [];
-  });
+    if (slug) {
+      setExpandedSlugs([slug]);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
