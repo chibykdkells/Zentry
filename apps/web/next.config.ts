@@ -60,6 +60,10 @@ const connectSources = [
   ...(isDevelopment ? devAppSources : []),
 ].filter(Boolean);
 
+const frameSources = isDevelopment
+  ? ["'self'", 'http:', 'blob:']
+  : ["'self'", apiOrigin, 'blob:'];
+
 const contentSecurityPolicy = [
   "default-src 'self'",
   "base-uri 'self'",
@@ -67,6 +71,7 @@ const contentSecurityPolicy = [
   "form-action 'self'",
   "object-src 'none'",
   `connect-src ${connectSources.join(' ')}`,
+  `frame-src ${frameSources.join(' ')}`,
   `script-src 'self' 'unsafe-inline'${isDevelopment ? " 'unsafe-eval'" : ''}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",

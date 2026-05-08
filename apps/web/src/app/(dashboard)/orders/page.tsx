@@ -411,7 +411,6 @@ export default function OrdersPage() {
                   src={detail.resultFileUrl}
                   title="Result file preview"
                   className="h-72 w-full border-0"
-                  sandbox="allow-scripts allow-same-origin"
                 />
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
