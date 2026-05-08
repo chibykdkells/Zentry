@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  InternalServerErrorException,
   Param,
   Patch,
   Post,
@@ -12,6 +13,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import axios from 'axios';
 import type { Response } from 'express';
 import { UserRole, type JwtUser } from '@zendocx/types';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -73,14 +75,37 @@ export class OrdersController {
     @Query('download') download: string | undefined,
     @Res() res: Response,
   ) {
+    const isDownload = download === '1';
     const access = await this.ordersService.getResultFileRedirect(
       orderId,
       signature,
       expires,
-      download === '1',
+      isDownload,
     );
 
-    return res.redirect(access.data.url);
+    // Proxy the file bytes directly so the browser never sees Cloudinary's
+    // X-Frame-Options headers, which would block the result from loading
+    // inside an <iframe> on the frontend domain.
+    type StreamResponse = { headers: Record<string, string>; data: NodeJS.ReadableStream };
+    let upstream: StreamResponse;
+    try {
+      upstream = (await axios.get(access.data.url, {
+        responseType: 'stream',
+        timeout: 30_000,
+      })) as StreamResponse;
+    } catch {
+      throw new InternalServerErrorException('Could not retrieve result file.');
+    }
+
+    const contentType = upstream.headers['content-type'] ?? 'application/octet-stream';
+
+    res.setHeader('Content-Type', contentType);
+
+    if (isDownload) {
+      res.setHeader('Content-Disposition', 'attachment');
+    }
+
+    upstream.data.pipe(res);
   }
 
   @Post('me/:orderId/dispute')
