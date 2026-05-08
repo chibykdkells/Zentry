@@ -30,8 +30,8 @@ export class AnalyticsService {
         COALESCE(SUM(t.amount), 0)          AS revenue,
         COUNT(*)                            AS order_count
       FROM "Transaction" t
-      WHERE t.type IN (${TransactionType.PLATFORM_COMMISSION}, ${TransactionType.SERVICE_PURCHASE})
-        AND t.status = 'SUCCESS'
+      WHERE t.type::text IN (${TransactionType.PLATFORM_COMMISSION}, ${TransactionType.SERVICE_PURCHASE})
+        AND t.status::text = 'SUCCESS'
         ${tf}
       GROUP BY 1
       ORDER BY 1 DESC
@@ -168,7 +168,7 @@ export class AnalyticsService {
         date_trunc(${trunc}, "createdAt") AS period,
         COUNT(*)                          AS new_users
       FROM "User"
-      WHERE role NOT IN (${UserRole.SUPER_ADMIN})
+      WHERE role::text NOT IN (${UserRole.SUPER_ADMIN})
         ${tf}
       GROUP BY 1
       ORDER BY 1 DESC
