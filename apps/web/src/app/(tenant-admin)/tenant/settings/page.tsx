@@ -1,6 +1,4 @@
 'use client';
-
-import Image from 'next/image';
 import { type ElementType, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
@@ -931,13 +929,12 @@ export default function TenantSettingsPage() {
           >
             {logoUrl.trim() ? (
               <div className="mb-4 inline-flex rounded-2xl bg-white/85 px-3 py-2 shadow-sm">
-                <Image
+                {/* External tenant logos can come from mixed hosts, so a plain img is safer here than next/image. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
                   src={logoUrl}
                   alt={`${name || 'Business'} logo`}
-                  width={128}
-                  height={40}
                   className="h-10 w-auto max-w-[8rem] object-contain"
-                  unoptimized
                 />
               </div>
             ) : null}
