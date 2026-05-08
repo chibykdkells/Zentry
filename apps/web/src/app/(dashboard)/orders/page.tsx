@@ -38,7 +38,7 @@ import {
   ordersLifecycle,
 } from '@/lib/service-catalog';
 import { cn } from '@/lib/utils';
-import { OrderStatus, TransactionStatus } from '@zendocx/types';
+import { OrderStatus } from '@zendocx/types';
 
 export default function OrdersPage() {
   const searchParams = useSearchParams();
@@ -328,84 +328,42 @@ export default function OrdersPage() {
 
           <div className="rounded-3xl border border-slate-100 bg-slate-50/70 p-5">
             <h3 className="text-sm font-semibold text-slate-900">
-              Timeline and payment activity
+              Order timeline
             </h3>
             <div className="mt-4 space-y-3">
               <TimelineRow label="Submitted" value={formatDate(detail.createdAt)} />
-              <TimelineRow label="Updated" value={formatDate(detail.updatedAt)} />
               <TimelineRow
                 label="Completed"
-                value={detail.completedAt ? formatDate(detail.completedAt) : 'Not completed yet'}
+                value={detail.completedAt ? formatDate(detail.completedAt) : 'Pending'}
               />
               <TimelineRow
                 label="Result uploaded"
                 value={
                   detail.resultUploadedAt
                     ? formatDate(detail.resultUploadedAt)
-                    : 'No result uploaded yet'
+                    : 'Not yet'
                 }
               />
               <TimelineRow
                 label="Dispute window"
                 value={
                   detail.disputeWindowExpiresAt
-                    ? `Open until ${formatDate(detail.disputeWindowExpiresAt)}`
+                    ? `Until ${formatDate(detail.disputeWindowExpiresAt)}`
                     : detail.fulfillmentType === 'AUTOMATED'
-                      ? 'Not used for instant provider delivery'
+                      ? 'Not applicable'
                       : 'Starts after completion'
                 }
               />
               <TimelineRow
-                label="Funds released"
+                label="Payment released"
                 value={
                   detail.escrowReleasedAt
                     ? formatDate(detail.escrowReleasedAt)
                     : detail.fulfillmentType === 'AUTOMATED'
-                      ? 'Not routed through held funds'
-                      : 'Funds are still on hold'
+                      ? 'Processed instantly'
+                      : 'Pending'
                 }
               />
-            </div>
-
-            <div className="mt-5 space-y-2 md:max-h-[18rem] md:overflow-y-auto md:pr-1">
-              {detail.transactions.length ? (
-                detail.transactions.map((transaction) => (
-                  <div
-                    key={transaction.id}
-                    className="rounded-2xl border border-slate-200 bg-white px-4 py-3"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900">
-                          {transaction.description}
-                        </p>
-                        <p className="mt-1 text-xs uppercase tracking-[0.14em] text-slate-400">
-                          {transaction.type} • {formatDate(transaction.createdAt)}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-semibold text-slate-900">
-                          {formatNaira(transaction.amount)}
-                        </p>
-                        <p
-                          className={cn(
-                            'mt-1 text-xs font-semibold uppercase tracking-[0.14em]',
-                            transaction.status === TransactionStatus.SUCCESS
-                              ? 'text-emerald-600'
-                              : 'text-amber-600',
-                          )}
-                        >
-                          {transaction.status}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm text-slate-500">
-                  No wallet activity has been recorded for this request yet.
-                </p>
-              )}
             </div>
           </div>
 
