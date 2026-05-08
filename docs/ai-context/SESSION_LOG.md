@@ -8092,3 +8092,70 @@ Per product decision: CBT center approval is the tenant admin's responsibility, 
 ### Blockers / Notes for Next Session
 - CBT centers that were approved but still see 0 jobs may need a page refresh to bust the TanStack Query cache.
 - Production-truth pass still pending: Sentry env vars, CNAME, Paystack webhook secret, silent refresh, PWA install.
+
+---
+
+## Session 2026-05-08 — Services deep link, CBT earnings transparency, tenant commission wiring, analytics fix
+
+**Phase:** Phase 10
+**AI Assistant:** Claude Sonnet 4.6
+
+### What Was Done
+
+**Services accordion deep link (hydration fix):**
+- When a user clicks a category tile on the home page (e.g., NECO), the services page now shows ALL categories but pre-expands only the clicked one.
+- Previous attempts using `useState` lazy initializers failed because React hydrates using the server-side value (where `window` is undefined), locking in an empty array.
+- Fix: `useEffect(() => { ... }, [])` reads `?categorySlug` param after hydration (same pattern as wallet page `?panel` param), then calls `window.history.replaceState` to clean the URL.
+- `activeCategory` stays `'ALL'` so all categories remain visible; only `expandedSlugs` is overridden.
+
+**CBT earnings transparency:**
+- "Total Earned" card on CBT dashboard now shows released earnings + pending commissions (COMPLETED orders with `escrowReleasedAt = null`).
+- New "Awaiting Release" card shows funds locked in the 2-hour dispute window.
+- Available balance remains the withdrawable (post-release) amount only.
+- `getCbtDashboard` in `orders.service.ts` adds a `pendingCommissionAggregate` query; dashboard hook and CBT dashboard page updated.
+
+**Tenant dashboard wallet confusion:**
+- Wallet tile now shows the tenant admin's own wallet balance (`myWalletBalance`) rather than the sum of all users' available balances.
+- Detail modal separates "Your wallet balance" and "User available funds" as two distinct rows.
+- `getTenantOverviewForAdmin` in `tenant.service.ts` queries `wallet.findUnique({ where: { userId } })` for the tenant admin's own wallet and returns it as `myWalletBalance`.
+
+**Tenant commission wiring (end-to-end):**
+- Root cause 1: `order.tenantFee` was never set at order creation (defaulted to 0).
+- Root cause 2: `platformFee` formula was wrong (applied to `cbtCommission + providerCost` instead of just `providerCost`).
+- Root cause 3: Escrow release gave platform everything after CBT commission, skipping the tenant wallet.
+- Fix: `createOrder` now sets `tenantFee = service.providerCost` and `platformFee = floor(providerCost * platformFeePercent / 100)`.
+- Escrow release now distributes three-way: CBT → `cbtCommission`, Tenant → `tenantFee - platformFee`, Platform → `totalAmount - cbtCommission - tenantNet`.
+- `platformActual` formula made safe for old orders where `tenantFee = 0n`: guarded with `order.tenantFee > 0n ? ... : 0n`.
+- Tenant wallet update and `TENANT_COMMISSION` transaction created at release.
+
+**Analytics page fix:**
+- `getRevenueTimeSeries` and `getUserGrowth` used Prisma `$queryRaw` with enum columns compared to text parameters — PostgreSQL raised `operator does not exist: "TransactionType" = text`.
+- Fix: explicit casts `t.type::text`, `t.status::text`, `role::text` in raw SQL.
+
+### Files Created / Modified
+
+- `apps/web/src/app/(dashboard)/services/page.tsx` — `useEffect` deep-link via `?categorySlug`, removed fallback expansion default
+- `apps/api/src/modules/orders/orders.service.ts` — `getCbtDashboard`: pending commission aggregate + `awaitingRelease` metric; `createOrder`: set `tenantFee` and corrected `platformFee`
+- `apps/api/src/modules/orders/orders-release-queue.service.ts` — three-way commission split; `platformActual` formula safe for old orders
+- `apps/api/src/modules/tenant/tenant.service.ts` — `getTenantOverviewForAdmin`: add `myWallet` query, return `myWalletBalance` + `userAvailableFunds`
+- `apps/api/src/modules/analytics/analytics.service.ts` — fix `::text` casts in raw SQL enum comparisons
+- `apps/web/src/app/(cbt)/dashboard/page.tsx` — "Awaiting Release" StatTile card
+- `apps/web/src/app/(tenant-admin)/tenant/dashboard/page.tsx` — wallet tile uses `myWalletBalance`; modal separates wallet and user funds
+- `apps/web/src/hooks/use-cbt-orders.ts` — added `awaitingRelease: string` to metrics interface
+- `apps/web/src/hooks/use-tenant-admin.ts` — `myWalletBalance` + `userAvailableFunds` in metrics interface
+
+### Decisions Made
+
+- Tenant commission formula: `tenantFee = service.providerCost`; `platformFee = floor(tenantFee * platformFeePercent / 100)`. Platform takes a cut of the tenant's margin only — not of CBT commission.
+- `platformActual` is always derived as `totalAmount - cbtCommission - tenantNet`, guaranteeing the invariant `CBT + Tenant + Platform = totalAmount`.
+- Old orders with `tenantFee = 0n` still handled correctly: `tenantNet = 0`, platform gets everything after CBT (backward compatible).
+
+### Phase Checklist Updates
+
+- [x] Phase 5: Tenant commission wired end-to-end (order creation + escrow release)
+- [x] Phase 10: Analytics raw SQL enum cast fix
+
+### Blockers / Notes for Next Session
+
+- Old orders in production have `tenantFee = 0` — they will release correctly (platform gets remainder), but tenant wallets were never credited for historical completed orders. A one-time backfill may be needed.
+- Production-truth pass still pending: Sentry env vars, CNAME, Paystack webhook secret, silent refresh, PWA install.

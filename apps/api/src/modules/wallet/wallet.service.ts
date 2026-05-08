@@ -23,8 +23,7 @@ import type { Request } from 'express';
 import { PaymentService } from '../../providers/payment/payment.service';
 import { EmailService } from '../../providers/email/email.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { generateTransactionRef } from '@zendocx/utils';
-import { nairaToKobo } from '@zendocx/utils';
+import { formatNaira, generateTransactionRef, nairaToKobo } from '@zendocx/utils';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   GetAdminWalletsQueryDto,
@@ -3312,7 +3311,7 @@ export class WalletService {
           userId: transaction.userId,
           type: 'WALLET_FUNDED',
           title: 'Wallet funded successfully',
-          message: `Your wallet has been credited with ${amountKobo.toString()} kobo.`,
+          message: `Your wallet has been credited with ${formatNaira(amountKobo)}.`,
           metadata: {
             reference: transaction.reference,
             amountKobo: amountKobo.toString(),

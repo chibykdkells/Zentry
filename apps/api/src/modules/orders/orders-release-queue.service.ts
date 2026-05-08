@@ -337,13 +337,10 @@ export class OrdersReleaseQueueService implements OnModuleInit {
 
       // Commission splits
       // - CBT earns their full commission
-      // - Platform earns its cut of the tenant fee (platformFee = tenantFee * platformFeePercent / 100)
-      // - Tenant earns the net tenant fee after the platform cut
-      // - Any remainder (totalAmount - cbtCommission - tenantFee) also goes to platform
-      const tenantNet = order.tenantFee - order.platformFee;
-      const platformActual =
-        order.platformFee +
-        (order.totalAmount - order.cbtCommission - order.tenantFee);
+      // - Tenant earns their fee minus platform's cut (safe for old orders where tenantFee=0)
+      // - Platform earns whatever is left: totalAmount - cbtCommission - tenantNet
+      const tenantNet = order.tenantFee > 0n ? order.tenantFee - order.platformFee : 0n;
+      const platformActual = order.totalAmount - order.cbtCommission - tenantNet;
 
       const requesterEscrowBefore = order.requester.wallet.escrowBalance;
       const requesterEscrowAfter = requesterEscrowBefore - order.totalAmount;

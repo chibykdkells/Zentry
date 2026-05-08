@@ -14,7 +14,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const hydrated = useHydrated();
 
   return (
-    <div className="min-h-screen flex flex-col md:h-screen md:overflow-hidden">
+    <div className="min-h-screen flex flex-col">
       <TopBar />
       <div className="flex flex-1 min-h-0">
         <Sidebar
@@ -23,7 +23,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           items={individualPrimaryNav}
           secondaryItems={individualSecondaryNav}
         />
-        <main className="min-h-0 flex-1 overflow-y-auto pb-20 md:pb-0 md:h-full">
+        <main className="min-h-0 flex-1 overflow-y-auto pb-20 md:pb-0">
           <RouteGuard requiredRoles={[UserRole.INDIVIDUAL]}>
             {children}
           </RouteGuard>

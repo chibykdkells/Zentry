@@ -9,7 +9,7 @@ import { UserRole } from '@zendocx/types';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen flex flex-col md:h-screen md:overflow-hidden">
+    <div className="min-h-screen flex flex-col">
       <TopBar title="Admin Dashboard" />
       <div className="flex flex-1 min-h-0">
         <Sidebar
@@ -18,7 +18,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           items={adminPrimaryNav}
           secondaryItems={adminSecondaryNav}
         />
-        <main className="min-h-0 flex-1 overflow-y-auto pb-20 md:pb-0 md:h-full">
+        <main className="min-h-0 flex-1 overflow-y-auto pb-20 md:pb-0">
           <RouteGuard requiredRoles={[UserRole.SUPER_ADMIN]}>
             {children}
           </RouteGuard>

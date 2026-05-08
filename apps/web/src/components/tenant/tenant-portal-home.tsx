@@ -4,6 +4,7 @@
 
 import Link from 'next/link';
 import { ArrowRight, CheckCircle2, ChevronRight, ShieldCheck, Zap } from 'lucide-react';
+import { formatNaira } from '@/lib/format';
 import { useTenantStore } from '@/stores/tenant.store';
 import { appendTenantContextToPath } from '@/lib/tenant-runtime';
 import { useServiceCatalog } from '@/hooks/use-service-catalog';
@@ -186,7 +187,7 @@ export function TenantPortalHome({ tenantSlug }: TenantPortalHomeProps) {
                           <p className="font-semibold text-slate-900 truncate">{service.name}</p>
                         </div>
                         <span className="shrink-0 rounded-full bg-white/80 px-2.5 py-1 text-xs font-bold text-slate-700 shadow-sm">
-                          {service.totalPrice}
+                          {formatNaira(service.totalPrice)}
                         </span>
                       </div>
                       {service.description ? (

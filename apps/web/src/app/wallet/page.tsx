@@ -56,6 +56,17 @@ const transactionStatusOptions: Array<{
   { label: 'Failed', value: TransactionStatus.FAILED },
 ];
 
+function getStartOfWeek(date: Date) {
+  const start = new Date(date);
+  const day = start.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+
+  start.setDate(start.getDate() + diff);
+  start.setHours(0, 0, 0, 0);
+
+  return start;
+}
+
 export default function WalletPage() {
   const user = useAuthStore((state) => state.user);
   const accessToken = useAuthStore((state) => state.accessToken);
@@ -184,6 +195,10 @@ export default function WalletPage() {
       transactionFilters.status !== ALL_FILTER_VALUE) ||
     Boolean(transactionFilters.startDate) ||
     Boolean(transactionFilters.endDate);
+  const startOfCurrentWeek = getStartOfWeek(new Date());
+  const recentTransactionsThisWeek = wallet.recentTransactions.filter(
+    (transaction) => new Date(transaction.createdAt) >= startOfCurrentWeek,
+  ).length;
 
   const isRequesterOnly = user?.role === UserRole.INDIVIDUAL;
   const isCbt = user?.role === UserRole.CBT_CENTER;
@@ -382,14 +397,14 @@ export default function WalletPage() {
           <DashTile
             icon={ReceiptText}
             label="Wallet Report"
-            value={`${wallet.transactionCount} records`}
+            value="View details"
             color="bg-[#0D1B3E] text-white"
             onClick={() => setOpenTile('report')}
           />
           <DashTile
             icon={History}
             label="Transaction History"
-            value={`${wallet.recentTransactions.length} recent`}
+            value={`${recentTransactionsThisWeek} this week`}
             color="bg-cyan-600 text-white"
             onClick={() => setOpenTile('history')}
           />

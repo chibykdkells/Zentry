@@ -358,35 +358,36 @@ export function CreateOrderModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/50 px-4 py-6">
-      <div className="w-full max-w-2xl rounded-[2rem] border border-slate-200 bg-white p-6 shadow-2xl">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-amber-600">
-              New request
-            </p>
-            <h2 className="mt-2 text-2xl font-semibold text-slate-900">
-              {service.name}
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-slate-500">
-              {service.description ??
-                'Complete the guided details below to place this request.'}
-            </p>
+    <div className="fixed inset-0 z-[80] overflow-y-auto bg-slate-950/50 px-4 py-6">
+      <div className="flex min-h-full items-start justify-center sm:items-center">
+        <div className="flex w-full max-w-2xl max-h-[calc(100dvh-3rem)] flex-col overflow-hidden rounded-[2rem] border border-slate-200 bg-white p-6 shadow-2xl">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-amber-600">
+                New request
+              </p>
+              <h2 className="mt-2 text-2xl font-semibold text-slate-900">
+                {service.name}
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                {service.description ??
+                  'Complete the guided details below to place this request.'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+            >
+              ✕
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
-          >
-            ✕
-          </button>
-        </div>
 
         <div className="mt-6 grid gap-3 rounded-3xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-3">
           <InfoPill label="Category" value={service.category.name} />
           <InfoPill
             label={isAutomatedService ? 'Estimated charge' : 'Price'}
-            value={estimatedAutomatedTotal}
+            value={formatNaira(estimatedAutomatedTotal)}
           />
           <InfoPill
             label="Documents"
@@ -398,7 +399,7 @@ export function CreateOrderModal({
           />
         </div>
 
-        <div className="mt-6 space-y-4">
+        <div className="mt-6 flex-1 space-y-4 overflow-y-auto pr-1">
           {requiredFields.length === 0 ? (
             <FeedbackBanner
               tone="info"
@@ -729,6 +730,7 @@ export function CreateOrderModal({
                 : 'Place order'}
           </button>
         </div>
+      </div>
       </div>
     </div>
   );

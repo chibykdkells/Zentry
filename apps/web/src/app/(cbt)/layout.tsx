@@ -24,7 +24,7 @@ export default function CbtLayout({ children }: { children: React.ReactNode }) {
   const primaryNav = user?.role === UserRole.CBT_STAFF ? cbtStaffPrimaryNav : cbtPrimaryNav;
 
   return (
-    <div className="min-h-screen flex flex-col md:h-screen md:overflow-hidden">
+    <div className="min-h-screen flex flex-col">
       <TopBar title="CBT Dashboard" />
       <div className="flex flex-1 min-h-0">
         <Sidebar
@@ -33,7 +33,7 @@ export default function CbtLayout({ children }: { children: React.ReactNode }) {
           items={primaryNav}
           secondaryItems={cbtSecondaryNav}
         />
-        <main className="min-h-0 flex-1 overflow-y-auto pb-20 md:pb-0 md:h-full">
+        <main className="min-h-0 flex-1 overflow-y-auto pb-20 md:pb-0">
           <RouteGuard requiredRoles={[UserRole.CBT_CENTER, UserRole.CBT_STAFF]}>
             {children}
           </RouteGuard>
