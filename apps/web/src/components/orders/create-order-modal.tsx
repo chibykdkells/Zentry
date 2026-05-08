@@ -358,10 +358,11 @@ export function CreateOrderModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[80] overflow-y-auto bg-slate-950/50 px-4 py-6">
-      <div className="flex min-h-full items-start justify-center sm:items-center">
-        <div className="flex w-full max-w-2xl max-h-[calc(100dvh-3rem)] flex-col overflow-hidden rounded-[2rem] border border-slate-200 bg-white p-6 shadow-2xl">
-          <div className="flex items-start justify-between gap-4">
+    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-950/50 sm:items-center sm:p-6">
+      <div className="flex w-full max-w-2xl flex-col overflow-hidden rounded-t-[2rem] border border-slate-200 bg-white shadow-2xl sm:rounded-[2rem]" style={{ maxHeight: 'calc(100dvh - 2rem)' }}>
+
+          {/* Pinned header */}
+          <div className="shrink-0 flex items-start justify-between gap-4 px-6 pt-6">
             <div>
               <p className="text-sm font-semibold uppercase tracking-[0.2em] text-amber-600">
                 New request
@@ -383,7 +384,10 @@ export function CreateOrderModal({
             </button>
           </div>
 
-        <div className="mt-6 grid gap-3 rounded-3xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-3">
+          {/* Scrollable body */}
+          <div className="flex-1 overflow-y-auto px-6 pb-2 pt-6">
+
+        <div className="grid gap-3 rounded-3xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-3">
           <InfoPill label="Category" value={service.category.name} />
           <InfoPill
             label={isAutomatedService ? 'Estimated charge' : 'Price'}
@@ -399,7 +403,7 @@ export function CreateOrderModal({
           />
         </div>
 
-        <div className="mt-6 flex-1 space-y-4 overflow-y-auto pr-1">
+        <div className="mt-6 space-y-4">
           {requiredFields.length === 0 ? (
             <FeedbackBanner
               tone="info"
@@ -703,7 +707,11 @@ export function CreateOrderModal({
           />
         ) : null}
 
-        <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+          </div>{/* end scrollable body */}
+
+          {/* Pinned footer */}
+          <div className="shrink-0 border-t border-slate-100 px-6 py-4">
+            <div className="flex flex-col gap-3 sm:flex-row">
           <button
             type="button"
             onClick={onClose}
@@ -729,8 +737,9 @@ export function CreateOrderModal({
                 ? 'Confirm purchase'
                 : 'Place order'}
           </button>
-        </div>
-      </div>
+            </div>
+          </div>
+
       </div>
     </div>
   );
