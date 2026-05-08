@@ -2987,6 +2987,7 @@ export class OrdersService {
       availableJobs,
       myJobs,
       wallet,
+      pendingCommissionAggregate,
     ] = await Promise.all([
       this.prisma.order.count({
         where: {
@@ -3035,7 +3036,21 @@ export class OrdersService {
           totalWithdrawn: true,
         },
       }),
+      // Sum commission on COMPLETED orders not yet released (in dispute window)
+      this.prisma.order.aggregate({
+        where: {
+          assignedCbtId: userId,
+          status: OrderStatus.COMPLETED,
+          escrowReleasedAt: null,
+        },
+        _sum: { cbtCommission: true },
+      }),
     ]);
+
+    const pendingCommission =
+      pendingCommissionAggregate._sum.cbtCommission ?? 0n;
+    const releasedEarned = wallet?.totalEarned ?? 0n;
+    const totalEarnedDisplay = (releasedEarned + pendingCommission).toString();
 
     return {
       message: 'CBT dashboard retrieved',
@@ -3046,7 +3061,8 @@ export class OrdersService {
           availableJobs: availableCount,
           activeJobs: activeCount,
           completedJobs: completedCount,
-          totalEarned: wallet?.totalEarned.toString() ?? '0',
+          totalEarned: totalEarnedDisplay,
+          awaitingRelease: pendingCommission.toString(),
           availableBalance: wallet?.availableBalance.toString() ?? '0',
           totalWithdrawn: wallet?.totalWithdrawn.toString() ?? '0',
         },

@@ -150,7 +150,7 @@ export default function TenantDashboardPage() {
         <DashTile
           icon={Wallet}
           label="Wallet"
-          value={formatNaira(overview.metrics.availableBalance)}
+          value={formatNaira(overview.metrics.myWalletBalance)}
           color="bg-[#0D1B3E] text-white"
           onClick={() => setOpenTile('wallet')}
         />
@@ -194,8 +194,12 @@ export default function TenantDashboardPage() {
       >
         <dl className="grid gap-y-3 text-sm">
           <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
-            <dt className="text-slate-500">Available balance</dt>
-            <dd className="font-semibold text-slate-900">{formatNaira(overview.metrics.availableBalance)}</dd>
+            <dt className="text-slate-500">Your wallet balance</dt>
+            <dd className="font-semibold text-slate-900">{formatNaira(overview.metrics.myWalletBalance)}</dd>
+          </div>
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+            <dt className="text-slate-500">User available funds</dt>
+            <dd className="font-semibold text-slate-900">{formatNaira(overview.metrics.userAvailableFunds)}</dd>
           </div>
           <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
             <dt className="text-slate-500">Held customer funds</dt>
@@ -307,8 +311,8 @@ export default function TenantDashboardPage() {
             <dd className="font-semibold text-slate-900">{overview.metrics.readyReleaseCount}</dd>
           </div>
           <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
-            <dt className="text-slate-500">Available balance</dt>
-            <dd className="font-semibold text-slate-900">{formatNaira(overview.metrics.availableBalance)}</dd>
+            <dt className="text-slate-500">Your wallet balance</dt>
+            <dd className="font-semibold text-slate-900">{formatNaira(overview.metrics.myWalletBalance)}</dd>
           </div>
         </dl>
       </DetailModal>

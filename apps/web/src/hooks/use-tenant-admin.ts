@@ -41,7 +41,8 @@ export interface TenantAdminOverview {
     completedOrders: number;
     disputedOrders: number;
     heldFunds: string;
-    availableBalance: string;
+    myWalletBalance: string;
+    userAvailableFunds: string;
     awaitingReleaseCount: number;
     readyReleaseCount: number;
     blockedReleaseCount: number;

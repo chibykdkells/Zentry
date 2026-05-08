@@ -1307,7 +1307,8 @@ export class TenantService {
       recentUsers,
       orderStats,
       heldFundsAggregate,
-      availableFundsAggregate,
+      userFundsAggregate,
+      myWallet,
       awaitingReleaseCount,
       readyReleaseCount,
       blockedReleaseCount,
@@ -1353,14 +1354,12 @@ export class TenantService {
         },
       }),
       this.prisma.wallet.aggregate({
-        where: {
-          user: {
-            tenantId,
-          },
-        },
-        _sum: {
-          availableBalance: true,
-        },
+        where: { user: { tenantId } },
+        _sum: { availableBalance: true },
+      }),
+      this.prisma.wallet.findUnique({
+        where: { userId },
+        select: { availableBalance: true },
       }),
       this.prisma.order.count({
         where: {
@@ -1471,8 +1470,9 @@ export class TenantService {
           completedOrders: counts.COMPLETED ?? 0,
           disputedOrders: counts.DISPUTED ?? 0,
           heldFunds: heldFundsAggregate._sum.escrowBalance?.toString() ?? '0',
-          availableBalance:
-            availableFundsAggregate._sum.availableBalance?.toString() ?? '0',
+          myWalletBalance: myWallet?.availableBalance.toString() ?? '0',
+          userAvailableFunds:
+            userFundsAggregate._sum.availableBalance?.toString() ?? '0',
           awaitingReleaseCount,
           readyReleaseCount,
           blockedReleaseCount,

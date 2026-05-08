@@ -151,11 +151,19 @@ export default function CbtDashboardPage() {
           href="/earnings"
         />
         <StatTile
+          label="Awaiting Release"
+          value={formatNaira(dashboard.metrics.awaitingRelease)}
+          sub="in dispute window"
+          icon={<Clock3 size={18} />}
+          accent="amber"
+          href="/earnings"
+        />
+        <StatTile
           label="Available"
           value={formatNaira(dashboard.metrics.availableBalance)}
           sub="withdrawable"
           icon={<TrendingUp size={18} />}
-          accent="amber"
+          accent="teal"
           href="/withdraw"
         />
       </div>

@@ -61,6 +61,7 @@ interface CbtDashboardResponse {
     activeJobs: number;
     completedJobs: number;
     totalEarned: string;
+    awaitingRelease: string;
     availableBalance: string;
     totalWithdrawn: string;
   };
