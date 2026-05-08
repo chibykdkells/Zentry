@@ -18,6 +18,7 @@ import { VtuService } from './vtu/vtu.service';
 import { TermiiSmsProvider } from './sms/termii.provider';
 import { SmsService } from './sms/sms.service';
 import { CloudinaryStorageProvider } from './storage/cloudinary.provider';
+import { DiskStorageProvider } from './storage/disk.provider';
 import { StorageService } from './storage/storage.service';
 import { ProviderCredentialsService } from './provider-credentials.service';
 
@@ -31,6 +32,7 @@ import { ProviderCredentialsService } from './provider-credentials.service';
     TermiiSmsProvider,
     ResendEmailProvider,
     CloudinaryStorageProvider,
+    DiskStorageProvider,
     {
       provide: PAYMENT_PROVIDER,
       useFactory: (
@@ -123,19 +125,30 @@ import { ProviderCredentialsService } from './provider-credentials.service';
       useFactory: (
         config: ConfigService,
         cloudinaryProvider: CloudinaryStorageProvider,
+        diskProvider: DiskStorageProvider,
       ) => {
+        const cloudName = config.get<string>('CLOUDINARY_CLOUD_NAME', '');
+        const apiKey = config.get<string>('CLOUDINARY_API_KEY', '');
+        const apiSecret = config.get<string>('CLOUDINARY_API_SECRET', '');
+        const cloudinaryReady = !!(
+          cloudName &&
+          cloudName !== 'demo' &&
+          apiKey &&
+          apiSecret
+        );
+
         const activeProvider = config.get<string>(
           'ACTIVE_STORAGE_PROVIDER',
           'CLOUDINARY',
         );
 
-        switch (activeProvider) {
-          case 'CLOUDINARY':
-          default:
-            return cloudinaryProvider;
-        }
+        if (activeProvider === 'DISK') return diskProvider;
+        if (activeProvider === 'CLOUDINARY' && cloudinaryReady) return cloudinaryProvider;
+
+        // Auto-fallback: Cloudinary selected but credentials absent — use disk
+        return diskProvider;
       },
-      inject: [ConfigService, CloudinaryStorageProvider],
+      inject: [ConfigService, CloudinaryStorageProvider, DiskStorageProvider],
     },
     PaymentService,
     VtuService,
@@ -150,6 +163,7 @@ import { ProviderCredentialsService } from './provider-credentials.service';
     SMS_PROVIDER,
     EMAIL_PROVIDER,
     STORAGE_PROVIDER,
+    DiskStorageProvider,
     PaymentService,
     VtuService,
     SmsService,

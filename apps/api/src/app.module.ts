@@ -24,6 +24,7 @@ import { TenantModule } from './modules/tenant/tenant.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { SystemConfigModule } from './modules/system-config/system-config.module';
+import { StaticModule } from './modules/static/static.module';
 import { ProvidersModule } from './providers/providers.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -75,6 +76,7 @@ import { TenantContextMiddleware } from './common/middleware/tenant-context.midd
     NotificationsModule,
     AnalyticsModule,
     SystemConfigModule,
+    StaticModule,
   ],
   providers: [
     AppService,
