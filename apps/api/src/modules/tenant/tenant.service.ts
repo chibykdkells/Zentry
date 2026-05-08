@@ -1309,6 +1309,7 @@ export class TenantService {
       heldFundsAggregate,
       userFundsAggregate,
       myWallet,
+      pendingTenantEarningsAggregate,
       awaitingReleaseCount,
       readyReleaseCount,
       blockedReleaseCount,
@@ -1361,6 +1362,17 @@ export class TenantService {
         where: { userId },
         select: { availableBalance: true },
       }),
+      // Sum tenant net on completed unreleased orders (tenantFee - platformFee per order)
+      this.prisma.order.aggregate({
+        where: {
+          tenantId,
+          fulfillmentType: 'MANUAL',
+          status: 'COMPLETED',
+          escrowReleasedAt: null,
+          tenantFee: { gt: 0 },
+        },
+        _sum: { tenantFee: true, platformFee: true },
+      }),
       this.prisma.order.count({
         where: {
           tenantId,
@@ -1411,6 +1423,8 @@ export class TenantService {
           id: true,
           orderNumber: true,
           cbtCommission: true,
+          tenantFee: true,
+          platformFee: true,
           disputeWindowExpiresAt: true,
           service: {
             select: {
@@ -1473,6 +1487,10 @@ export class TenantService {
           myWalletBalance: myWallet?.availableBalance.toString() ?? '0',
           userAvailableFunds:
             userFundsAggregate._sum.availableBalance?.toString() ?? '0',
+          pendingTenantCommission: (
+            (pendingTenantEarningsAggregate._sum.tenantFee ?? 0n) -
+            (pendingTenantEarningsAggregate._sum.platformFee ?? 0n)
+          ).toString(),
           awaitingReleaseCount,
           readyReleaseCount,
           blockedReleaseCount,
@@ -1486,6 +1504,7 @@ export class TenantService {
           id: order.id,
           orderNumber: order.orderNumber,
           cbtCommission: order.cbtCommission.toString(),
+          tenantEarning: (order.tenantFee - order.platformFee).toString(),
           releaseState: order.dispute
             ? 'BLOCKED'
             : order.disputeWindowExpiresAt &&

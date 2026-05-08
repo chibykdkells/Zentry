@@ -6,6 +6,7 @@ import {
   AlertCircle,
   Briefcase,
   Clock3,
+  Coins,
   Settings2,
   ShieldAlert,
   UserRoundCheck,
@@ -118,7 +119,7 @@ export default function TenantDashboardPage() {
       />
 
       {/* Colorful stat cards — immediate numbers at a glance */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <StatCard
           title="Customers"
           value={String(overview.metrics.individualUsers)}
@@ -142,6 +143,12 @@ export default function TenantDashboardPage() {
           value={formatNaira(overview.metrics.heldFunds)}
           icon={Wallet}
           variant="teal"
+        />
+        <StatCard
+          title="Your earnings awaiting release"
+          value={formatNaira(overview.metrics.pendingTenantCommission)}
+          icon={Coins}
+          variant="amber"
         />
       </div>
 
@@ -196,6 +203,10 @@ export default function TenantDashboardPage() {
           <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
             <dt className="text-slate-500">Your wallet balance</dt>
             <dd className="font-semibold text-slate-900">{formatNaira(overview.metrics.myWalletBalance)}</dd>
+          </div>
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-amber-100 bg-amber-50/70 px-4 py-3">
+            <dt className="text-amber-700">Earnings awaiting release</dt>
+            <dd className="font-semibold text-amber-900">{formatNaira(overview.metrics.pendingTenantCommission)}</dd>
           </div>
           <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
             <dt className="text-slate-500">User available funds</dt>
@@ -380,6 +391,7 @@ export default function TenantDashboardPage() {
                   </div>
                   <div className="mt-3 grid gap-1.5 text-sm text-slate-600 sm:grid-cols-2">
                     <p>CBT payout: {formatNaira(item.cbtCommission)}</p>
+                    <p className="font-medium text-amber-700">Your earnings: {formatNaira(item.tenantEarning)}</p>
                     <p>CBT: {item.assignedCbt ? item.assignedCbt.name : 'Not assigned'}</p>
                     <p>
                       Window:{' '}

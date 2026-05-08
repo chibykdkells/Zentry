@@ -43,6 +43,7 @@ export interface TenantAdminOverview {
     heldFunds: string;
     myWalletBalance: string;
     userAvailableFunds: string;
+    pendingTenantCommission: string;
     awaitingReleaseCount: number;
     readyReleaseCount: number;
     blockedReleaseCount: number;
@@ -61,6 +62,7 @@ export interface TenantAdminOverview {
     id: string;
     orderNumber: string;
     cbtCommission: string;
+    tenantEarning: string;
     releaseState: 'AWAITING_WINDOW' | 'READY' | 'BLOCKED';
     disputeWindowExpiresAt: string | null;
     service: {
