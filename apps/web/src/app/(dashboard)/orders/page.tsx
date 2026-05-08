@@ -159,11 +159,6 @@ export default function OrdersPage() {
               }
               value={formatNaira(detail.totalAmount)}
             />
-            <MetricPill label="Platform fee" value={formatNaira(detail.platformFee)} />
-            <MetricPill
-              label="CBT commission"
-              value={formatNaira(detail.cbtCommission)}
-            />
           </div>
 
           <div className="rounded-3xl border border-slate-100 bg-slate-50/70 p-5">
