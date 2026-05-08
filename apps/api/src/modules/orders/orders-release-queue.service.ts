@@ -173,7 +173,9 @@ export class OrdersReleaseQueueService implements OnModuleInit {
           fulfillmentType: true,
           totalAmount: true,
           platformFee: true,
+          tenantFee: true,
           cbtCommission: true,
+          tenantId: true,
           escrowReleasedAt: true,
           disputeWindowExpiresAt: true,
           assignedCbtId: true,
@@ -319,24 +321,45 @@ export class OrdersReleaseQueueService implements OnModuleInit {
         );
       }
 
+      // Find tenant admin wallet (if this is a tenant order)
+      const tenantWallet =
+        order.tenantId && order.tenantFee > 0n
+          ? await tx.wallet.findFirst({
+              where: {
+                user: {
+                  tenantId: order.tenantId,
+                  role: UserRole.TENANT_ADMIN,
+                },
+              },
+              select: { id: true, userId: true, availableBalance: true, totalEarned: true },
+            })
+          : null;
+
+      // Commission splits
+      // - CBT earns their full commission
+      // - Platform earns its cut of the tenant fee (platformFee = tenantFee * platformFeePercent / 100)
+      // - Tenant earns the net tenant fee after the platform cut
+      // - Any remainder (totalAmount - cbtCommission - tenantFee) also goes to platform
+      const tenantNet = order.tenantFee - order.platformFee;
+      const platformActual =
+        order.platformFee +
+        (order.totalAmount - order.cbtCommission - order.tenantFee);
+
       const requesterEscrowBefore = order.requester.wallet.escrowBalance;
       const requesterEscrowAfter = requesterEscrowBefore - order.totalAmount;
       const cbtBalanceBefore = earnerWallet.availableBalance;
       const cbtBalanceAfter = cbtBalanceBefore + order.cbtCommission;
-      const cbtTotalEarnedAfter =
-        earnerWallet.totalEarned + order.cbtCommission;
-      const platformNet = order.totalAmount - order.cbtCommission;
+      const cbtTotalEarnedAfter = earnerWallet.totalEarned + order.cbtCommission;
       const platformBalanceBefore = platformWallet.availableBalance;
-      const platformBalanceAfter = platformBalanceBefore + platformNet;
+      const platformBalanceAfter = platformBalanceBefore + platformActual;
       const requesterReleaseReference = generateTransactionRef();
       const cbtCommissionReference = generateTransactionRef();
       const platformCommissionReference = generateTransactionRef();
+      const tenantCommissionReference = generateTransactionRef();
 
       await tx.wallet.update({
         where: { id: order.requester.wallet.id },
-        data: {
-          escrowBalance: requesterEscrowAfter,
-        },
+        data: { escrowBalance: requesterEscrowAfter },
       });
 
       await tx.wallet.update({
@@ -349,10 +372,18 @@ export class OrdersReleaseQueueService implements OnModuleInit {
 
       await tx.wallet.update({
         where: { id: platformWallet.id },
-        data: {
-          availableBalance: platformBalanceAfter,
-        },
+        data: { availableBalance: platformBalanceAfter },
       });
+
+      if (tenantWallet && tenantNet > 0n) {
+        await tx.wallet.update({
+          where: { id: tenantWallet.id },
+          data: {
+            availableBalance: tenantWallet.availableBalance + tenantNet,
+            totalEarned: tenantWallet.totalEarned + tenantNet,
+          },
+        });
+      }
 
       await tx.transaction.createMany({
         data: [
@@ -397,7 +428,7 @@ export class OrdersReleaseQueueService implements OnModuleInit {
             orderId: order.id,
             type: TransactionType.PLATFORM_COMMISSION,
             status: TransactionStatus.SUCCESS,
-            amount: platformNet,
+            amount: platformActual,
             balanceBefore: platformBalanceBefore,
             balanceAfter: platformBalanceAfter,
             reference: platformCommissionReference,
@@ -407,6 +438,27 @@ export class OrdersReleaseQueueService implements OnModuleInit {
               scope: 'platform-commission',
             },
           },
+          ...(tenantWallet && tenantNet > 0n
+            ? [
+                {
+                  walletId: tenantWallet.id,
+                  userId: tenantWallet.userId,
+                  orderId: order.id,
+                  type: TransactionType.TENANT_COMMISSION,
+                  status: TransactionStatus.SUCCESS,
+                  amount: tenantNet,
+                  balanceBefore: tenantWallet.availableBalance,
+                  balanceAfter: tenantWallet.availableBalance + tenantNet,
+                  reference: tenantCommissionReference,
+                  description: `Tenant commission credited for ${order.orderNumber}`,
+                  metadata: {
+                    orderNumber: order.orderNumber,
+                    scope: 'tenant-commission',
+                    tenantId: order.tenantId,
+                  },
+                },
+              ]
+            : []),
         ],
       });
 
@@ -466,7 +518,8 @@ export class OrdersReleaseQueueService implements OnModuleInit {
         skipped: false,
         orderNumber: order.orderNumber,
         cbtCommission: order.cbtCommission.toString(),
-        platformNet: platformNet.toString(),
+        tenantNet: tenantNet.toString(),
+        platformNet: platformActual.toString(),
         cbtId: earnerUserId,
       };
     });

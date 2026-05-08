@@ -3925,10 +3925,10 @@ export class OrdersService {
             requesterDocUrls:
               normalizedRequesterDocuments as Prisma.InputJsonValue,
             totalAmount: service.totalPrice,
+            tenantFee: service.providerCost,
             platformFee: BigInt(
               Math.floor(
-                (Number(service.cbtCommission + service.providerCost) *
-                  service.platformFeePercent) /
+                (Number(service.providerCost) * service.platformFeePercent) /
                   100,
               ),
             ),
