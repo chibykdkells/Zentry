@@ -94,4 +94,19 @@ export class CloudinaryStorageProvider implements IStorageProvider {
       secure: true,
     });
   }
+
+  getSignedDownloadUrl(publicId: string, expiresInSeconds: number): string {
+    if (!this.configured) {
+      return `https://res.cloudinary.com/${this.cloudName}/raw/upload/fl_attachment/${publicId}`;
+    }
+
+    return cloudinary.url(publicId, {
+      resource_type: 'raw',
+      type: 'authenticated',
+      sign_url: true,
+      expires_at: Math.floor(Date.now() / 1000) + expiresInSeconds,
+      secure: true,
+      flags: 'attachment',
+    });
+  }
 }

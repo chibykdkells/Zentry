@@ -70,12 +70,14 @@ export class OrdersController {
     @Param('orderId') orderId: string,
     @Query('signature') signature: string,
     @Query('expires') expires: string,
+    @Query('download') download: string | undefined,
     @Res() res: Response,
   ) {
     const access = await this.ordersService.getResultFileRedirect(
       orderId,
       signature,
       expires,
+      download === '1',
     );
 
     return res.redirect(access.data.url);

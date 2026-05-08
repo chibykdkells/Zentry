@@ -955,6 +955,7 @@ export class OrdersService {
     orderId: string,
     signature: string,
     expires: string,
+    forDownload = false,
   ) {
     this.assertValidResultFileSignature(orderId, signature, expires);
 
@@ -970,10 +971,15 @@ export class OrdersService {
       throw new NotFoundException('Result file not found');
     }
 
-    const signedUrl = this.storageService.getSignedUrl(
-      order.resultFileUrl,
-      this.resultFileAccessTtlSeconds,
-    );
+    const signedUrl = forDownload
+      ? this.storageService.getSignedDownloadUrl(
+          order.resultFileUrl,
+          this.resultFileAccessTtlSeconds,
+        )
+      : this.storageService.getSignedUrl(
+          order.resultFileUrl,
+          this.resultFileAccessTtlSeconds,
+        );
 
     return {
       message: 'Result file access granted',

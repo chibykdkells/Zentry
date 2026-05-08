@@ -293,6 +293,8 @@ export interface IStorageProvider {
   deleteFile(publicId: string): Promise<void>;
   /** Generate a time-limited signed delivery URL for a private file. */
   getSignedUrl(publicId: string, expiresInSeconds: number): string;
+  /** Like getSignedUrl but forces the browser to download the file (Content-Disposition: attachment). */
+  getSignedDownloadUrl(publicId: string, expiresInSeconds: number): string;
 }
 
 export const STORAGE_PROVIDER = 'STORAGE_PROVIDER';

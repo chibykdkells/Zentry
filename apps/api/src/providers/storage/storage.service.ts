@@ -28,4 +28,8 @@ export class StorageService {
   getSignedUrl(publicId: string, expiresInSeconds: number): string {
     return this.provider.getSignedUrl(publicId, expiresInSeconds);
   }
+
+  getSignedDownloadUrl(publicId: string, expiresInSeconds: number): string {
+    return this.provider.getSignedDownloadUrl(publicId, expiresInSeconds);
+  }
 }

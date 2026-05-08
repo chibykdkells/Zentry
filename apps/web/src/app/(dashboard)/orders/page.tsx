@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import {
@@ -8,8 +9,8 @@ import {
   CheckCircle,
   ClipboardList,
   Copy,
-  FolderClock,
-  PackageCheck,
+  Download,
+  ExternalLink,
   ReceiptText,
   ShieldAlert,
 } from 'lucide-react';
@@ -33,7 +34,6 @@ import {
   type UploadedOrderFile,
 } from '@/lib/order-file-uploads';
 import {
-  emptyOrderReasons,
   ordersEmptyFilters,
   ordersLifecycle,
 } from '@/lib/service-catalog';
@@ -41,11 +41,22 @@ import { cn } from '@/lib/utils';
 import { OrderStatus, TransactionStatus } from '@zendocx/types';
 
 export default function OrdersPage() {
+  const searchParams = useSearchParams();
   const [activeFilter, setActiveFilter] =
     useState<(typeof ordersEmptyFilters)[number]['id']>('all');
-  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(
+    () => searchParams.get('order'),
+  );
   const [isMobileDetailOpen, setIsMobileDetailOpen] = useState(false);
   const usesMobileSheet = useMediaQuery('(max-width: 1279px)');
+
+  useEffect(() => {
+    const id = searchParams.get('order');
+    if (id) {
+      setSelectedOrderId(id);
+      if (usesMobileSheet) setIsMobileDetailOpen(true);
+    }
+  }, [searchParams, usesMobileSheet]);
   const { metrics, orders, loading, error, reload } = useOrders();
   const visibleOrders = useMemo(
     () =>
@@ -84,13 +95,6 @@ export default function OrdersPage() {
     error: detailError,
     reload: reloadDetail,
   } = useOrderDetail(effectiveSelectedOrderId);
-
-  const orderMetrics = [
-    { label: 'All orders', value: metrics?.all ?? 0, icon: ClipboardList },
-    { label: 'In progress', value: metrics?.active ?? 0, icon: FolderClock },
-    { label: 'Completed', value: metrics?.completed ?? 0, icon: PackageCheck },
-    { label: 'Issues', value: metrics?.issues ?? 0, icon: ShieldAlert },
-  ] as const;
 
   const handleSelectOrder = (orderId: string) => {
     setSelectedOrderId(orderId);
@@ -449,13 +453,31 @@ export default function OrdersPage() {
                   }
                 />
               </div>
-              <div className="mt-4">
-                <FilePreviewGallery
-                  title="Finished work"
-                  files={[detail.resultFileUrl]}
-                  emptyMessage="The finished work has not been uploaded yet."
-                  className="border-emerald-200 bg-white/70"
+              <div className="mt-4 overflow-hidden rounded-2xl border border-emerald-200 bg-white">
+                <iframe
+                  src={detail.resultFileUrl}
+                  title="Result file preview"
+                  className="h-72 w-full border-0"
+                  sandbox="allow-scripts allow-same-origin"
                 />
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <a
+                  href={`${detail.resultFileUrl}&download=1`}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-800"
+                >
+                  <Download size={14} />
+                  Download result
+                </a>
+                <a
+                  href={detail.resultFileUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 rounded-2xl border border-emerald-200 bg-white px-4 py-2.5 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-50"
+                >
+                  <ExternalLink size={14} />
+                  Open in new tab
+                </a>
               </div>
               {detail.disputeWindowExpiresAt ? (
                 <div className="mt-4 inline-flex items-center justify-center rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm font-medium text-emerald-800">
@@ -545,7 +567,7 @@ export default function OrdersPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-5 p-4 md:flex md:h-full md:flex-col xl:overflow-hidden md:space-y-6 md:p-8">
       <PageHeader
-        title="Orders"
+        title="My Orders"
         description="Track your service requests from submission to completion."
         actions={
           <Link
@@ -558,36 +580,9 @@ export default function OrdersPage() {
         }
       />
 
-      <section className="grid gap-2.5 md:grid-cols-2 xl:grid-cols-4 md:gap-3">
-        {orderMetrics.map((metric) => (
-          <article
-            key={metric.label}
-            className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm"
-          >
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-surface-soft text-brand-navy">
-              <metric.icon size={18} />
-            </div>
-            <p className="mt-5 text-3xl font-bold tracking-tight text-slate-900">
-              {metric.value}
-            </p>
-            <p className="mt-1 text-sm text-slate-500">{metric.label}</p>
-          </article>
-        ))}
-      </section>
-
-      <div className="grid gap-5 md:gap-6 xl:h-[calc(100vh-15rem)] xl:grid-cols-[1.05fr_0.95fr] xl:overflow-hidden">
+      <div className="grid gap-5 md:gap-6 xl:h-[calc(100vh-12rem)] xl:grid-cols-[1.05fr_0.95fr] xl:overflow-hidden">
         <section className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-sm md:p-6 xl:flex xl:min-h-0 xl:flex-col">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">
-                Request history
-              </h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Select any order to inspect its full request detail and latest
-                wallet movement.
-              </p>
-            </div>
-
+          <div className="flex items-center justify-between gap-4">
             <FilterChipGroup
               value={activeFilter}
               onChange={(value) =>
@@ -598,6 +593,11 @@ export default function OrdersPage() {
                 label: filter.label,
               }))}
             />
+            {metrics && (
+              <p className="shrink-0 text-xs text-slate-400">
+                {metrics.all} order{metrics.all !== 1 ? 's' : ''}
+              </p>
+            )}
           </div>
 
           {loading ? (
@@ -638,45 +638,34 @@ export default function OrdersPage() {
                   type="button"
                   onClick={() => handleSelectOrder(order.id)}
                   className={cn(
-                    'w-full rounded-[1.5rem] border p-5 text-left transition',
+                    'w-full rounded-[1.5rem] border px-4 py-4 text-left transition',
                     selectedOrder?.id === order.id
                       ? 'border-brand-navy bg-brand-navy/[0.03] shadow-sm'
                       : 'border-slate-100 bg-slate-50/70 hover:border-slate-200 hover:bg-white',
                   )}
                 >
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-base font-semibold text-slate-900">
-                          {order.service.name}
-                        </h3>
-                        <StatusBadge status={order.status} />
-                      </div>
-                      <p className="mt-2 text-sm text-slate-500">
-                        {order.orderNumber} · {order.service.category.name}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900">
+                        {order.service.name}
                       </p>
-                      <p className="mt-2 text-sm leading-6 text-slate-500">
-                        Submitted on {formatDate(order.createdAt)}
+                      <p className="mt-1 text-xs text-slate-400">
+                        {order.orderNumber} · {formatDate(order.createdAt)}
                       </p>
                     </div>
-
-                    <div className="grid gap-3 sm:grid-cols-3">
-                      <MetricPill
-                        label="Amount"
-                        value={formatNaira(order.totalAmount)}
-                      />
-                      <MetricPill label="Status" value={order.status} />
-                      <MetricPill
-                        label="Documents"
-                        value={String(order.requesterDocUrls.length)}
-                      />
+                    <div className="flex shrink-0 flex-col items-end gap-1.5">
+                      <StatusBadge status={order.status} />
+                      <span className="text-xs font-medium text-slate-500">
+                        {formatNaira(order.totalAmount)}
+                      </span>
                     </div>
                   </div>
                   {order.resultFileUrl ? (
-                    <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-3 text-sm text-emerald-800">
-                      Result available
+                    <div className="mt-3 flex items-center gap-1.5 text-xs font-medium text-emerald-700">
+                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      Result ready
                       {order.disputeWindowExpiresAt
-                        ? ` • ${formatTimeUntil(order.disputeWindowExpiresAt)}`
+                        ? ` · ${formatTimeUntil(order.disputeWindowExpiresAt)}`
                         : ''}
                     </div>
                   ) : null}
@@ -722,25 +711,6 @@ export default function OrdersPage() {
       >
         {detailContent}
       </MobileSheet>
-
-      <section className="grid gap-5 md:gap-6 lg:grid-cols-2">
-        {emptyOrderReasons.map((item) => (
-          <article
-            key={item.title}
-            className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-sm md:p-6"
-          >
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-[#0D1B3E]">
-              <item.icon size={20} />
-            </div>
-            <h2 className="mt-5 text-lg font-semibold text-slate-900">
-              {item.title}
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-slate-500">
-              {item.description}
-            </p>
-          </article>
-        ))}
-      </section>
     </div>
   );
 }

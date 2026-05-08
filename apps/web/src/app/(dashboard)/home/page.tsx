@@ -182,9 +182,10 @@ export default function HomePage() {
             {recentOrders.map((order) => {
               const s = statusStyles[order.status] ?? { cls: 'bg-slate-100 text-slate-500', label: order.status };
               return (
-                <div
+                <Link
                   key={order.id}
-                  className="flex items-center justify-between rounded-2xl border border-brand-line bg-brand-surface px-4 py-3.5 shadow-sm"
+                  href={appendTenantContextToPath(`/orders?order=${order.id}`, tenantSlug)}
+                  className="flex items-center justify-between rounded-2xl border border-brand-line bg-brand-surface px-4 py-3.5 shadow-sm transition hover:border-slate-300 hover:bg-white active:scale-[0.99]"
                 >
                   <div className="min-w-0 pr-3">
                     <p className="truncate text-sm font-semibold text-brand-ink">
@@ -197,7 +198,7 @@ export default function HomePage() {
                   <span className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold ${s.cls}`}>
                     {s.label}
                   </span>
-                </div>
+                </Link>
               );
             })}
           </div>

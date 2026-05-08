@@ -32,7 +32,7 @@ export interface RoleNavigation {
 export const individualPrimaryNav: AppNavItem[] = [
   { label: 'Home', href: '/home', icon: Home },
   { label: 'Services', href: '/services', icon: Zap },
-  { label: 'Orders', href: '/orders', icon: ClipboardList },
+  { label: 'My Orders', href: '/orders', icon: ClipboardList },
   { label: 'Wallet', href: '/wallet', icon: Wallet },
 ];
 
