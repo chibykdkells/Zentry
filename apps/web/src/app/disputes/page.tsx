@@ -57,7 +57,7 @@ export default function DisputesPage() {
           }
         />
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <section className="grid grid-cols-2 gap-4 xl:grid-cols-4">
           {metricCards.map((card) => (
             <article
               key={card.label}

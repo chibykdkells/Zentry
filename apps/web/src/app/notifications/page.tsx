@@ -79,47 +79,15 @@ export default function NotificationsPage() {
           title="Notifications"
           description="Account, wallet, and order updates in real time."
           actions={
-            <div className="flex flex-wrap items-center gap-2">
-              {browserPermission === 'default' ? (
-                <button
-                  type="button"
-                  onClick={() => { void enableBrowserAlerts(); }}
-                  className="rounded-2xl border border-brand-line bg-brand-surface px-4 py-2.5 text-sm font-semibold text-brand-ink transition hover:shadow-sm"
-                >
-                  Enable browser alerts
-                </button>
-              ) : null}
-              {pushConfig?.enabled ? (
-                pushStatus?.isSubscribed ? (
-                  <button
-                    type="button"
-                    onClick={() => { void disablePush.mutateAsync(); }}
-                    disabled={disablePush.isPending}
-                    className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-50"
-                  >
-                    Disable push
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => { if (pushConfig.publicKey) { void enablePush.mutateAsync(pushConfig.publicKey); } }}
-                    disabled={enablePush.isPending || !pushConfig.publicKey}
-                    className="rounded-2xl bg-brand-navy px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-navy-strong disabled:opacity-50"
-                  >
-                    Enable push
-                  </button>
-                )
-              ) : null}
-              <FilterChipGroup
-                value={filter}
-                onChange={(value) => setFilter(value as 'all' | 'unread' | 'read')}
-                options={[
-                  { id: 'all', label: `All (${totalCount})` },
-                  { id: 'unread', label: `Unread (${unreadCount})` },
-                  { id: 'read', label: `Read (${Math.max(totalCount - unreadCount, 0)})` },
-                ]}
-              />
-            </div>
+            <FilterChipGroup
+              value={filter}
+              onChange={(value) => setFilter(value as 'all' | 'unread' | 'read')}
+              options={[
+                { id: 'all', label: `All (${totalCount})` },
+                { id: 'unread', label: `Unread (${unreadCount})` },
+                { id: 'read', label: `Read (${Math.max(totalCount - unreadCount, 0)})` },
+              ]}
+            />
           }
         />
 
@@ -140,10 +108,42 @@ export default function NotificationsPage() {
           }
         >
           {pushConfig?.enabled ? (
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-              {pushStatus?.isSubscribed
-                ? 'Background push is active for this browser. You can receive updates even when ZenDocx is not open.'
-                : 'Background push is available. Enable it to receive updates when ZenDocx is in the background.'}
+            <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-slate-600">
+                {pushStatus?.isSubscribed
+                  ? 'Push is active — you can receive updates even when the app is closed.'
+                  : 'Enable push to receive updates when the app is in the background.'}
+              </p>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                {browserPermission === 'default' ? (
+                  <button
+                    type="button"
+                    onClick={() => { void enableBrowserAlerts(); }}
+                    className="rounded-2xl border border-brand-line bg-white px-4 py-2 text-sm font-semibold text-brand-ink transition hover:shadow-sm"
+                  >
+                    Allow alerts
+                  </button>
+                ) : null}
+                {pushStatus?.isSubscribed ? (
+                  <button
+                    type="button"
+                    onClick={() => { void disablePush.mutateAsync(); }}
+                    disabled={disablePush.isPending}
+                    className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-50"
+                  >
+                    Disable push
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => { if (pushConfig.publicKey) { void enablePush.mutateAsync(pushConfig.publicKey); } }}
+                    disabled={enablePush.isPending || !pushConfig.publicKey}
+                    className="rounded-2xl bg-brand-navy px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-navy-strong disabled:opacity-50"
+                  >
+                    Enable push
+                  </button>
+                )}
+              </div>
             </div>
           ) : (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">

@@ -373,7 +373,7 @@ export default function WalletPage() {
         <div
           className={cn(
             'grid grid-cols-2 gap-3',
-            canRequestWithdrawal ? 'sm:grid-cols-4' : 'sm:grid-cols-2',
+            canRequestWithdrawal ? 'md:grid-cols-4' : 'sm:grid-cols-2',
           )}
         >
           {canRequestWithdrawal ? (
@@ -739,14 +739,14 @@ function DashTile({ icon: Icon, label, value, color, onClick }: {
     <button
       type="button"
       onClick={onClick}
-      className="group flex flex-col gap-3 rounded-[1.5rem] border border-slate-200 bg-white p-5 text-left transition hover:border-slate-300 hover:shadow-sm active:scale-[0.98]"
+      className="group flex flex-col gap-3 rounded-[1.5rem] border border-slate-200 bg-white p-4 text-left transition hover:border-slate-300 hover:shadow-sm active:scale-[0.98] sm:p-5"
     >
-      <div className={`flex h-11 w-11 items-center justify-center rounded-2xl ${color}`}>
-        <Icon size={20} />
+      <div className={`flex h-10 w-10 items-center justify-center rounded-2xl sm:h-11 sm:w-11 ${color}`}>
+        <Icon size={18} />
       </div>
       <div className="min-w-0">
-        <p className="truncate text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">{label}</p>
-        <p className="mt-1 truncate text-xl font-bold tracking-tight text-slate-900">{value}</p>
+        <p className="truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400 sm:text-xs">{label}</p>
+        <p className="mt-1 truncate text-base font-bold tracking-tight text-slate-900 sm:text-lg">{value}</p>
       </div>
     </button>
   );

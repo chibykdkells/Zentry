@@ -55,9 +55,9 @@ export function StatCard({ title, value, icon: Icon, variant = 'navy', className
       )}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className={cn('mb-1.5 text-xs font-semibold uppercase tracking-wider truncate', v.title)}>{title}</p>
-          <p className={cn('text-2xl font-black tracking-tight sm:text-3xl', v.value)}>{value}</p>
+          <p className={cn('truncate text-xl font-black tracking-tight sm:text-2xl', v.value)}>{value}</p>
         </div>
         <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl sm:h-11 sm:w-11', v.icon)}>
           <Icon size={18} />

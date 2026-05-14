@@ -29,7 +29,7 @@ export default function SupportPage() {
           }
         />
 
-        <section className="grid gap-4 lg:grid-cols-3">
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {supportQuickActions.map((action) => (
             <article
               key={action.title}

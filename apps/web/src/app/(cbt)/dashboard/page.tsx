@@ -125,7 +125,7 @@ export default function CbtDashboardPage() {
       </div>
 
       {/* Stats grid */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <StatTile
           label="Available Jobs"
           value={String(dashboard.metrics.availableJobs)}
@@ -165,6 +165,7 @@ export default function CbtDashboardPage() {
           icon={<TrendingUp size={18} />}
           accent="teal"
           href="/withdraw"
+          className="col-span-2 sm:col-span-1"
         />
       </div>
 
@@ -238,6 +239,7 @@ function StatTile({
   icon,
   accent,
   href,
+  className,
 }: {
   label: string;
   value: string;
@@ -245,6 +247,7 @@ function StatTile({
   icon: React.ReactNode;
   accent: 'navy' | 'teal' | 'green' | 'amber';
   href: string;
+  className?: string;
 }) {
   const accentMap = {
     navy:  { icon: 'bg-brand-navy/10 text-brand-navy',   dot: 'bg-brand-navy' },
@@ -256,15 +259,15 @@ function StatTile({
   return (
     <Link
       href={href}
-      className="group flex flex-col gap-3 rounded-[1.5rem] border border-brand-line bg-brand-surface p-5 shadow-sm transition hover:shadow-md active:scale-[0.98]"
+      className={`group flex flex-col gap-3 rounded-[1.5rem] border border-brand-line bg-brand-surface p-5 shadow-sm transition hover:shadow-md active:scale-[0.98] ${className ?? ''}`}
     >
-      <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${a.icon}`}>
+      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${a.icon}`}>
         {icon}
       </div>
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-widest text-brand-muted">{label}</p>
-        <p className="mt-1 text-xl font-black tracking-tight text-brand-ink">{value}</p>
-        <p className="mt-0.5 text-xs text-brand-muted">{sub}</p>
+      <div className="min-w-0">
+        <p className="truncate text-xs font-semibold uppercase tracking-widest text-brand-muted">{label}</p>
+        <p className="mt-1 truncate text-lg font-black tracking-tight text-brand-ink sm:text-xl">{value}</p>
+        <p className="mt-0.5 truncate text-xs text-brand-muted">{sub}</p>
       </div>
     </Link>
   );

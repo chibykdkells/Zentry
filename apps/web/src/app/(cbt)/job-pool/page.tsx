@@ -248,19 +248,22 @@ export default function JobPoolPage() {
                         : 'border-slate-100 bg-slate-50/70 hover:border-slate-200 hover:bg-white'
                     }`}
                   >
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                      <div>
-                        <h2 className="text-base font-semibold text-slate-900">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h2 className="truncate text-base font-semibold text-slate-900">
                           {job.service.name}
                         </h2>
-                        <p className="mt-2 text-sm text-slate-500">
-                          {job.orderNumber} • {job.service.category.name}
+                        <p className="mt-1 truncate text-sm text-slate-500">
+                          {job.orderNumber} · {job.service.category.name}
                         </p>
-                        <p className="mt-2 text-sm text-slate-500">
-                          {job.requester.firstName} {job.requester.lastName} • {job.requester.email}
+                        <p className="mt-1 truncate text-sm text-slate-500">
+                          {job.requester.firstName} {job.requester.lastName}
+                        </p>
+                        <p className="mt-0.5 truncate text-xs text-slate-400">
+                          {job.requester.email}
                         </p>
                       </div>
-                      <div className="text-right">
+                      <div className="shrink-0 text-right">
                         <p className="text-sm font-semibold text-slate-900">
                           {formatNaira(job.cbtCommission)}
                         </p>
