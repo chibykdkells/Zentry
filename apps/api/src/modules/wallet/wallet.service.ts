@@ -1882,12 +1882,6 @@ export class WalletService {
       );
     }
 
-    if (transaction.status === TransactionStatus.FAILED) {
-      reasons.push(
-        'This funding transaction is already marked failed and should be reviewed manually before any credit attempt.',
-      );
-    }
-
     const verification =
       process.env.NODE_ENV === 'development' && checkoutMode === 'sandbox'
         ? {
@@ -2613,10 +2607,9 @@ export class WalletService {
     const verification = await this.paymentService.verifyPayment(reference);
 
     if (!verification.success) {
-      await this.markFundingTransactionFailed(
-        transaction.id,
-        'Gateway verification did not confirm a successful payment',
-      );
+      // Do NOT mark FAILED here — Paystack may not have finalised the charge
+      // yet when the user lands on the callback page. Leave the transaction
+      // PENDING so the webhook can still credit it.
       throw new BadRequestException(
         'Payment has not been confirmed yet. Please try again shortly.',
       );
@@ -3225,12 +3218,6 @@ export class WalletService {
       };
     }
 
-    if (transaction.status === TransactionStatus.FAILED) {
-      throw new BadRequestException(
-        'This funding transaction has already been marked as failed.',
-      );
-    }
-
     if (amountKobo !== transaction.amount) {
       await this.markFundingTransactionFailed(
         transaction.id,
@@ -3242,7 +3229,10 @@ export class WalletService {
     }
 
     const claimed = await this.prisma.transaction.updateMany({
-      where: { id: transaction.id, status: TransactionStatus.PENDING },
+      where: {
+        id: transaction.id,
+        status: { in: [TransactionStatus.PENDING, TransactionStatus.FAILED] },
+      },
       data: { status: TransactionStatus.SUCCESS },
     });
 
