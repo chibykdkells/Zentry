@@ -1,8 +1,12 @@
 import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
+import type { Metadata } from 'next';
 import { TenantPortalHome } from '@/components/tenant/tenant-portal-home';
 import { LandingPage } from '@/components/marketing/landing-page';
-import { fetchTenantPublicConfig } from '@/lib/tenant-public-config';
+import {
+  buildTenantMetadataDescription,
+  fetchTenantPublicConfig,
+} from '@/lib/tenant-public-config';
 import {
   resolveTenantSlugFromCustomDomain,
   resolveTenantSlugFromHost,
@@ -10,33 +14,63 @@ import {
 
 const RETURNING_TENANTS_COOKIE = 'zendocx-returning-tenants';
 
+async function resolveTenantFromRequest(
+  resolvedSearchParams: Record<string, string | string[] | undefined>,
+) {
+  const rawTenantSlug = resolvedSearchParams.tenant;
+  const explicitTenantSlug = Array.isArray(rawTenantSlug)
+    ? rawTenantSlug[0] ?? null
+    : rawTenantSlug ?? null;
+  const headerStore = await headers();
+  const hostname = (headerStore.get('host') ?? '').split(':')[0].trim().toLowerCase();
+  const hostTenantSlug = resolveTenantSlugFromHost(headerStore.get('host') ?? '');
+  const customDomainTenantSlug =
+    explicitTenantSlug || hostTenantSlug
+      ? null
+      : await resolveTenantSlugFromCustomDomain(hostname);
+  const tenantSlug = explicitTenantSlug ?? hostTenantSlug ?? customDomainTenantSlug;
+  const initialTenant = await fetchTenantPublicConfig(tenantSlug);
+
+  return { tenantSlug, initialTenant };
+}
+
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}): Promise<Metadata> {
+  const resolvedSearchParams = (await searchParams) ?? {};
+  const { tenantSlug, initialTenant } = await resolveTenantFromRequest(
+    resolvedSearchParams,
+  );
+
+  if (!tenantSlug || !initialTenant) {
+    return {};
+  }
+
+  const brandName = initialTenant.name.trim() || 'Service portal';
+  return {
+    title: `${brandName} — Service portal`,
+    description: buildTenantMetadataDescription(brandName),
+    appleWebApp: {
+      title: brandName,
+    },
+  };
+}
+
 export default async function Home({
   searchParams,
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const resolvedSearchParams = (await searchParams) ?? {};
-  const rawTenantSlug = resolvedSearchParams.tenant;
-  const explicitTenantSlug = Array.isArray(rawTenantSlug)
-    ? rawTenantSlug[0] ?? null
-    : rawTenantSlug ?? null;
-  const headerStore = await headers();
+  const { tenantSlug, initialTenant } =
+    await resolveTenantFromRequest(resolvedSearchParams);
   const cookieStore = await cookies();
-  const hostname = (headerStore.get('host') ?? '').split(':')[0].trim().toLowerCase();
-  const hostTenantSlug = resolveTenantSlugFromHost(
-    headerStore.get('host') ?? '',
-  );
-  const customDomainTenantSlug =
-    explicitTenantSlug || hostTenantSlug
-      ? null
-      : await resolveTenantSlugFromCustomDomain(hostname);
-  const tenantSlug = explicitTenantSlug ?? hostTenantSlug ?? customDomainTenantSlug;
 
   if (!tenantSlug) {
     return <LandingPage />;
   }
-
-  const initialTenant = await fetchTenantPublicConfig(tenantSlug);
 
   const returningTenants = (cookieStore.get(RETURNING_TENANTS_COOKIE)?.value ?? '')
     .split(',')

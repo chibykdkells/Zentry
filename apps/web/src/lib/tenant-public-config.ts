@@ -20,6 +20,50 @@ export interface TenantPublicConfig {
   }>;
 }
 
+const LEGACY_AUTO_HEADING_PATTERN = /^access\s+.+\s+from one business portal$/i;
+const LEGACY_AUTO_SUBHEADING_PATTERN =
+  /^review the available services, understand the process, and sign in when you are ready to continue\.?$/i;
+
+export function buildTenantDefaultHeading(brandName: string): string {
+  return `${brandName} helps you handle paperwork from the comfort of your home`;
+}
+
+export function buildTenantDefaultSubheading(): string {
+  return 'Request everyday paperwork, registrations, and online support services easily, affordably, and without leaving home.';
+}
+
+export function buildTenantMetadataDescription(brandName: string): string {
+  return `${brandName} makes paperwork and online support services simple, convenient, and affordable from the comfort of your home.`;
+}
+
+export function resolveTenantHeading(
+  tenant: TenantPublicConfig | null | undefined,
+): string {
+  const brandName = tenant?.name?.trim() || 'Service portal';
+  const configuredHeading = tenant?.homepageHeading?.trim() ?? '';
+
+  if (!configuredHeading || LEGACY_AUTO_HEADING_PATTERN.test(configuredHeading)) {
+    return buildTenantDefaultHeading(brandName);
+  }
+
+  return configuredHeading;
+}
+
+export function resolveTenantSubheading(
+  tenant: TenantPublicConfig | null | undefined,
+): string {
+  const configuredSubheading = tenant?.homepageSubheading?.trim() ?? '';
+
+  if (
+    !configuredSubheading ||
+    LEGACY_AUTO_SUBHEADING_PATTERN.test(configuredSubheading)
+  ) {
+    return buildTenantDefaultSubheading();
+  }
+
+  return configuredSubheading;
+}
+
 export async function fetchTenantPublicConfig(
   tenantSlug: string | null | undefined,
 ): Promise<TenantPublicConfig | null> {

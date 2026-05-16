@@ -6,8 +6,9 @@ import { getTenantThemeBootstrapScript } from '@/lib/tenant-theme';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'ZenDocx — Government Services, Simplified',
-  description: 'Fast. Trusted. Government Services at your fingertips. JAMB, NIMC, NECO, Airtime, Data, and more.',
+  title: 'ZenDocx — Digital service portals for modern businesses',
+  description:
+    'White-label service portals for paperwork, registrations, payments, and customer support workflows.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,

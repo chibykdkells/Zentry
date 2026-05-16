@@ -8,7 +8,12 @@ import { formatNaira } from '@/lib/format';
 import { useTenantStore } from '@/stores/tenant.store';
 import { appendTenantContextToPath } from '@/lib/tenant-runtime';
 import { useServiceCatalog } from '@/hooks/use-service-catalog';
-import type { TenantPublicConfig } from '@/lib/tenant-public-config';
+import {
+  buildTenantMetadataDescription,
+  resolveTenantHeading,
+  resolveTenantSubheading,
+  type TenantPublicConfig,
+} from '@/lib/tenant-public-config';
 
 interface TenantPortalHomeProps {
   tenantSlug: string;
@@ -32,11 +37,8 @@ export function TenantPortalHome({ tenantSlug, initialTenant = null }: TenantPor
 
   const resolvedTenant = tenant ?? initialTenant;
   const brandName = resolvedTenant?.name ?? 'Service portal';
-  const heading =
-    resolvedTenant?.homepageHeading ?? `${brandName} service portal`;
-  const subheading =
-    resolvedTenant?.homepageSubheading ??
-    'Browse available services, submit requests, and track progress from one secure workspace.';
+  const heading = resolveTenantHeading(resolvedTenant);
+  const subheading = resolveTenantSubheading(resolvedTenant);
   const steps = resolvedTenant?.homepageManualSteps?.length
     ? resolvedTenant.homepageManualSteps
     : [
@@ -232,7 +234,7 @@ export function TenantPortalHome({ tenantSlug, initialTenant = null }: TenantPor
         </section>
 
         <p className="text-center text-xs text-slate-400">
-          Powered by ZenDocx · Fast. Trusted. Government Services, Simplified.
+          {buildTenantMetadataDescription(brandName)}
         </p>
       </div>
     </div>

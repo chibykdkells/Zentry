@@ -7,7 +7,10 @@ import { ShieldCheck } from 'lucide-react';
 import { useHydrated } from '@/hooks/use-hydrated';
 import { useTenantStore } from '@/stores/tenant.store';
 import { appendTenantContextToPath } from '@/lib/tenant-runtime';
-import type { TenantPublicConfig } from '@/lib/tenant-public-config';
+import {
+  buildTenantMetadataDescription,
+  type TenantPublicConfig,
+} from '@/lib/tenant-public-config';
 
 interface AuthShellProps {
   title: string;
@@ -114,7 +117,7 @@ export function AuthShell({
           <p className="text-sm leading-7 text-white/50 max-w-xs">
             {isPlatformVariant
               ? 'Manage tenants, provision admins, and operate the platform dashboard.'
-              : `${brandName} gives you one secure place to sign in, request services, and follow progress.`}
+              : `${brandName} gives you one secure place to sign in, request services, and get paperwork sorted from home.`}
           </p>
 
           {/* Features */}
@@ -206,7 +209,7 @@ export function AuthShell({
             {isPlatformVariant
               ? 'For tenant users — sign in through your organization portal.'
               : resolvedTenant
-                ? `Secure access for ${brandName}.`
+                ? buildTenantMetadataDescription(brandName)
                 : 'Secure access to your service portal.'}
           </p>
         </div>
