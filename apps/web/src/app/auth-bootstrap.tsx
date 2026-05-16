@@ -5,6 +5,11 @@ import { usePathname } from 'next/navigation';
 import apiClient from '@/lib/api-client';
 import { isAuthRoute } from '@/lib/auth-routes';
 import { useAuthStore } from '@/stores/auth.store';
+import {
+  discoverCustomDomainTenantSlug,
+  isCustomTenantDomain,
+  persistActiveTenantSlug,
+} from '@/lib/tenant-runtime';
 
 export function AuthBootstrap() {
   const user = useAuthStore((state) => state.user);
@@ -13,6 +18,19 @@ export function AuthBootstrap() {
   const hasHydrated = useAuthStore((state) => state.hasHydrated);
   const clearAuth = useAuthStore((state) => state.clearAuth);
   const setAccessToken = useAuthStore((state) => state.setAccessToken);
+
+  // On a custom domain (e.g. ecafe.app), the tenant slug cannot be extracted
+  // from the hostname pattern. Discover it once via API and persist to cookie
+  // so all subsequent API calls include the correct x-tenant-slug header.
+  useEffect(() => {
+    const hostname =
+      typeof window !== 'undefined' ? window.location.hostname : '';
+    if (!isCustomTenantDomain(hostname)) return;
+
+    void discoverCustomDomainTenantSlug(hostname).then((slug) => {
+      if (slug) persistActiveTenantSlug(slug);
+    });
+  }, []);
 
   useEffect(() => {
     if (!hasHydrated || !user || accessToken || isAuthRoute(pathname)) {

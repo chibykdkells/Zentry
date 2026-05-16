@@ -639,6 +639,10 @@ export class TenantService {
     });
   }
 
+  async resolveFromHostname(hostname: string): Promise<Tenant | null> {
+    return this.resolver.resolveFromHostname(hostname);
+  }
+
   async updateTenant(id: string, dto: UpdateTenantDto): Promise<Tenant> {
     const tenant = await this.getTenantById(id);
     const customDomain = this.normalizeCustomDomain(dto.customDomain);

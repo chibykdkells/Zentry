@@ -72,6 +72,20 @@ export class TenantController {
     };
   }
 
+  /**
+   * Public endpoint — resolves a tenant by its custom domain hostname.
+   * Used by the frontend when running on a custom domain (e.g. ecafe.app)
+   * to discover the tenant slug so it can be sent as x-tenant-slug on API calls.
+   */
+  @Get('resolve-host')
+  @Public()
+  async resolveByHost(@Query('host') host: string) {
+    const tenant = await this.tenantService.resolveFromHostname(host ?? '');
+    return {
+      data: tenant ? { slug: tenant.slug, name: tenant.name } : null,
+    };
+  }
+
   /** SUPER_ADMIN: create a new tenant */
   @Post()
   @Roles(UserRole.SUPER_ADMIN)

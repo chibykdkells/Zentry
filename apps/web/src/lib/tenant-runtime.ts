@@ -3,6 +3,8 @@ const TENANT_SLUG_STORAGE_KEY = 'zendocx-tenant-slug';
 const RETURNING_TENANTS_COOKIE = 'zendocx-returning-tenants';
 const RETURNING_TENANTS_STORAGE_KEY = 'zendocx-returning-tenants';
 
+const PLATFORM_DOMAIN = 'zendocx.net';
+
 export function isPrivateDevelopmentHost(hostname: string): boolean {
   return (
     hostname === 'localhost' ||
@@ -10,6 +12,43 @@ export function isPrivateDevelopmentHost(hostname: string): boolean {
     hostname === '0.0.0.0' ||
     /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname)
   );
+}
+
+/**
+ * Returns true when the browser is running on a tenant custom domain
+ * (e.g. ecafe.app) rather than a *.zendocx.net subdomain or localhost.
+ */
+export function isCustomTenantDomain(hostname: string): boolean {
+  return (
+    Boolean(hostname) &&
+    hostname !== PLATFORM_DOMAIN &&
+    !hostname.endsWith(`.${PLATFORM_DOMAIN}`) &&
+    !isPrivateDevelopmentHost(hostname)
+  );
+}
+
+/**
+ * Calls the API to resolve the tenant slug for a custom domain hostname.
+ * Persists the resolved slug to cookie + localStorage so subsequent API
+ * calls can send the correct x-tenant-slug header.
+ */
+export async function discoverCustomDomainTenantSlug(
+  hostname: string,
+): Promise<string | null> {
+  if (!isCustomTenantDomain(hostname)) return null;
+
+  try {
+    const apiBase =
+      process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+    const res = await fetch(
+      `${apiBase}/api/v1/tenants/resolve-host?host=${encodeURIComponent(hostname)}`,
+    );
+    if (!res.ok) return null;
+    const json = (await res.json()) as { data: { slug: string } | null };
+    return json?.data?.slug ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function getConfiguredDevTenantSlug(): string | null {
