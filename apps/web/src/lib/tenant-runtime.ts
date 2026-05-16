@@ -38,8 +38,10 @@ export async function discoverCustomDomainTenantSlug(
       `${apiBase}/api/v1/tenants/resolve-host?host=${encodeURIComponent(hostname)}`,
     );
     if (!res.ok) return null;
-    const json = (await res.json()) as { data: { slug: string } | null };
-    return json?.data?.slug ?? null;
+    const json = (await res.json()) as {
+      data?: { data?: { slug?: string | null } | null } | null;
+    };
+    return json?.data?.data?.slug ?? null;
   } catch {
     return null;
   }

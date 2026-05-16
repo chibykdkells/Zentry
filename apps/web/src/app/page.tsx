@@ -32,8 +32,10 @@ async function resolveTenantSlugFromCustomDomain(hostname: string): Promise<stri
       return null;
     }
 
-    const payload = (await response.json()) as { data?: { slug?: string | null } | null };
-    const resolvedSlug = payload?.data?.slug?.trim().toLowerCase() ?? '';
+    const payload = (await response.json()) as {
+      data?: { data?: { slug?: string | null } | null } | null;
+    };
+    const resolvedSlug = payload?.data?.data?.slug?.trim().toLowerCase() ?? '';
     return resolvedSlug || null;
   } catch {
     return null;
