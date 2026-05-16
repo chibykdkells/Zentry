@@ -1,17 +1,16 @@
+import {
+  extractTenantSlugFromPlatformHostname,
+  isPrivateDevelopmentHostname,
+  isCustomTenantHostname,
+} from '@/lib/platform-domain';
+
 const TENANT_SLUG_COOKIE = 'zendocx-tenant-slug';
 const TENANT_SLUG_STORAGE_KEY = 'zendocx-tenant-slug';
 const RETURNING_TENANTS_COOKIE = 'zendocx-returning-tenants';
 const RETURNING_TENANTS_STORAGE_KEY = 'zendocx-returning-tenants';
 
-const PLATFORM_DOMAIN = 'zendocx.net';
-
 export function isPrivateDevelopmentHost(hostname: string): boolean {
-  return (
-    hostname === 'localhost' ||
-    hostname === '127.0.0.1' ||
-    hostname === '0.0.0.0' ||
-    /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname)
-  );
+  return isPrivateDevelopmentHostname(hostname);
 }
 
 /**
@@ -19,12 +18,7 @@ export function isPrivateDevelopmentHost(hostname: string): boolean {
  * (e.g. ecafe.app) rather than a *.zendocx.net subdomain or localhost.
  */
 export function isCustomTenantDomain(hostname: string): boolean {
-  return (
-    Boolean(hostname) &&
-    hostname !== PLATFORM_DOMAIN &&
-    !hostname.endsWith(`.${PLATFORM_DOMAIN}`) &&
-    !isPrivateDevelopmentHost(hostname)
-  );
+  return isCustomTenantHostname(hostname);
 }
 
 /**
@@ -94,16 +88,9 @@ function readTenantSlugFromStorage(): string | null {
 }
 
 function readTenantSlugFromHostname(hostname: string): string | null {
-  if (!hostname.endsWith('.zendocx.net')) {
-    return null;
-  }
-
-  const slug = hostname.replace(/\.zendocx\.net$/, '');
-  if (!slug || slug === 'www') {
-    return null;
-  }
-
-  return normalizeTenantSlug(slug);
+  return normalizeTenantSlug(
+    extractTenantSlugFromPlatformHostname(hostname, new Set(['www', 'api', 'platform', 'admin', 'app'])),
+  );
 }
 
 function persistTenantSlug(slug: string | null): void {

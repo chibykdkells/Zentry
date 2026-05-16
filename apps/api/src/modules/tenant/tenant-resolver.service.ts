@@ -23,6 +23,26 @@ export class TenantResolverService {
     return hostname.split(':')[0]?.trim().toLowerCase() ?? '';
   }
 
+  private buildCustomDomainCandidates(hostname: string): string[] {
+    const normalizedHost = this.normalizeHostname(hostname);
+    if (!normalizedHost) {
+      return [];
+    }
+
+    const candidates = new Set<string>([normalizedHost]);
+
+    if (normalizedHost.startsWith('www.')) {
+      const apexHost = normalizedHost.slice(4);
+      if (apexHost) {
+        candidates.add(apexHost);
+      }
+    } else {
+      candidates.add(`www.${normalizedHost}`);
+    }
+
+    return Array.from(candidates);
+  }
+
   async resolveFromSlug(slug: string): Promise<Tenant | null> {
     const normalizedSlug = slug.trim().toLowerCase();
     if (!normalizedSlug) {
@@ -67,7 +87,7 @@ export class TenantResolverService {
     const host = this.normalizeHostname(hostname);
 
     // Platform root domain and reserved subdomains — no tenant resolution
-    const PLATFORM_SUBDOMAINS = ['www', 'api', 'app', 'mail', 'cdn', 'static'];
+    const PLATFORM_SUBDOMAINS = ['www', 'api', 'app', 'platform', 'admin', 'mail', 'cdn', 'static'];
     if (
       host === PLATFORM_HOSTNAME ||
       PLATFORM_SUBDOMAINS.some((sub) => host === `${sub}.${PLATFORM_HOSTNAME}`)
@@ -103,10 +123,11 @@ export class TenantResolverService {
       }
     } else {
       // Custom domain lookup
+      const candidateHosts = this.buildCustomDomainCandidates(host);
       tenant = await this.prisma.tenant
         .findFirst({
           where: {
-            customDomain: host,
+            customDomain: { in: candidateHosts },
             customDomainVerified: true,
             isActive: true,
           },
@@ -136,10 +157,7 @@ export class TenantResolverService {
     }
 
     for (const customDomain of input.customDomains ?? []) {
-      const normalizedHost = customDomain
-        ? this.normalizeHostname(customDomain)
-        : '';
-      if (normalizedHost) {
+      for (const normalizedHost of this.buildCustomDomainCandidates(customDomain ?? '')) {
         hosts.add(normalizedHost);
       }
     }

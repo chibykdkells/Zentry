@@ -1,4 +1,5 @@
 import type { TenantConfig } from '@/stores/tenant.store';
+import { extractTenantSlugFromPlatformHostname } from '@/lib/platform-domain';
 
 export const TENANT_THEME_STORAGE_KEY = 'zendocx-tenant-config';
 export const TENANT_SLUG_STORAGE_KEY = 'zendocx-tenant-slug';
@@ -106,10 +107,10 @@ export function getTenantThemeBootstrapScript() {
           const host = window.location.hostname.toLowerCase();
           let hostSlug = '';
 
-          if (host.endsWith('.zendocx.net')) {
-            hostSlug = host.replace(/\\.zendocx\\.net$/, '');
-            if (hostSlug === 'www') hostSlug = '';
-          }
+          hostSlug = extractTenantSlugFromPlatformHostname(
+            host,
+            new Set(['www', 'api', 'platform', 'admin', 'app']),
+          ) || '';
 
           const activeSlug = explicitSlug || cookieSlug || (slugRaw || '').trim().toLowerCase() || hostSlug;
           if (activeSlug && tenant.slug !== activeSlug) return;

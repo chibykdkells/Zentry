@@ -108,7 +108,7 @@ describe('TenantResolverService', () => {
   });
 
   it('returns null for reserved platform subdomains', async () => {
-    for (const sub of ['www', 'api', 'app']) {
+    for (const sub of ['www', 'api', 'app', 'platform', 'admin']) {
       const result = await service.resolveFromHostname(`${sub}.zendocx.net`);
       expect(result).toBeNull();
     }
@@ -147,7 +147,23 @@ describe('TenantResolverService', () => {
     expect(result).toEqual(tenant);
     expect(prisma.tenant.findFirst).toHaveBeenCalledWith({
       where: {
-        customDomain: 'portal.testbiz.com',
+        customDomain: { in: ['portal.testbiz.com', 'www.portal.testbiz.com'] },
+        customDomainVerified: true,
+        isActive: true,
+      },
+    });
+  });
+
+  it('resolves www custom-domain aliases to the same verified tenant', async () => {
+    redis.getJson.mockResolvedValue(null);
+    prisma.tenant.findFirst.mockResolvedValue(tenant);
+
+    const result = await service.resolveFromHostname('www.portal.testbiz.com');
+
+    expect(result).toEqual(tenant);
+    expect(prisma.tenant.findFirst).toHaveBeenCalledWith({
+      where: {
+        customDomain: { in: ['www.portal.testbiz.com', 'portal.testbiz.com'] },
         customDomainVerified: true,
         isActive: true,
       },
@@ -163,7 +179,7 @@ describe('TenantResolverService', () => {
     expect(result).toBeNull();
     expect(prisma.tenant.findFirst).toHaveBeenCalledWith({
       where: {
-        customDomain: 'portal.testbiz.com',
+        customDomain: { in: ['portal.testbiz.com', 'www.portal.testbiz.com'] },
         customDomainVerified: true,
         isActive: true,
       },

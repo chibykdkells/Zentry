@@ -7,24 +7,17 @@ import {
   isProtectedRoute,
 } from '@/lib/auth-routes';
 import { getRoleFromJwt } from '@/lib/auth-token';
+import {
+  extractTenantSlugFromPlatformHostname,
+  isCustomTenantHostname,
+} from '@/lib/platform-domain';
 
-const RESERVED_SUBDOMAINS = new Set(['www', 'api', 'platform', 'admin']);
+const RESERVED_SUBDOMAINS = new Set(['www', 'api', 'platform', 'admin', 'app']);
 const RETURNING_TENANTS_COOKIE = 'zendocx-returning-tenants';
-const PLATFORM_DOMAIN = 'zendocx.net';
 
 function resolveTenantSlugFromHost(host: string): string {
   const hostname = host.split(':')[0].trim().toLowerCase();
-
-  if (!hostname.endsWith(`.${PLATFORM_DOMAIN}`)) {
-    return '';
-  }
-
-  const slug = hostname.replace(new RegExp(`\\.${PLATFORM_DOMAIN.replace('.', '\\.')}$`), '');
-  if (!slug || RESERVED_SUBDOMAINS.has(slug)) {
-    return '';
-  }
-
-  return slug;
+  return extractTenantSlugFromPlatformHostname(hostname, RESERVED_SUBDOMAINS) ?? '';
 }
 
 /**
@@ -35,13 +28,7 @@ function resolveTenantSlugFromHost(host: string): string {
  */
 function isCustomTenantDomain(host: string): boolean {
   const hostname = host.split(':')[0].trim().toLowerCase();
-  return (
-    Boolean(hostname) &&
-    hostname !== PLATFORM_DOMAIN &&
-    !hostname.endsWith(`.${PLATFORM_DOMAIN}`) &&
-    hostname !== 'localhost' &&
-    !/^\d{1,3}(\.\d{1,3}){3}$/.test(hostname)
-  );
+  return isCustomTenantHostname(hostname);
 }
 
 export function proxy(request: NextRequest) {

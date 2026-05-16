@@ -117,7 +117,25 @@ export class TenantService {
       .replace(/^https?:\/\//, '')
       .replace(/\/.*$/, '')
       .replace(/\.$/, '');
-    return normalized || null;
+    if (!normalized) {
+      return null;
+    }
+
+    const platformDomain = this.config
+      .get<string>('PLATFORM_DOMAIN')
+      ?.trim()
+      .toLowerCase() || 'zendocx.net';
+
+    if (
+      normalized === platformDomain ||
+      normalized.endsWith(`.${platformDomain}`)
+    ) {
+      throw new BadRequestException(
+        `Custom domain "${normalized}" is reserved for the platform. Use an external domain you control, not the main platform domain or one of its subdomains.`,
+      );
+    }
+
+    return normalized;
   }
 
   private getDomainVerificationSecretConfig(): {

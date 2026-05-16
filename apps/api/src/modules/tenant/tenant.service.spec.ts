@@ -51,9 +51,11 @@ describe('TenantService', () => {
       groupBy: jest.Mock;
       count: jest.Mock;
       findMany: jest.Mock;
+      aggregate: jest.Mock;
     };
     wallet: {
       aggregate: jest.Mock;
+      findUnique: jest.Mock;
     };
     transaction: {
       count: jest.Mock;
@@ -104,9 +106,11 @@ describe('TenantService', () => {
         groupBy: jest.fn(),
         count: jest.fn(),
         findMany: jest.fn(),
+        aggregate: jest.fn().mockResolvedValue({ _sum: { tenantFee: 0n, platformFee: 0n } }),
       },
       wallet: {
         aggregate: jest.fn(),
+        findUnique: jest.fn().mockResolvedValue({ availableBalance: 0n }),
       },
       transaction: {
         count: jest.fn(),
@@ -205,7 +209,9 @@ describe('TenantService', () => {
       completedOrders: 4,
       disputedOrders: 1,
       heldFunds: '0',
-      availableBalance: '0',
+      myWalletBalance: '0',
+      userAvailableFunds: '0',
+      pendingTenantCommission: '0',
       awaitingReleaseCount: 0,
       readyReleaseCount: 0,
       blockedReleaseCount: 0,
@@ -277,6 +283,40 @@ describe('TenantService', () => {
       customDomains: ['portal.testbiz.com', 'portal.updated.com'],
     });
     expect(result.data.name).toBe('Updated Biz');
+  });
+
+  it('rejects platform root domain as a tenant custom domain', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      role: 'TENANT_ADMIN',
+      tenantId: tenant.id,
+      adminPermissions: ['MANAGE_BUSINESS_SETTINGS'],
+    });
+    prisma.tenant.findUnique.mockResolvedValue(tenant);
+
+    await expect(
+      service.updateOwnTenantSettings('tenant-admin-1', {
+        customDomain: 'zendocx.net',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(prisma.tenant.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects platform subdomains as tenant custom domains', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      role: 'TENANT_ADMIN',
+      tenantId: tenant.id,
+      adminPermissions: ['MANAGE_BUSINESS_SETTINGS'],
+    });
+    prisma.tenant.findUnique.mockResolvedValue(tenant);
+
+    await expect(
+      service.updateOwnTenantSettings('tenant-admin-1', {
+        customDomain: 'app.zendocx.net',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(prisma.tenant.update).not.toHaveBeenCalled();
   });
 
   it('returns DNS verification instructions for a saved custom domain', async () => {
