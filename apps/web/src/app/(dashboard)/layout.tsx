@@ -14,7 +14,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const hydrated = useHydrated();
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="flex flex-col min-h-screen md:h-screen">
       <TopBar />
       <div className="flex flex-1 min-h-0">
         <Sidebar

@@ -14,7 +14,7 @@ export default function TenantAdminLayout({ children }: { children: React.ReactN
   const hydrated = useHydrated();
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="flex flex-col min-h-screen md:h-screen">
       <TopBar title="Business Workspace" />
       <div className="flex flex-1 min-h-0">
         <Sidebar

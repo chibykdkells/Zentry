@@ -24,7 +24,7 @@ export default function CbtLayout({ children }: { children: React.ReactNode }) {
   const primaryNav = user?.role === UserRole.CBT_STAFF ? cbtStaffPrimaryNav : cbtPrimaryNav;
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="flex flex-col min-h-screen md:h-screen">
       <TopBar title="CBT Dashboard" />
       <div className="flex flex-1 min-h-0">
         <Sidebar

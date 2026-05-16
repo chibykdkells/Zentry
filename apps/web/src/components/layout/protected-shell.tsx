@@ -94,7 +94,7 @@ export function ProtectedShell({ title, children }: ProtectedShellProps) {
           : 'Account';
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="flex flex-col min-h-screen md:h-screen">
       <TopBar title={title} />
 
       <div className="flex flex-1 min-h-0">

@@ -8289,3 +8289,133 @@ Per product decision: CBT center approval is the tenant admin's responsibility, 
 
 - Production-truth pass still pending: Sentry env vars, `app.zendocx.net` CNAME, silent refresh browser test, PWA install flow.
 - Multi-file result upload (CBT currently limited to one file) not addressed — future enhancement if needed.
+
+---
+
+## Session 2026-05-08 (continuation 3) — File storage root-cause fix + UX cleanup
+
+**Phase:** Phase 3 / Phase 7
+**AI Assistant:** Claude Sonnet 4.6
+
+### What Was Done
+
+**UX cleanup (orders page):**
+- Removed "Platform fee" and "CBT commission" MetricPills from requester order detail — internal financial distribution should not be visible to requesters.
+
+**Root-cause fix: file upload/download broken (404 on all result files):**
+
+**Diagnosis:**
+- `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` were all empty in `.env`.
+- `CloudinaryStorageProvider` detected unconfigured state and entered mock mode.
+- `uploadFile()` in mock mode silently returned success without storing anything — the `publicId` (e.g. `orders/results/UUID/timestamp-file.png`) was saved to DB but no file was ever written anywhere.
+- `getSignedUrl()` / `getSignedDownloadUrl()` in mock mode built URLs with empty cloud name: `https://res.cloudinary.com//raw/upload/...` (double slash) → 404.
+- All result file previews (iframe) and download buttons 404'd because of this.
+
+**Fix — DiskStorageProvider + StaticController:**
+- Added `DiskStorageProvider` that actually writes files to `{cwd}/uploads/` on disk.
+- `getSignedUrl` returns `${API_URL}/api/v1/static/{publicId}`.
+- `getSignedDownloadUrl` returns `${API_URL}/api/v1/static/{publicId}?dl=1`.
+- Added `StaticController` at `GET /api/v1/static/*` — public (no auth), path-traversal-guarded, sets `Content-Type` from extension, sets `Content-Disposition: attachment` when `?dl=1`.
+- `ProvidersModule` factory now auto-selects disk when Cloudinary credentials are absent; switches to Cloudinary automatically once credentials are present.
+- Cloudinary account created and credentials (`dgz7iynly` / key / secret) configured in both `apps/api/.env` and Fly.io secrets (`zentry-api-prod`). App now uses real Cloudinary storage in production.
+
+**Note:** Old orders uploaded before this fix were never actually stored — those result files will still 404 and need to be re-uploaded by CBT centers.
+
+### Files Created / Modified
+
+- `apps/api/src/providers/storage/disk.provider.ts` — new DiskStorageProvider
+- `apps/api/src/modules/static/static.controller.ts` — new static file serving endpoint
+- `apps/api/src/modules/static/static.module.ts` — new module
+- `apps/api/src/providers/providers.module.ts` — added DiskStorageProvider, auto-fallback logic in STORAGE_PROVIDER factory
+- `apps/api/src/app.module.ts` — registered StaticModule
+- `apps/web/src/app/(dashboard)/orders/page.tsx` — removed platformFee + cbtCommission MetricPills
+- `apps/api/.env` — CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY filled in (secret added separately)
+- `docs/ai-context/SESSION_LOG.md` — this entry
+
+### Decisions Made
+
+- DiskStorageProvider is the permanent fallback for environments without Cloudinary credentials — removes the silent-mock failure mode entirely.
+- Cloudinary is activated by presence of credentials, not by `ACTIVE_STORAGE_PROVIDER` env var alone — prevents the misconfiguration that caused this bug.
+
+### Phase Checklist Updates
+
+- [x] Phase 3: Result file upload/download fully working end-to-end with Cloudinary.
+
+### Blockers / Notes for Next Session
+
+- Old mocked result uploads in DB are broken — CBT centers must re-upload results for orders where the file was uploaded before 2026-05-08.
+- Production-truth pass still pending: Sentry env vars, `app.zendocx.net` CNAME, silent refresh browser test, PWA install flow.
+
+---
+
+## Session 2026-05-15 — Wallet funding race condition fix, mobile responsiveness overhaul, desktop scrollbar fix
+
+**Phase:** Phase 10
+**AI Assistant:** Claude Sonnet 4.6
+
+### What Was Done
+
+#### 1. Wallet funding race condition fix (`wallet.service.ts`)
+
+Root cause: `confirmFundingReference` was calling `markFundingTransactionFailed` immediately when Paystack had not yet finalized the charge (user lands on callback page before Paystack's server has settled the transaction). This permanently set the transaction to `FAILED`, blocking the webhook from ever crediting the wallet.
+
+Three fixes applied:
+- **`confirmFundingReference`**: Removed `markFundingTransactionFailed` call on non-success verify. Now throws `BadRequestException` so the user can retry, while leaving the transaction `PENDING` for the webhook to credit.
+- **`completeFundingTransaction`**: Removed the `FAILED` guard that prevented already-failed transactions from being recovered. The `updateMany` claim gate now uses `status: { in: [PENDING, FAILED] }` so stuck transactions are recoverable.
+- **`getAdminFundingReconciliationPreview`**: Removed the block that prevented reconciliation of `FAILED` transactions.
+
+**Production reconciliation:** Connected to the live Fly.io container via `flyctl ssh console`, confirmed the race-condition-affected transaction was still retrievable, and credited it through the admin reconciliation endpoint.
+
+#### 2. Mobile responsiveness overhaul (9 files)
+
+- **`page-header.tsx`**: Changed from always side-by-side to `flex-col gap-3 sm:flex-row sm:items-start sm:justify-between` so actions stack below title on small screens.
+- **`stat-card.tsx`**: Added `min-w-0 flex-1` + `truncate` on all text, responsive font size `text-xl sm:text-2xl`.
+- **CBT `dashboard/page.tsx`**: `StatTile` grid changed to `grid-cols-2 sm:grid-cols-3` (5th tile spans 2 columns on mobile), added `min-w-0` + `truncate` + reduced icon/font sizes.
+- **`wallet/page.tsx`**: `DashTile` grid breakpoint changed from `sm:grid-cols-4` → `md:grid-cols-4`; tile padding/icon/text compacted for smaller screens.
+- **`job-pool/page.tsx`**: Job card layout changed from `flex-col lg:flex-row` to always `flex items-start justify-between gap-3` with `min-w-0` + `truncate` on all text fields.
+- **`my-jobs/page.tsx`**: Same job card fix as job-pool; metric cards grid changed to always `grid-cols-3`.
+- **`notifications/page.tsx`**: Moved push toggle buttons out of `PageHeader` actions (was cramping the filter chip group) and into the push-status banner inside `AccountPanel`.
+- **`support/page.tsx`**: Quick actions grid breakpoint `lg:grid-cols-3` → `sm:grid-cols-2 lg:grid-cols-3`.
+- **`disputes/page.tsx`**: Metrics grid changed to `grid-cols-2 gap-4 xl:grid-cols-4`.
+
+#### 3. Desktop browser-level scrollbar fix (5 layout files)
+
+Root cause: all layout outer wrappers used `min-h-screen flex flex-col`, which allows the container to grow past the viewport. This broke the flex height chain — `main.flex-1.overflow-y-auto` never triggered internal scroll because the element's height grew with its content.
+
+Fix: changed `min-h-screen flex flex-col` → `flex flex-col min-h-screen md:h-screen` in all 5 layout files. On `md+`, the outer wrapper is locked to exactly the viewport height, making `main.overflow-y-auto` the sole scroll container. On mobile, `min-h-screen` is retained for natural document scroll (safe for iOS Safari dynamic toolbar).
+
+### Files Created / Modified
+
+- `apps/api/src/modules/wallet/wallet.service.ts` — race condition fix in `confirmFundingReference`, `completeFundingTransaction`, `getAdminFundingReconciliationPreview`
+- `apps/web/src/components/shared/page-header.tsx` — responsive stacking
+- `apps/web/src/components/shared/stat-card.tsx` — `min-w-0`, `truncate`, responsive font size
+- `apps/web/src/app/(cbt)/dashboard/page.tsx` — `StatTile` grid + truncate fixes
+- `apps/web/src/app/wallet/page.tsx` — `DashTile` grid + compact sizing
+- `apps/web/src/app/(cbt)/job-pool/page.tsx` — job card layout fix
+- `apps/web/src/app/(cbt)/my-jobs/page.tsx` — job card + metric grid fixes
+- `apps/web/src/app/notifications/page.tsx` — push controls moved to AccountPanel banner
+- `apps/web/src/app/support/page.tsx` — quick actions grid breakpoint
+- `apps/web/src/app/disputes/page.tsx` — metrics grid
+- `apps/web/src/components/layout/protected-shell.tsx` — `md:h-screen` added
+- `apps/web/src/app/(dashboard)/layout.tsx` — `md:h-screen` added
+- `apps/web/src/app/(cbt)/layout.tsx` — `md:h-screen` added
+- `apps/web/src/app/(tenant-admin)/layout.tsx` — `md:h-screen` added
+- `apps/web/src/app/(admin)/layout.tsx` — `md:h-screen` added
+
+### Decisions Made
+
+- Wallet funding: never call `markFundingTransactionFailed` from the callback page — Paystack may not have settled yet. Leave `PENDING`; only the webhook or reconciliation tool should mark `FAILED`.
+- Layout scroll chain: `min-h-screen md:h-screen` is the canonical pattern for this stack — mobile gets natural document scroll, desktop gets locked viewport with internal `main` scroll.
+
+### Phase Checklist Updates
+
+- [x] Phase 10: Wallet funding race condition fixed
+- [x] Phase 10: Full mobile responsiveness overhaul across all dashboard pages
+- [x] Phase 10: Desktop browser-level scrollbar eliminated via layout height lock
+
+### Blockers / Notes for Next Session
+
+- Sentry Vercel env vars still needed: `NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_ORG=zendocx`, `SENTRY_PROJECT=zendocx-web`
+- `app.zendocx.net` CNAME record in Cloudflare still pending
+- Manual browser verification: silent refresh on 401 and PWA install flow
+- Load testing (500 concurrent users) deferred

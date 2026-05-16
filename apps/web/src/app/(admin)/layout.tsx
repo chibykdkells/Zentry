@@ -9,7 +9,7 @@ import { UserRole } from '@zendocx/types';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="flex flex-col min-h-screen md:h-screen">
       <TopBar title="Admin Dashboard" />
       <div className="flex flex-1 min-h-0">
         <Sidebar
