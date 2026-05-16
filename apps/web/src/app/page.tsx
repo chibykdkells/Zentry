@@ -2,45 +2,13 @@ import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { TenantPortalHome } from '@/components/tenant/tenant-portal-home';
 import { LandingPage } from '@/components/marketing/landing-page';
+import { fetchTenantPublicConfig } from '@/lib/tenant-public-config';
 import {
-  extractTenantSlugFromPlatformHostname,
-  isCustomTenantHostname,
-} from '@/lib/platform-domain';
+  resolveTenantSlugFromCustomDomain,
+  resolveTenantSlugFromHost,
+} from '@/lib/tenant-server';
 
-const RESERVED_SUBDOMAINS = new Set(['www', 'api', 'platform', 'admin', 'app']);
 const RETURNING_TENANTS_COOKIE = 'zendocx-returning-tenants';
-
-function resolveTenantSlugFromHost(host: string): string | null {
-  const hostname = host.split(':')[0].trim().toLowerCase();
-  return extractTenantSlugFromPlatformHostname(hostname, RESERVED_SUBDOMAINS);
-}
-
-async function resolveTenantSlugFromCustomDomain(hostname: string): Promise<string | null> {
-  if (!isCustomTenantHostname(hostname)) {
-    return null;
-  }
-
-  const apiBase =
-    process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
-
-  try {
-    const response = await fetch(
-      `${apiBase}/api/v1/tenants/resolve-host?host=${encodeURIComponent(hostname)}`,
-      { cache: 'no-store' },
-    );
-    if (!response.ok) {
-      return null;
-    }
-
-    const payload = (await response.json()) as {
-      data?: { data?: { slug?: string | null } | null } | null;
-    };
-    const resolvedSlug = payload?.data?.data?.slug?.trim().toLowerCase() ?? '';
-    return resolvedSlug || null;
-  } catch {
-    return null;
-  }
-}
 
 export default async function Home({
   searchParams,
@@ -68,6 +36,8 @@ export default async function Home({
     return <LandingPage />;
   }
 
+  const initialTenant = await fetchTenantPublicConfig(tenantSlug);
+
   const returningTenants = (cookieStore.get(RETURNING_TENANTS_COOKIE)?.value ?? '')
     .split(',')
     .map((item) => item.trim().toLowerCase())
@@ -77,5 +47,5 @@ export default async function Home({
     redirect(`/login?tenant=${encodeURIComponent(tenantSlug)}`);
   }
 
-  return <TenantPortalHome tenantSlug={tenantSlug} />;
+  return <TenantPortalHome tenantSlug={tenantSlug} initialTenant={initialTenant} />;
 }

@@ -8,9 +8,11 @@ import { formatNaira } from '@/lib/format';
 import { useTenantStore } from '@/stores/tenant.store';
 import { appendTenantContextToPath } from '@/lib/tenant-runtime';
 import { useServiceCatalog } from '@/hooks/use-service-catalog';
+import type { TenantPublicConfig } from '@/lib/tenant-public-config';
 
 interface TenantPortalHomeProps {
   tenantSlug: string;
+  initialTenant?: TenantPublicConfig | null;
 }
 
 const PASTEL_PALETTES = [
@@ -24,18 +26,19 @@ const PASTEL_PALETTES = [
   { bg: 'bg-pink-50', border: 'border-pink-100', dot: 'bg-pink-400', text: 'text-pink-700' },
 ];
 
-export function TenantPortalHome({ tenantSlug }: TenantPortalHomeProps) {
+export function TenantPortalHome({ tenantSlug, initialTenant = null }: TenantPortalHomeProps) {
   const tenant = useTenantStore((state) => state.tenant);
   const { services, loading } = useServiceCatalog({ tenantSlug });
 
-  const brandName = tenant?.name ?? 'This business';
+  const resolvedTenant = tenant ?? initialTenant;
+  const brandName = resolvedTenant?.name ?? 'Service portal';
   const heading =
-    tenant?.homepageHeading ?? `Access ${brandName} from one business portal`;
+    resolvedTenant?.homepageHeading ?? `${brandName} service portal`;
   const subheading =
-    tenant?.homepageSubheading ??
-    'Review services, understand the process, and continue when you are ready.';
-  const steps = tenant?.homepageManualSteps?.length
-    ? tenant.homepageManualSteps
+    resolvedTenant?.homepageSubheading ??
+    'Browse available services, submit requests, and track progress from one secure workspace.';
+  const steps = resolvedTenant?.homepageManualSteps?.length
+    ? resolvedTenant.homepageManualSteps
     : [
         {
           title: 'Choose a service',
@@ -67,9 +70,9 @@ export function TenantPortalHome({ tenantSlug }: TenantPortalHomeProps) {
           {/* Brand bar */}
           <div className="mb-8 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              {tenant?.logoUrl ? (
+              {resolvedTenant?.logoUrl ? (
                 <img
-                  src={tenant.logoUrl}
+                  src={resolvedTenant.logoUrl}
                   alt={brandName}
                   className="h-10 w-10 rounded-2xl object-cover ring-1 ring-white/20"
                 />

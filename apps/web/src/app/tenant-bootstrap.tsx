@@ -4,7 +4,11 @@ import { useEffect, useLayoutEffect } from 'react';
 import { useTenantStore, type TenantConfig } from '@/stores/tenant.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { apiClient } from '@/lib/api-client';
-import { resolveTenantSlugForRequest } from '@/lib/tenant-runtime';
+import {
+  discoverCustomDomainTenantSlug,
+  persistActiveTenantSlug,
+  resolveTenantSlugForRequest,
+} from '@/lib/tenant-runtime';
 import { applyTenantTheme, resetTenantTheme } from '@/lib/tenant-theme';
 
 export function TenantBootstrap() {
@@ -64,6 +68,14 @@ export function TenantBootstrap() {
           const tenantSlug = resolveTenantSlugForRequest();
           if (tenantSlug) {
             params.slug = tenantSlug;
+          } else if (typeof window !== 'undefined') {
+            const discoveredSlug = await discoverCustomDomainTenantSlug(
+              window.location.hostname,
+            );
+            if (discoveredSlug) {
+              persistActiveTenantSlug(discoveredSlug);
+              params.slug = discoveredSlug;
+            }
           }
         }
 

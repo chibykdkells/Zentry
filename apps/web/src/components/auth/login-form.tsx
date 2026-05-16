@@ -16,6 +16,7 @@ import { AuthShell } from '@/components/auth/auth-shell';
 import { FeedbackBanner } from '@/components/shared/feedback-banner';
 import { getSafePostLoginRoute } from '@/lib/auth-routes';
 import { getHumanLoginErrorMessage } from '@/lib/api-error';
+import type { TenantPublicConfig } from '@/lib/tenant-public-config';
 import {
   appendTenantContextToPath,
   clearPersistedTenantSlug,
@@ -75,7 +76,13 @@ async function attemptLogin(
   }
 }
 
-export function LoginForm({ mode = 'auto' }: { mode?: LoginMode }) {
+export function LoginForm({
+  mode = 'auto',
+  initialTenant = null,
+}: {
+  mode?: LoginMode;
+  initialTenant?: TenantPublicConfig | null;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { accessToken, clearAuth, setAccessToken, setAuth, user } =
@@ -86,7 +93,9 @@ export function LoginForm({ mode = 'auto' }: { mode?: LoginMode }) {
   const nextPath = searchParams.get('next');
   const sessionExpired = searchParams.get('reason') === 'session-expired';
   const inferredTenantSlug =
-    typeof window !== 'undefined' ? resolveTenantSlugForRequest() : null;
+    typeof window !== 'undefined'
+      ? resolveTenantSlugForRequest() ?? initialTenant?.slug ?? null
+      : initialTenant?.slug ?? null;
   const platformMode = mode === 'platform';
   const registerHref = appendTenantContextToPath('/register', inferredTenantSlug);
   const cbtRegisterHref = appendTenantContextToPath(
@@ -289,6 +298,7 @@ export function LoginForm({ mode = 'auto' }: { mode?: LoginMode }) {
           : 'Enter your credentials to continue to your workspace.'
       }
       footer={footer}
+      initialTenant={initialTenant}
     >
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         {infoMessage ? (

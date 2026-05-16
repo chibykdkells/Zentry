@@ -7,6 +7,7 @@ import { ShieldCheck } from 'lucide-react';
 import { useHydrated } from '@/hooks/use-hydrated';
 import { useTenantStore } from '@/stores/tenant.store';
 import { appendTenantContextToPath } from '@/lib/tenant-runtime';
+import type { TenantPublicConfig } from '@/lib/tenant-public-config';
 
 interface AuthShellProps {
   title: string;
@@ -14,6 +15,7 @@ interface AuthShellProps {
   footer?: React.ReactNode;
   children: React.ReactNode;
   variant?: 'default' | 'platform';
+  initialTenant?: TenantPublicConfig | null;
 }
 
 const FEATURES = [
@@ -28,11 +30,12 @@ export function AuthShell({
   footer,
   children,
   variant = 'default',
+  initialTenant = null,
 }: AuthShellProps) {
   const tenant = useTenantStore((state) => state.tenant);
   const hydrated = useHydrated();
 
-  const resolvedTenant = hydrated ? tenant : null;
+  const resolvedTenant = hydrated ? (tenant ?? initialTenant) : initialTenant;
   const brandName = resolvedTenant?.name ?? 'ZenDocx';
   const brandInitial = brandName.charAt(0).toUpperCase();
   const isPlatformVariant = variant === 'platform';
@@ -111,7 +114,7 @@ export function AuthShell({
           <p className="text-sm leading-7 text-white/50 max-w-xs">
             {isPlatformVariant
               ? 'Manage tenants, provision admins, and operate the platform dashboard.'
-              : 'Your complete government services marketplace. Secure, fast, and always available.'}
+              : `${brandName} gives you one secure place to sign in, request services, and follow progress.`}
           </p>
 
           {/* Features */}
@@ -202,7 +205,9 @@ export function AuthShell({
           <p className="mt-6 text-center text-xs text-slate-400">
             {isPlatformVariant
               ? 'For tenant users — sign in through your organization portal.'
-              : 'Powered by ZenDocx · Fast. Trusted. Government Services, Simplified.'}
+              : resolvedTenant
+                ? `Secure access for ${brandName}.`
+                : 'Secure access to your service portal.'}
           </p>
         </div>
       </div>
