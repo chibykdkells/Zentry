@@ -31,6 +31,7 @@ export class EmailService {
       subject: input.subject,
       html: input.html,
       text: input.text,
+      fromName: input.fromName,
     };
 
     this.logger.warn(

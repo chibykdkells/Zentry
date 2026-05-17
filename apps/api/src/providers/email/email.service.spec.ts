@@ -41,6 +41,7 @@ describe('EmailService', () => {
       subject: 'Verify your email',
       html: '<p>OTP</p>',
       text: 'OTP',
+      fromName: 'E-Cafe',
     });
     expect(result).toEqual({
       messageId: 'fallback-message-id',
