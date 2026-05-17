@@ -48,14 +48,18 @@ export class ResendEmailProvider implements IEmailProvider {
 
       if (error) {
         this.logger.error(`Resend error for ${input.to}: ${error.message}`);
-        return { messageId: '', accepted: false };
+        return {
+          messageId: '',
+          accepted: false,
+          errorMessage: error.message,
+        };
       }
 
       return { messageId: data?.id ?? '', accepted: true };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`Resend send failed for ${input.to}: ${msg}`);
-      return { messageId: '', accepted: false };
+      return { messageId: '', accepted: false, errorMessage: msg };
     }
   }
 }

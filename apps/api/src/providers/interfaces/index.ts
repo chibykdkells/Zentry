@@ -266,6 +266,7 @@ export interface SendEmailInput {
 export interface SendEmailResult {
   messageId: string;
   accepted: boolean;
+  errorMessage?: string;
 }
 
 export interface IEmailProvider {

@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   EMAIL_PROVIDER,
   IEmailProvider,
@@ -8,6 +8,8 @@ import {
 
 @Injectable()
 export class EmailService {
+  private readonly logger = new Logger(EmailService.name);
+
   constructor(
     @Inject(EMAIL_PROVIDER)
     private readonly provider: IEmailProvider,
@@ -17,7 +19,32 @@ export class EmailService {
     return this.provider.providerName;
   }
 
-  sendEmail(input: SendEmailInput): Promise<SendEmailResult> {
-    return this.provider.sendEmail(input);
+  async sendEmail(input: SendEmailInput): Promise<SendEmailResult> {
+    const primaryResult = await this.provider.sendEmail(input);
+
+    if (primaryResult.accepted || !input.fromEmail) {
+      return primaryResult;
+    }
+
+    const fallbackInput: SendEmailInput = {
+      to: input.to,
+      subject: input.subject,
+      html: input.html,
+      text: input.text,
+    };
+
+    this.logger.warn(
+      `Retrying email to ${input.to} with default sender after custom sender "${input.fromEmail}" failed: ${primaryResult.errorMessage ?? 'unknown error'}`,
+    );
+
+    const fallbackResult = await this.provider.sendEmail(fallbackInput);
+
+    if (!fallbackResult.accepted) {
+      this.logger.error(
+        `Fallback email send failed for ${input.to}: ${fallbackResult.errorMessage ?? 'unknown error'}`,
+      );
+    }
+
+    return fallbackResult;
   }
 }
