@@ -48,6 +48,7 @@ export function proxy(request: NextRequest) {
   // the API from the Host header. The proxy doesn't need the slug — it just
   // needs to know a tenant context is present so it doesn't block routes.
   const hasTenantContext = Boolean(tenantSlug) || isCustomTenantDomain(host);
+  const isCustomDomainRequest = isCustomTenantDomain(host);
   const refreshToken = request.cookies.get('refresh_token')?.value;
   const role = getRoleFromJwt(refreshToken);
   const returningTenants =
@@ -145,6 +146,10 @@ export function proxy(request: NextRequest) {
   }
 
   if (isProtectedRoute(pathname) && !role) {
+    if (isCustomDomainRequest) {
+      return persistTenantCookie(NextResponse.next());
+    }
+
     const redirectTarget = `${pathname}${search}`;
 
     if (pathname.startsWith('/admin')) {
