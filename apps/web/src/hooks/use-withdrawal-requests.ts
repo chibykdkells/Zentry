@@ -6,6 +6,7 @@ import { WithdrawalStatus } from '@zendocx/types';
 import type { CreateWithdrawalRequestInput } from '@zendocx/validators';
 import apiClient from '@/lib/api-client';
 import { getApiErrorMessage } from '@/lib/api-error';
+import { useAuthStore } from '@/stores/auth.store';
 
 const MY_WITHDRAWALS_QUERY_KEY = ['wallet', 'withdrawals', 'me'] as const;
 const ADMIN_WITHDRAWALS_QUERY_KEY = ['wallet', 'withdrawals', 'admin'] as const;
@@ -107,6 +108,10 @@ function buildQueryString(params: Record<string, string | number | undefined | n
 }
 
 export function useMyWithdrawalRequests(filters: MyWithdrawalFilters) {
+  const user = useAuthStore((state) => state.user);
+  const accessToken = useAuthStore((state) => state.accessToken);
+  const hasHydrated = useAuthStore((state) => state.hasHydrated);
+  const awaitingSession = !hasHydrated || (!!user && !accessToken);
   const query = useQuery({
     queryKey: [...MY_WITHDRAWALS_QUERY_KEY, filters] as const,
     queryFn: async () => {
@@ -122,13 +127,14 @@ export function useMyWithdrawalRequests(filters: MyWithdrawalFilters) {
 
       return response.data.data;
     },
+    enabled: hasHydrated && !!accessToken,
   });
 
   return {
     requests: query.data?.items ?? [],
     summary: query.data?.summary ?? null,
     meta: query.data?.meta ?? null,
-    loading: query.isLoading,
+    loading: awaitingSession || query.isLoading,
     error: query.error
       ? getApiErrorMessage(
           query.error,
@@ -142,6 +148,10 @@ export function useMyWithdrawalRequests(filters: MyWithdrawalFilters) {
 }
 
 export function useAdminWithdrawalRequests(filters: AdminWithdrawalFilters) {
+  const user = useAuthStore((state) => state.user);
+  const accessToken = useAuthStore((state) => state.accessToken);
+  const hasHydrated = useAuthStore((state) => state.hasHydrated);
+  const awaitingSession = !hasHydrated || (!!user && !accessToken);
   const query = useQuery({
     queryKey: [...ADMIN_WITHDRAWALS_QUERY_KEY, filters] as const,
     queryFn: async () => {
@@ -160,13 +170,14 @@ export function useAdminWithdrawalRequests(filters: AdminWithdrawalFilters) {
 
       return response.data.data;
     },
+    enabled: hasHydrated && !!accessToken,
   });
 
   return {
     requests: query.data?.items ?? [],
     summary: query.data?.summary ?? null,
     meta: query.data?.meta ?? null,
-    loading: query.isLoading,
+    loading: awaitingSession || query.isLoading,
     error: query.error
       ? getApiErrorMessage(
           query.error,

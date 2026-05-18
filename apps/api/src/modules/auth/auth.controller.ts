@@ -9,6 +9,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { CookieOptions } from 'express';
 import type { Request, Response } from 'express';
 import type { Tenant } from '@prisma/client';
 import { Throttle } from '@nestjs/throttler';
@@ -133,7 +134,7 @@ export class AuthController {
       domain: this.getRefreshCookieDomain(),
       httpOnly: true,
       secure: this.configService.get('NODE_ENV') === 'production',
-      sameSite: 'strict',
+      sameSite: this.getRefreshCookieSameSite(),
       path: '/',
       maxAge: this.parseDurationToMs(
         this.configService.get('JWT_REFRESH_EXPIRES_IN', '7d'),
@@ -141,12 +142,18 @@ export class AuthController {
     });
   }
 
+  private getRefreshCookieSameSite(): CookieOptions['sameSite'] {
+    return this.configService.get('NODE_ENV') === 'production'
+      ? 'none'
+      : 'lax';
+  }
+
   private clearRefreshTokenCookie(response: Response): void {
     response.clearCookie('refresh_token', {
       domain: this.getRefreshCookieDomain(),
       httpOnly: true,
       secure: this.configService.get('NODE_ENV') === 'production',
-      sameSite: 'strict',
+      sameSite: this.getRefreshCookieSameSite(),
       path: '/',
     });
   }

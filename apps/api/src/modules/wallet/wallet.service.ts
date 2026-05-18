@@ -293,6 +293,8 @@ export class WalletService {
   }
 
   async getMyWalletOverview(userId: string, tenantId: string | null) {
+    await this.reconcileRecentPendingFundings(userId);
+
     const wallet = await this.prisma.wallet.findFirst({
       where: {
         userId,
@@ -2026,6 +2028,8 @@ export class WalletService {
     query: GetWalletTransactionsQueryDto,
     tenantId: string | null,
   ) {
+    await this.reconcileRecentPendingFundings(userId);
+
     const wallet = await this.prisma.wallet.findFirst({
       where: {
         userId,
@@ -3190,6 +3194,75 @@ export class WalletService {
   private getFundingCallbackUrl(transaction: FundingTransactionRecord) {
     const callbackUrl = this.toMetadataRecord(transaction.metadata).callbackUrl;
     return typeof callbackUrl === 'string' ? callbackUrl : null;
+  }
+
+  private async reconcileRecentPendingFundings(userId: string) {
+    const recentPendingFundings = await this.prisma.transaction.findMany({
+      where: {
+        userId,
+        type: TransactionType.WALLET_FUNDING,
+        status: TransactionStatus.PENDING,
+        createdAt: {
+          gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+      select: {
+        id: true,
+        walletId: true,
+        userId: true,
+        type: true,
+        status: true,
+        amount: true,
+        reference: true,
+        gateway: true,
+        gatewayRef: true,
+        metadata: true,
+        createdAt: true,
+        wallet: {
+          select: {
+            id: true,
+            availableBalance: true,
+          },
+        },
+        user: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            role: true,
+            tenantId: true,
+          },
+        },
+      },
+    });
+
+    for (const transaction of recentPendingFundings) {
+      try {
+        const verification = await this.paymentService.verifyPayment(
+          transaction.reference,
+        );
+
+        if (!verification.success) {
+          continue;
+        }
+
+        await this.completeFundingTransaction({
+          transaction,
+          amountKobo: verification.amountKobo,
+          gatewayRef: verification.gatewayRef,
+          source: 'gateway-verification',
+        });
+      } catch (error) {
+        this.logger.warn(
+          `Pending funding reconciliation skipped for ${transaction.reference}: ${
+            error instanceof Error ? error.message : 'unknown error'
+          }`,
+        );
+      }
+    }
   }
 
   private async completeFundingTransaction({

@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { PaymentGateway, TransactionStatus, TransactionType } from '@zendocx/types';
 import apiClient from '@/lib/api-client';
 import { getApiErrorMessage } from '@/lib/api-error';
+import { useAuthStore } from '@/stores/auth.store';
 
 export interface WalletTransaction {
   id: string;
@@ -64,18 +65,23 @@ export interface BankListItem {
 }
 
 export function useBanks() {
+  const user = useAuthStore((state) => state.user);
+  const accessToken = useAuthStore((state) => state.accessToken);
+  const hasHydrated = useAuthStore((state) => state.hasHydrated);
+  const awaitingSession = !hasHydrated || (!!user && !accessToken);
   const query = useQuery({
     queryKey: ['wallet', 'banks'] as const,
     queryFn: async () => {
       const response = await apiClient.get<{ data: BankListItem[] }>('/wallet/banks');
       return response.data.data;
     },
+    enabled: hasHydrated && !!accessToken,
     staleTime: 1000 * 60 * 60, // banks list changes rarely — cache for 1 hour
   });
 
   return {
     banks: query.data ?? [],
-    loading: query.isLoading,
+    loading: awaitingSession || query.isLoading,
     error: query.error
       ? getApiErrorMessage(query.error, 'Could not load bank list.')
       : null,
@@ -83,17 +89,22 @@ export function useBanks() {
 }
 
 export function useWallet() {
+  const user = useAuthStore((state) => state.user);
+  const accessToken = useAuthStore((state) => state.accessToken);
+  const hasHydrated = useAuthStore((state) => state.hasHydrated);
+  const awaitingSession = !hasHydrated || (!!user && !accessToken);
   const query = useQuery({
     queryKey: WALLET_OVERVIEW_QUERY_KEY,
     queryFn: async () => {
       const response = await apiClient.get<{ data: WalletOverview }>('/wallet/me');
       return response.data.data;
     },
+    enabled: hasHydrated && !!accessToken,
   });
 
   return {
     wallet: query.data ?? null,
-    loading: query.isLoading,
+    loading: awaitingSession || query.isLoading,
     error: query.error
       ? getApiErrorMessage(query.error, 'Could not load your wallet right now.')
       : null,
@@ -104,6 +115,10 @@ export function useWallet() {
 }
 
 export function useWalletTransactions(filters: WalletTransactionFilters) {
+  const user = useAuthStore((state) => state.user);
+  const accessToken = useAuthStore((state) => state.accessToken);
+  const hasHydrated = useAuthStore((state) => state.hasHydrated);
+  const awaitingSession = !hasHydrated || (!!user && !accessToken);
   const query = useQuery({
     queryKey: ['wallet', 'transactions', filters] as const,
     queryFn: async () => {
@@ -139,13 +154,14 @@ export function useWalletTransactions(filters: WalletTransactionFilters) {
 
       return response.data.data;
     },
+    enabled: hasHydrated && !!accessToken,
   });
 
   return {
     transactions: query.data?.items ?? [],
     meta: query.data?.meta ?? null,
     filters: query.data?.filters ?? null,
-    loading: query.isLoading,
+    loading: awaitingSession || query.isLoading,
     error: query.error
       ? getApiErrorMessage(
           query.error,
