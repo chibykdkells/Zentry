@@ -3301,26 +3301,35 @@ export class WalletService {
       );
     }
 
-    const claimed = await this.prisma.transaction.updateMany({
-      where: {
-        id: transaction.id,
-        status: { in: [TransactionStatus.PENDING, TransactionStatus.FAILED] },
-      },
-      data: { status: TransactionStatus.SUCCESS },
-    });
-
-    if (claimed.count === 0) {
-      return {
-        message: 'Wallet funding already processed.',
-        data: {
-          reference: transaction.reference,
-          status: TransactionStatus.SUCCESS,
-          amountKobo: transaction.amount.toString(),
-        },
-      };
-    }
-
     const updatedTransaction = await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.transaction.updateMany({
+        where: {
+          id: transaction.id,
+          status: { in: [TransactionStatus.PENDING, TransactionStatus.FAILED] },
+        },
+        data: { status: TransactionStatus.SUCCESS },
+      });
+
+      if (claimed.count === 0) {
+        const existing = await tx.transaction.findUnique({
+          where: { id: transaction.id },
+          select: {
+            reference: true,
+            status: true,
+            amount: true,
+            gateway: true,
+            gatewayRef: true,
+            balanceAfter: true,
+          },
+        });
+
+        if (!existing) {
+          throw new NotFoundException('Funding transaction not found');
+        }
+
+        return existing;
+      }
+
       const wallet = await tx.wallet.findUnique({
         where: { id: transaction.walletId },
         select: { id: true, availableBalance: true },
