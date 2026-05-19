@@ -84,6 +84,7 @@ export class PaystackProvider implements IPaymentProvider {
         reference: string;
         id: number;
         paid_at: string;
+        fees?: number | null;
       };
     };
 
@@ -93,6 +94,10 @@ export class PaystackProvider implements IPaymentProvider {
       reference: data.reference,
       gatewayRef: data.id.toString(),
       paidAt: data.paid_at ? new Date(data.paid_at) : undefined,
+      feeKobo:
+        typeof data.fees === 'number' && Number.isFinite(data.fees)
+          ? BigInt(data.fees)
+          : undefined,
     };
   }
 
@@ -188,7 +193,7 @@ export class PaystackProvider implements IPaymentProvider {
 
     const body = JSON.parse(rawBody.toString()) as {
       event: string;
-      data: { reference: string; amount: number; id: number };
+      data: { reference: string; amount: number; id: number; fees?: number | null };
     };
 
     return {
@@ -197,6 +202,10 @@ export class PaystackProvider implements IPaymentProvider {
       reference: body.data.reference,
       amountKobo: BigInt(body.data.amount),
       gatewayRef: body.data.id.toString(),
+      feeKobo:
+        typeof body.data.fees === 'number' && Number.isFinite(body.data.fees)
+          ? BigInt(body.data.fees)
+          : undefined,
     };
   }
 }

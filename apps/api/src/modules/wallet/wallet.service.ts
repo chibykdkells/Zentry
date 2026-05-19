@@ -349,6 +349,9 @@ export class WalletService {
   async getAdminWalletOverview(tenantId: string | null) {
     const tf = tenantId ? { tenantId } : {};
     const walletTf = tenantId ? { user: { tenantId } } : {};
+    const tenantSql = tenantId
+      ? Prisma.sql`AND "tenantId" = ${tenantId}`
+      : Prisma.sql``;
     const [
       walletAggregate,
       walletCount,
@@ -358,8 +361,10 @@ export class WalletService {
       platformCommissionAggregate,
       cbtCommissionAggregate,
       withdrawalAggregate,
+      withdrawalStatusSummary,
       refundAggregate,
       heldFundsByTenant,
+      capturedFundingFeeAggregate,
     ] = await this.prisma.$transaction([
       this.prisma.wallet.aggregate({
         where: walletTf,
@@ -428,6 +433,19 @@ export class WalletService {
           amount: true,
         },
       }),
+      this.prisma.withdrawalRequest.groupBy({
+        by: ['status'],
+        where: tf,
+        orderBy: {
+          status: 'asc',
+        },
+        _sum: {
+          amount: true,
+        },
+        _count: {
+          _all: true,
+        },
+      }),
       this.prisma.transaction.aggregate({
         where: {
           ...tf,
@@ -456,7 +474,81 @@ export class WalletService {
           },
         },
       }),
+      this.prisma.$queryRaw<Array<{ total: bigint | null }>>`
+        SELECT COALESCE(
+          SUM(
+            CASE
+              WHEN jsonb_typeof(COALESCE(metadata::jsonb, '{}'::jsonb)) = 'object'
+                AND COALESCE(metadata::jsonb, '{}'::jsonb) ? 'gatewayFeeKobo'
+              THEN NULLIF(metadata::jsonb->>'gatewayFeeKobo', '')::bigint
+              ELSE 0
+            END
+          ),
+          0
+        ) AS total
+        FROM "Transaction"
+        WHERE type = ${TransactionType.WALLET_FUNDING}::"TransactionType"
+          AND status = ${TransactionStatus.SUCCESS}::"TransactionStatus"
+          ${tenantSql}
+      `,
     ]);
+
+    const withdrawalSummary = withdrawalStatusSummary.reduce(
+      (acc, item) => {
+        const amount = item._sum?.amount?.toString() ?? '0';
+        const count =
+          typeof item._count === 'object' && item._count
+            ? item._count._all ?? 0
+            : 0;
+
+        switch (item.status) {
+          case WithdrawalStatus.PENDING:
+            acc.pendingWithdrawalAmount = amount;
+            acc.pendingWithdrawalCount = count;
+            break;
+          case WithdrawalStatus.APPROVED:
+            acc.approvedWithdrawalAmount = amount;
+            acc.approvedWithdrawalCount = count;
+            break;
+          case WithdrawalStatus.PROCESSING:
+            acc.processingWithdrawalAmount = amount;
+            acc.processingWithdrawalCount = count;
+            break;
+          case WithdrawalStatus.COMPLETED:
+            acc.completedWithdrawalAmount = amount;
+            acc.completedWithdrawalCount = count;
+            break;
+          case WithdrawalStatus.REJECTED:
+            acc.rejectedWithdrawalAmount = amount;
+            acc.rejectedWithdrawalCount = count;
+            break;
+        }
+
+        return acc;
+      },
+      {
+        pendingWithdrawalAmount: '0',
+        pendingWithdrawalCount: 0,
+        approvedWithdrawalAmount: '0',
+        approvedWithdrawalCount: 0,
+        processingWithdrawalAmount: '0',
+        processingWithdrawalCount: 0,
+        completedWithdrawalAmount: '0',
+        completedWithdrawalCount: 0,
+        rejectedWithdrawalAmount: '0',
+        rejectedWithdrawalCount: 0,
+      },
+    );
+
+    const payoutReviewAmount = (
+      BigInt(withdrawalSummary.pendingWithdrawalAmount) +
+      BigInt(withdrawalSummary.approvedWithdrawalAmount) +
+      BigInt(withdrawalSummary.processingWithdrawalAmount)
+    ).toString();
+    const payoutReviewCount =
+      withdrawalSummary.pendingWithdrawalCount +
+      withdrawalSummary.approvedWithdrawalCount +
+      withdrawalSummary.processingWithdrawalCount;
 
     const heldFundsByBusiness = heldFundsByTenant
       .map((tenant) => ({
@@ -503,6 +595,11 @@ export class WalletService {
           cbtCommissionAggregate._sum.amount?.toString() ?? '0',
         withdrawalVolume: withdrawalAggregate._sum.amount?.toString() ?? '0',
         refundVolume: refundAggregate._sum.amount?.toString() ?? '0',
+        capturedFundingFeeVolume:
+          capturedFundingFeeAggregate[0]?.total?.toString() ?? '0',
+        payoutReviewAmount,
+        payoutReviewCount,
+        ...withdrawalSummary,
         heldFundsByTenant: heldFundsByBusiness,
       },
     };
@@ -1980,6 +2077,7 @@ export class WalletService {
             success: true,
             amountKobo: transaction.amount,
             gatewayRef: transaction.gatewayRef ?? `sandbox-${transaction.reference}`,
+            feeKobo: 0n,
           }
         : await this.paymentService.verifyPayment(normalizedReference);
 
@@ -1993,6 +2091,7 @@ export class WalletService {
       transaction,
       amountKobo: verification.amountKobo,
       gatewayRef: verification.gatewayRef,
+      gatewayFeeKobo: verification.feeKobo,
       source: 'admin-reconciliation',
     });
 
@@ -2604,6 +2703,7 @@ export class WalletService {
         transaction,
         amountKobo: transaction.amount,
         gatewayRef: transaction.gatewayRef ?? `sandbox-${reference}`,
+        gatewayFeeKobo: 0n,
         source: 'sandbox-confirmation',
       });
     }
@@ -2623,6 +2723,7 @@ export class WalletService {
       transaction,
       amountKobo: verification.amountKobo,
       gatewayRef: verification.gatewayRef,
+      gatewayFeeKobo: verification.feeKobo,
       source: 'gateway-verification',
     });
   }
@@ -2668,6 +2769,7 @@ export class WalletService {
       transaction,
       amountKobo: parsed.amountKobo,
       gatewayRef: parsed.gatewayRef,
+      gatewayFeeKobo: parsed.feeKobo,
       source: 'payment-webhook',
     });
 
@@ -3253,6 +3355,7 @@ export class WalletService {
           transaction,
           amountKobo: verification.amountKobo,
           gatewayRef: verification.gatewayRef,
+          gatewayFeeKobo: verification.feeKobo,
           source: 'gateway-verification',
         });
       } catch (error) {
@@ -3269,11 +3372,13 @@ export class WalletService {
     transaction,
     amountKobo,
     gatewayRef,
+    gatewayFeeKobo,
     source,
   }: {
     transaction: FundingTransactionRecord;
     amountKobo: bigint;
     gatewayRef: string;
+    gatewayFeeKobo?: bigint;
     source:
       | 'payment-webhook'
       | 'gateway-verification'
@@ -3366,6 +3471,12 @@ export class WalletService {
               ? (transaction.metadata as Record<string, unknown>)
               : {}),
             confirmationSource: source,
+            ...(gatewayFeeKobo !== undefined
+              ? {
+                  gatewayFeeKobo: gatewayFeeKobo.toString(),
+                  gatewayNetKobo: (amountKobo - gatewayFeeKobo).toString(),
+                }
+              : {}),
           },
         },
         select: {

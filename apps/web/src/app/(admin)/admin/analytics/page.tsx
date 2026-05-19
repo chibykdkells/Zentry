@@ -107,7 +107,7 @@ export default function AdminAnalyticsPage() {
     );
   }
 
-  const { walletFloat, cbtPerformance } = overview;
+  const { walletFloat, cbtPerformance, moneySummary } = overview;
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-8">
@@ -135,6 +135,49 @@ export default function AdminAnalyticsPage() {
           </div>
         }
       />
+
+      {/* Money summary */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          {
+            label: 'Customer funding inflow',
+            value: formatNaira(moneySummary.walletFundingInflow),
+            icon: Wallet,
+            color: 'text-sky-600',
+          },
+          {
+            label: 'Gross order value',
+            value: formatNaira(moneySummary.orderVolume),
+            icon: Briefcase,
+            color: 'text-indigo-600',
+          },
+          {
+            label: 'Realized Zendocx revenue',
+            value: formatNaira(moneySummary.realizedPlatformRevenue),
+            icon: TrendingUp,
+            color: 'text-emerald-600',
+          },
+          {
+            label: 'Payouts awaiting action',
+            value: `${formatNaira(moneySummary.payoutReviewAmount)} · ${moneySummary.payoutReviewCount}`,
+            icon: Users,
+            color: 'text-rose-600',
+          },
+        ].map((card) => (
+          <article
+            key={card.label}
+            className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm"
+          >
+            <div className={`flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-50 ${card.color}`}>
+              <card.icon size={18} />
+            </div>
+            <p className="mt-4 text-xl font-bold tracking-tight text-slate-900">
+              {card.value}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">{card.label}</p>
+          </article>
+        ))}
+      </div>
 
       {/* Wallet float summary */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -199,9 +242,9 @@ export default function AdminAnalyticsPage() {
 
       {/* Revenue chart */}
       <section className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-        <h2 className="text-sm font-semibold text-slate-900">Platform revenue (₦)</h2>
+        <h2 className="text-sm font-semibold text-slate-900">Realized Zendocx revenue (₦)</h2>
         <p className="mt-1 text-xs text-slate-400">
-          Combined platform commissions and automated service revenue
+          Only commissions already recognized into the platform wallet. Customer wallet funding and escrowed order money are tracked separately above.
         </p>
         <div className="mt-6 h-64">
           {revenueChartData.length ? (
@@ -346,6 +389,47 @@ export default function AdminAnalyticsPage() {
           </div>
         </section>
       </div>
+
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {[
+          {
+            label: 'Funding fees captured',
+            value: formatNaira(moneySummary.capturedFundingFeeVolume),
+            helper: 'Only fundings recorded after fee tracking went live.',
+          },
+          {
+            label: 'Revenue still pending release',
+            value: formatNaira(moneySummary.pendingReleaseRevenue),
+            helper: 'Completed manual work that is ready to clear into platform earnings once escrow is released.',
+          },
+          {
+            label: 'Approved/processing withdrawals',
+            value: `${formatNaira(
+              (
+                BigInt(moneySummary.approvedWithdrawalAmount) +
+                BigInt(moneySummary.processingWithdrawalAmount)
+              ).toString(),
+            )} · ${moneySummary.approvedWithdrawalCount + moneySummary.processingWithdrawalCount}`,
+            helper: 'Already reviewed and moving through payout.',
+          },
+          {
+            label: 'Pending withdrawal review',
+            value: `${formatNaira(moneySummary.pendingWithdrawalAmount)} · ${moneySummary.pendingWithdrawalCount}`,
+            helper: 'Still waiting on a super admin decision.',
+          },
+        ].map((item) => (
+          <article
+            key={item.label}
+            className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm"
+          >
+            <p className="text-lg font-bold tracking-tight text-slate-900">{item.value}</p>
+            <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+              {item.label}
+            </p>
+            <p className="mt-3 text-xs leading-5 text-slate-400">{item.helper}</p>
+          </article>
+        ))}
+      </section>
 
       {/* CBT performance */}
       <section className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-sm md:p-6">

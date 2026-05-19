@@ -78,7 +78,7 @@ export function AdminWithdrawalReview() {
   return (
     <AccountPanel
       title="Withdrawal payout review"
-      description="Review CBT payout requests, move them through safe finance states, and keep the reserved wallet balance honest."
+      description="Review user withdrawal requests, approve the ones ready for payout, and keep reserved wallet balances in sync with gateway outcomes."
       contentClassName="space-y-4"
     >
       <div className="grid gap-3 lg:grid-cols-[1fr_220px_auto]">
@@ -100,7 +100,7 @@ export function AdminWithdrawalReview() {
                   search: event.target.value,
                 }));
               }}
-              placeholder="Search by CBT name or email"
+              placeholder="Search by user name or email"
               className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 pl-10 text-sm text-slate-700 outline-none transition focus:border-brand-navy focus:ring-2 focus:ring-brand-navy/10"
             />
           </div>
@@ -231,7 +231,7 @@ export function AdminWithdrawalReview() {
       ) : (
         <EmptyState
           title="No withdrawal requests matched"
-          message="Try broadening the filters or wait for new CBT payout requests to come in."
+          message="Try broadening the filters or wait for new withdrawal requests to come in."
           icon={Loader2}
         />
       )}

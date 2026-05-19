@@ -51,12 +51,33 @@ export interface WalletFloat {
   totalUserAvailable: string;
 }
 
+export interface MoneySummary {
+  walletFundingInflow: string;
+  realizedPlatformRevenue: string;
+  orderVolume: string;
+  pendingReleaseRevenue: string;
+  capturedFundingFeeVolume: string;
+  payoutReviewAmount: string;
+  payoutReviewCount: number;
+  pendingWithdrawalAmount: string;
+  pendingWithdrawalCount: number;
+  approvedWithdrawalAmount: string;
+  approvedWithdrawalCount: number;
+  processingWithdrawalAmount: string;
+  processingWithdrawalCount: number;
+  completedWithdrawalAmount: string;
+  completedWithdrawalCount: number;
+  rejectedWithdrawalAmount: string;
+  rejectedWithdrawalCount: number;
+}
+
 export interface AnalyticsOverview {
   revenue: RevenuePoint[];
   ordersByService: OrdersByService[];
   cbtPerformance: CbtPerformance;
   userGrowth: UserGrowthPoint[];
   walletFloat: WalletFloat;
+  moneySummary: MoneySummary;
 }
 
 // ── Hooks ─────────────────────────────────────────────────────────────

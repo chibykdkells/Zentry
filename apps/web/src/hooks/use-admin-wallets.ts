@@ -19,6 +19,19 @@ export interface AdminWalletOverview {
   cbtCommissionVolume: string;
   withdrawalVolume: string;
   refundVolume: string;
+  capturedFundingFeeVolume: string;
+  payoutReviewAmount: string;
+  payoutReviewCount: number;
+  pendingWithdrawalAmount: string;
+  pendingWithdrawalCount: number;
+  approvedWithdrawalAmount: string;
+  approvedWithdrawalCount: number;
+  processingWithdrawalAmount: string;
+  processingWithdrawalCount: number;
+  completedWithdrawalAmount: string;
+  completedWithdrawalCount: number;
+  rejectedWithdrawalAmount: string;
+  rejectedWithdrawalCount: number;
   heldFundsByTenant: Array<{
     id: string;
     name: string;

@@ -138,28 +138,23 @@ export default function AdminFinancePage() {
   const statCards = overview
     ? [
         {
-          title: 'Available across wallets',
-          value: formatNaira(overview.totalAvailableBalance),
+          title: 'Customer funding inflow',
+          value: formatNaira(overview.successfulFundingVolume),
           icon: Wallet,
         },
         {
-          title: 'Funds on hold',
-          value: formatNaira(overview.totalEscrowBalance),
+          title: 'Realized Zendocx earnings',
+          value: formatNaira(overview.platformCommissionVolume),
           icon: ShieldCheck,
         },
         {
-          title: 'Platform earnings',
-          value: formatNaira(overview.platformCommissionVolume),
+          title: 'Payout queue',
+          value: `${formatNaira(overview.payoutReviewAmount)} · ${overview.payoutReviewCount}`,
           icon: LineChart,
         },
         {
-          title: 'CBT payouts',
-          value: formatNaira(overview.cbtCommissionVolume),
-          icon: LineChart,
-        },
-        {
-          title: 'Withdrawal volume',
-          value: formatNaira(overview.withdrawalVolume),
+          title: 'Gateway fees captured',
+          value: formatNaira(overview.capturedFundingFeeVolume),
           icon: LineChart,
         },
       ]
@@ -297,6 +292,10 @@ export default function AdminFinancePage() {
                 value={overview.pendingFundingCount.toString()}
               />
               <FinanceRow
+                label="Customer funding inflow"
+                value={formatNaira(overview.successfulFundingVolume)}
+              />
+              <FinanceRow
                 label="Money ready now"
                 value={formatNaira(overview.totalAvailableBalance)}
               />
@@ -313,12 +312,33 @@ export default function AdminFinancePage() {
                 value={formatNaira(overview.platformCommissionVolume)}
               />
               <FinanceRow
+                label="Funding fees captured"
+                value={formatNaira(overview.capturedFundingFeeVolume)}
+              />
+              <FinanceRow
                 label="CBT earnings released"
                 value={formatNaira(overview.cbtCommissionVolume)}
               />
               <FinanceRow
                 label="Withdrawal requests total"
                 value={formatNaira(overview.withdrawalVolume)}
+              />
+              <FinanceRow
+                label="Withdrawals awaiting review or payout"
+                value={`${formatNaira(overview.payoutReviewAmount)} · ${overview.payoutReviewCount} request(s)`}
+              />
+              <FinanceRow
+                label="Pending withdrawal review"
+                value={`${formatNaira(overview.pendingWithdrawalAmount)} · ${overview.pendingWithdrawalCount} request(s)`}
+              />
+              <FinanceRow
+                label="Approved / processing payouts"
+                value={`${formatNaira(
+                  (
+                    BigInt(overview.approvedWithdrawalAmount) +
+                    BigInt(overview.processingWithdrawalAmount)
+                  ).toString(),
+                )} · ${overview.approvedWithdrawalCount + overview.processingWithdrawalCount} request(s)`}
               />
               <FinanceRow
                 label="Refunds returned"
@@ -328,6 +348,8 @@ export default function AdminFinancePage() {
           )}
         </AccountPanel>
       </div>
+
+      <AdminWithdrawalReview />
 
       <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
         <AccountPanel
@@ -1233,8 +1255,6 @@ export default function AdminFinancePage() {
           </ScrollCardBody>
         )}
       </AccountPanel>
-
-      <AdminWithdrawalReview />
     </div>
   );
 }

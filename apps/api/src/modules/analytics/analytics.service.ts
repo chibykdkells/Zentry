@@ -1,5 +1,12 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma, TransactionType, UserRole } from '@prisma/client';
+import {
+  OrderStatus,
+  Prisma,
+  TransactionStatus,
+  TransactionType,
+  UserRole,
+  WithdrawalStatus,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 export type AnalyticsPeriod = 'daily' | 'weekly' | 'monthly';
@@ -21,7 +28,7 @@ export class AnalyticsService {
     const trunc =
       period === 'daily' ? 'day' : period === 'weekly' ? 'week' : 'month';
 
-    // Platform commission + service purchase transactions = platform revenue
+    // Realized Zendocx revenue only — customer spend and wallet funding are tracked separately.
     const rows = await this.prisma.$queryRaw<
       Array<{ period: Date; revenue: bigint; order_count: bigint }>
     >`
@@ -30,7 +37,7 @@ export class AnalyticsService {
         COALESCE(SUM(t.amount), 0)          AS revenue,
         COUNT(*)                            AS order_count
       FROM "Transaction" t
-      WHERE t.type::text IN (${TransactionType.PLATFORM_COMMISSION}, ${TransactionType.SERVICE_PURCHASE})
+      WHERE t.type::text IN (${TransactionType.PLATFORM_COMMISSION})
         AND t.status::text = 'SUCCESS'
         ${tf}
       GROUP BY 1
@@ -237,16 +244,176 @@ export class AnalyticsService {
     };
   }
 
+  async getMoneySummary(tenantId: string | null) {
+    const tf = tenantId ? { tenantId } : {};
+    const tenantSql = tenantId
+      ? Prisma.sql`AND "tenantId" = ${tenantId}`
+      : Prisma.sql``;
+    const now = new Date();
+
+    const [
+      walletFundingAggregate,
+      platformRevenueAggregate,
+      orderVolumeAggregate,
+      pendingRevenueAggregate,
+      withdrawalSummary,
+      fundingFeesAggregate,
+    ] = await Promise.all([
+      this.prisma.transaction.aggregate({
+        where: {
+          ...tf,
+          type: TransactionType.WALLET_FUNDING,
+          status: TransactionStatus.SUCCESS,
+        },
+        _sum: { amount: true },
+      }),
+      this.prisma.transaction.aggregate({
+        where: {
+          ...tf,
+          type: TransactionType.PLATFORM_COMMISSION,
+          status: TransactionStatus.SUCCESS,
+        },
+        _sum: { amount: true },
+      }),
+      this.prisma.order.aggregate({
+        where: {
+          ...tf,
+          status: {
+            in: [
+              OrderStatus.PENDING,
+              OrderStatus.ASSIGNED,
+              OrderStatus.IN_PROGRESS,
+              OrderStatus.COMPLETED,
+              OrderStatus.DISPUTED,
+              OrderStatus.RESOLVED,
+              OrderStatus.REFUNDED,
+            ],
+          },
+        },
+        _sum: { totalAmount: true },
+      }),
+      this.prisma.order.aggregate({
+        where: {
+          ...tf,
+          fulfillmentType: 'MANUAL',
+          status: OrderStatus.COMPLETED,
+          escrowReleasedAt: null,
+          dispute: null,
+          disputeWindowExpiresAt: {
+            lte: now,
+          },
+        },
+        _sum: { platformFee: true },
+      }),
+      this.prisma.withdrawalRequest.groupBy({
+        by: ['status'],
+        where: tf,
+        orderBy: {
+          status: 'asc',
+        },
+        _sum: { amount: true },
+        _count: { _all: true },
+      }),
+      this.prisma.$queryRaw<Array<{ total: bigint | null }>>`
+        SELECT COALESCE(
+          SUM(
+            CASE
+              WHEN jsonb_typeof(COALESCE(metadata::jsonb, '{}'::jsonb)) = 'object'
+                AND COALESCE(metadata::jsonb, '{}'::jsonb) ? 'gatewayFeeKobo'
+              THEN NULLIF(metadata::jsonb->>'gatewayFeeKobo', '')::bigint
+              ELSE 0
+            END
+          ),
+          0
+        ) AS total
+        FROM "Transaction"
+        WHERE type = ${TransactionType.WALLET_FUNDING}::"TransactionType"
+          AND status = ${TransactionStatus.SUCCESS}::"TransactionStatus"
+          ${tenantSql}
+      `,
+    ]);
+
+    const normalizedWithdrawals = withdrawalSummary.reduce(
+      (acc, item) => {
+        const amount = item._sum?.amount?.toString() ?? '0';
+        const count =
+          typeof item._count === 'object' && item._count
+            ? item._count._all ?? 0
+            : 0;
+
+        switch (item.status) {
+          case WithdrawalStatus.PENDING:
+            acc.pendingWithdrawalAmount = amount;
+            acc.pendingWithdrawalCount = count;
+            break;
+          case WithdrawalStatus.APPROVED:
+            acc.approvedWithdrawalAmount = amount;
+            acc.approvedWithdrawalCount = count;
+            break;
+          case WithdrawalStatus.PROCESSING:
+            acc.processingWithdrawalAmount = amount;
+            acc.processingWithdrawalCount = count;
+            break;
+          case WithdrawalStatus.COMPLETED:
+            acc.completedWithdrawalAmount = amount;
+            acc.completedWithdrawalCount = count;
+            break;
+          case WithdrawalStatus.REJECTED:
+            acc.rejectedWithdrawalAmount = amount;
+            acc.rejectedWithdrawalCount = count;
+            break;
+        }
+
+        return acc;
+      },
+      {
+        pendingWithdrawalAmount: '0',
+        pendingWithdrawalCount: 0,
+        approvedWithdrawalAmount: '0',
+        approvedWithdrawalCount: 0,
+        processingWithdrawalAmount: '0',
+        processingWithdrawalCount: 0,
+        completedWithdrawalAmount: '0',
+        completedWithdrawalCount: 0,
+        rejectedWithdrawalAmount: '0',
+        rejectedWithdrawalCount: 0,
+      },
+    );
+
+    return {
+      walletFundingInflow:
+        walletFundingAggregate._sum.amount?.toString() ?? '0',
+      realizedPlatformRevenue:
+        platformRevenueAggregate._sum.amount?.toString() ?? '0',
+      orderVolume: orderVolumeAggregate._sum.totalAmount?.toString() ?? '0',
+      pendingReleaseRevenue:
+        pendingRevenueAggregate._sum.platformFee?.toString() ?? '0',
+      capturedFundingFeeVolume:
+        fundingFeesAggregate[0]?.total?.toString() ?? '0',
+      payoutReviewAmount: (
+        BigInt(normalizedWithdrawals.pendingWithdrawalAmount) +
+        BigInt(normalizedWithdrawals.approvedWithdrawalAmount) +
+        BigInt(normalizedWithdrawals.processingWithdrawalAmount)
+      ).toString(),
+      payoutReviewCount:
+        normalizedWithdrawals.pendingWithdrawalCount +
+        normalizedWithdrawals.approvedWithdrawalCount +
+        normalizedWithdrawals.processingWithdrawalCount,
+      ...normalizedWithdrawals,
+    };
+  }
+
   // ── Full overview (all metrics in one call) ───────────────────────
 
   async getAdminOverview(tenantId: string | null) {
-    const [revenue, ordersByService, cbtPerformance, userGrowth, walletFloat] =
+    const [revenue, ordersByService, cbtPerformance, userGrowth, walletFloat, moneySummary] =
       await Promise.all([
         this.getRevenueTimeSeries(tenantId, 'daily', 30),
         this.getOrdersByService(tenantId, 10),
         this.getCbtPerformance(tenantId),
         this.getUserGrowth(tenantId, 'daily', 30),
         this.getWalletFloat(tenantId),
+        this.getMoneySummary(tenantId),
       ]);
 
     return {
@@ -255,6 +422,7 @@ export class AnalyticsService {
       cbtPerformance,
       userGrowth,
       walletFloat,
+      moneySummary,
     };
   }
 

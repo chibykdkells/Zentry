@@ -141,7 +141,7 @@ export default function AdminDashboardPage() {
         <DashTile
           icon={DollarSign}
           label="Finance"
-          value={formatNaira(walletOverview.platformCommissionVolume)}
+          value={`${formatNaira(walletOverview.successfulFundingVolume)} inflow`}
           color="bg-emerald-600 text-white"
           onClick={() => setOpenTile('finance')}
         />
@@ -207,7 +207,11 @@ export default function AdminDashboardPage() {
       >
         <div className="grid gap-3 sm:grid-cols-2">
           <MoneyTile
-            label="Platform earnings"
+            label="Customer funding inflow"
+            value={formatNaira(walletOverview.successfulFundingVolume)}
+          />
+          <MoneyTile
+            label="Realized Zendocx revenue"
             value={formatNaira(walletOverview.platformCommissionVolume)}
           />
           <MoneyTile
@@ -219,8 +223,20 @@ export default function AdminDashboardPage() {
             value={formatNaira(walletOverview.cbtCommissionVolume)}
           />
           <MoneyTile
-            label="Total withdrawals"
+            label="Withdrawals already settled"
             value={formatNaira(walletOverview.withdrawalVolume)}
+          />
+          <MoneyTile
+            label="Withdrawals awaiting action"
+            value={`${formatNaira(walletOverview.payoutReviewAmount)} · ${walletOverview.payoutReviewCount}`}
+          />
+          <MoneyTile
+            label="Funding fees captured"
+            value={formatNaira(walletOverview.capturedFundingFeeVolume)}
+          />
+          <MoneyTile
+            label="Pending funding reconciliations"
+            value={walletOverview.pendingFundingCount.toString()}
           />
         </div>
 

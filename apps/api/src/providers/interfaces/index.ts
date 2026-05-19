@@ -32,6 +32,7 @@ export interface VerifyPaymentResult {
   reference: string;
   gatewayRef: string;
   paidAt?: Date;
+  feeKobo?: bigint;
 }
 
 export interface WebhookParseResult {
@@ -42,6 +43,7 @@ export interface WebhookParseResult {
   /** Amount in Kobo */
   amountKobo: bigint;
   gatewayRef: string;
+  feeKobo?: bigint;
 }
 
 export interface InitiateTransferInput {
