@@ -6,6 +6,7 @@ import { Toaster } from 'react-hot-toast';
 import { AuthBootstrap } from './auth-bootstrap';
 import { TenantBootstrap } from './tenant-bootstrap';
 import { SocketBootstrap } from './socket-bootstrap';
+import { AdminCacheGuard } from '@/components/pwa/admin-cache-guard';
 import { InstallPrompt } from '@/components/pwa/install-prompt';
 import { createAppQueryClient } from '@/lib/query-client';
 
@@ -14,6 +15,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <AdminCacheGuard />
       <AuthBootstrap />
       <TenantBootstrap />
       <SocketBootstrap />
