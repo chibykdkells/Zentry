@@ -3,14 +3,8 @@ import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import { TenantPortalHome } from '@/components/tenant/tenant-portal-home';
 import { LandingPage } from '@/components/marketing/landing-page';
-import {
-  buildTenantMetadataDescription,
-  fetchTenantPublicConfig,
-} from '@/lib/tenant-public-config';
-import {
-  resolveTenantSlugFromCustomDomain,
-  resolveTenantSlugFromHost,
-} from '@/lib/tenant-server';
+import { buildTenantMetadataDescription } from '@/lib/tenant-public-config';
+import { resolveTenantPublicContext } from '@/lib/tenant-server';
 
 const RETURNING_TENANTS_COOKIE = 'zendocx-returning-tenants';
 
@@ -22,16 +16,10 @@ async function resolveTenantFromRequest(
     ? rawTenantSlug[0] ?? null
     : rawTenantSlug ?? null;
   const headerStore = await headers();
-  const hostname = (headerStore.get('host') ?? '').split(':')[0].trim().toLowerCase();
-  const hostTenantSlug = resolveTenantSlugFromHost(headerStore.get('host') ?? '');
-  const customDomainTenantSlug =
-    explicitTenantSlug || hostTenantSlug
-      ? null
-      : await resolveTenantSlugFromCustomDomain(hostname);
-  const tenantSlug = explicitTenantSlug ?? hostTenantSlug ?? customDomainTenantSlug;
-  const initialTenant = await fetchTenantPublicConfig(tenantSlug);
-
-  return { tenantSlug, initialTenant };
+  return resolveTenantPublicContext({
+    host: headerStore.get('host') ?? '',
+    explicitTenantSlug,
+  });
 }
 
 export async function generateMetadata({

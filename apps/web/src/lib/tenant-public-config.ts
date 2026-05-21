@@ -1,3 +1,5 @@
+import { unstable_cache } from 'next/cache';
+
 export interface TenantPublicConfig {
   id: string;
   name: string;
@@ -64,7 +66,7 @@ export function resolveTenantSubheading(
   return configuredSubheading;
 }
 
-export async function fetchTenantPublicConfig(
+async function fetchTenantPublicConfigUncached(
   tenantSlug: string | null | undefined,
 ): Promise<TenantPublicConfig | null> {
   const normalizedSlug = tenantSlug?.trim().toLowerCase() ?? '';
@@ -92,4 +94,19 @@ export async function fetchTenantPublicConfig(
   } catch {
     return null;
   }
+}
+
+const fetchTenantPublicConfigCached = unstable_cache(
+  async (tenantSlug: string | null | undefined) =>
+    fetchTenantPublicConfigUncached(tenantSlug),
+  ['tenant-public-config'],
+  {
+    revalidate: 60 * 10,
+  },
+);
+
+export async function fetchTenantPublicConfig(
+  tenantSlug: string | null | undefined,
+): Promise<TenantPublicConfig | null> {
+  return fetchTenantPublicConfigCached(tenantSlug);
 }

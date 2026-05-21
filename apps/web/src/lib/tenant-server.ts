@@ -1,7 +1,10 @@
+import { cache } from 'react';
+import { unstable_cache } from 'next/cache';
 import {
   extractTenantSlugFromPlatformHostname,
   isCustomTenantHostname,
 } from '@/lib/platform-domain';
+import { fetchTenantPublicConfig } from '@/lib/tenant-public-config';
 
 const RESERVED_SUBDOMAINS = new Set(['www', 'api', 'platform', 'admin', 'app']);
 
@@ -10,7 +13,7 @@ export function resolveTenantSlugFromHost(host: string): string | null {
   return extractTenantSlugFromPlatformHostname(hostname, RESERVED_SUBDOMAINS);
 }
 
-export async function resolveTenantSlugFromCustomDomain(
+async function resolveTenantSlugFromCustomDomainUncached(
   hostname: string,
 ): Promise<string | null> {
   if (!isCustomTenantHostname(hostname)) {
@@ -37,3 +40,36 @@ export async function resolveTenantSlugFromCustomDomain(
     return null;
   }
 }
+
+const resolveTenantSlugFromCustomDomainCached = unstable_cache(
+  async (hostname: string) =>
+    resolveTenantSlugFromCustomDomainUncached(hostname),
+  ['tenant-custom-domain-resolve'],
+  {
+    revalidate: 60 * 10,
+  },
+);
+
+export async function resolveTenantSlugFromCustomDomain(
+  hostname: string,
+): Promise<string | null> {
+  return resolveTenantSlugFromCustomDomainCached(hostname);
+}
+
+export const resolveTenantPublicContext = cache(
+  async (options: { host: string; explicitTenantSlug?: string | null }) => {
+    const host = options.host ?? '';
+    const explicitTenantSlug = options.explicitTenantSlug?.trim() || null;
+    const hostname = host.split(':')[0].trim().toLowerCase();
+    const hostTenantSlug = resolveTenantSlugFromHost(host);
+    const customDomainTenantSlug =
+      explicitTenantSlug || hostTenantSlug
+        ? null
+        : await resolveTenantSlugFromCustomDomain(hostname);
+    const tenantSlug =
+      explicitTenantSlug ?? hostTenantSlug ?? customDomainTenantSlug;
+    const initialTenant = await fetchTenantPublicConfig(tenantSlug);
+
+    return { tenantSlug, initialTenant };
+  },
+);
