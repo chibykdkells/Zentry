@@ -7,6 +7,7 @@ describe('TenantResolverService', () => {
     name: 'Test Biz',
     slug: 'testbiz',
     logoUrl: null,
+    iconUrl: null,
     primaryColor: '#0D1B3E',
     accentColor: '#F5A623',
     textColor: '#10203C',

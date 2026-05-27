@@ -4,6 +4,7 @@ import { TENANT_HOMEPAGE_TEMPLATES } from '@zendocx/types';
 export const UpdateOwnTenantSettingsSchema = z.object({
   name: z.string().trim().min(2).max(100).optional(),
   logoUrl: z.string().url().nullable().optional(),
+  iconUrl: z.string().url().nullable().optional(),
   primaryColor: z
     .string()
     .regex(/^#[0-9A-Fa-f]{6}$/)
