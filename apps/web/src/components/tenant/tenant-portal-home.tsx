@@ -76,14 +76,16 @@ export function TenantPortalHome({ tenantSlug, initialTenant = null }: TenantPor
                 <img
                   src={resolvedTenant.logoUrl}
                   alt={brandName}
-                  className="h-10 w-10 rounded-2xl object-cover ring-1 ring-white/20"
+                  className="h-9 w-auto max-w-[160px] object-contain"
                 />
               ) : (
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/10">
-                  <span className="text-lg font-black text-[#F5A623]">{brandInitial}</span>
-                </div>
+                <>
+                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/10">
+                    <span className="text-lg font-black text-[#F5A623]">{brandInitial}</span>
+                  </div>
+                  <span className="font-bold text-white">{brandName}</span>
+                </>
               )}
-              <span className="font-bold text-white">{brandName}</span>
             </div>
             <Link
               href={loginHref}

@@ -22,6 +22,7 @@ interface SidebarProps {
   sectionLabel: string;
   items: SidebarItem[];
   secondaryItems?: SidebarItem[];
+  logoUrl?: string | null;
 }
 
 export function Sidebar({
@@ -29,6 +30,7 @@ export function Sidebar({
   sectionLabel,
   items,
   secondaryItems = [],
+  logoUrl,
 }: SidebarProps) {
   const pathname = usePathname();
   const clearAuth = useAuthStore((state) => state.clearAuth);
@@ -66,17 +68,32 @@ export function Sidebar({
         href={homeHref}
         className="flex items-center gap-3 border-b border-white/10 px-6 py-6 transition hover:bg-white/5"
       >
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-accent">
-          <span className="text-sm font-black text-white">Z</span>
-        </div>
-        <div>
-          <span className="block text-xl font-black tracking-tight text-white">
-            {brandLabel}
-          </span>
-          <span className="block text-[11px] font-medium uppercase tracking-[0.16em] text-slate-400">
-            {sectionLabel}
-          </span>
-        </div>
+        {logoUrl ? (
+          <div className="flex flex-col gap-0.5">
+            <img
+              src={logoUrl}
+              alt={brandLabel}
+              className="h-8 w-auto max-w-[140px] object-contain"
+            />
+            <span className="block text-[11px] font-medium uppercase tracking-[0.16em] text-slate-400">
+              {sectionLabel}
+            </span>
+          </div>
+        ) : (
+          <>
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-accent">
+              <span className="text-sm font-black text-white">Z</span>
+            </div>
+            <div>
+              <span className="block text-xl font-black tracking-tight text-white">
+                {brandLabel}
+              </span>
+              <span className="block text-[11px] font-medium uppercase tracking-[0.16em] text-slate-400">
+                {sectionLabel}
+              </span>
+            </div>
+          </>
+        )}
       </Link>
 
       <nav className="flex-1 px-4 py-6">

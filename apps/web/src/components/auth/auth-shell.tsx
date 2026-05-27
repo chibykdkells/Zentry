@@ -70,50 +70,56 @@ export function AuthShell({
               <img
                 src={resolvedTenant.logoUrl}
                 alt={brandName}
-                className="w-10 h-10 rounded-2xl object-cover ring-1 ring-white/20"
+                className="h-9 w-auto max-w-[160px] object-contain"
               />
             ) : (
-              <div className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center ring-1 ring-white/10 group-hover:bg-white/15 transition-colors">
-                <span className="text-[#F5A623] font-black text-lg">{brandInitial}</span>
-              </div>
+              <>
+                <div className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center ring-1 ring-white/10 group-hover:bg-white/15 transition-colors">
+                  <span className="text-[#F5A623] font-black text-lg">{brandInitial}</span>
+                </div>
+                <span className="text-white font-bold text-lg tracking-tight">{brandName}</span>
+              </>
             )}
-            <span className="text-white font-bold text-lg tracking-tight">{brandName}</span>
           </Link>
         </div>
 
         {/* Center: brand showcase */}
         <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-10 text-center">
           {/* Large logo icon */}
-          <div
-            className="mb-8 flex items-center justify-center"
-            style={{
-              width: 96,
-              height: 96,
-              borderRadius: 28,
-              background: 'rgba(255,255,255,0.10)',
-              border: '1px solid rgba(255,255,255,0.12)',
-              boxShadow: '0 20px 60px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.05) inset',
-            }}
-          >
-            {resolvedTenant?.logoUrl ? (
+          {resolvedTenant?.logoUrl ? (
+            <div className="mb-8">
               <img
                 src={resolvedTenant.logoUrl}
                 alt={brandName}
-                className="w-14 h-14 rounded-xl object-cover"
+                className="h-16 w-auto max-w-[220px] object-contain"
               />
-            ) : (
+            </div>
+          ) : (
+            <div
+              className="mb-8 flex items-center justify-center"
+              style={{
+                width: 96,
+                height: 96,
+                borderRadius: 28,
+                background: 'rgba(255,255,255,0.10)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                boxShadow: '0 20px 60px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.05) inset',
+              }}
+            >
               <span className="text-[#F5A623] font-black" style={{ fontSize: 44 }}>
                 {brandInitial}
               </span>
-            )}
-          </div>
+            </div>
+          )}
 
           <p className="text-sm font-semibold uppercase tracking-[0.24em] text-white/40 mb-2">
             {isPlatformVariant ? 'Platform access' : 'Welcome to'}
           </p>
-          <h2 className="text-4xl font-black text-white tracking-tight leading-tight mb-3">
-            {brandName}
-          </h2>
+          {!resolvedTenant?.logoUrl && (
+            <h2 className="text-4xl font-black text-white tracking-tight leading-tight mb-3">
+              {brandName}
+            </h2>
+          )}
           <p className="text-sm leading-7 text-white/50 max-w-xs">
             {isPlatformVariant
               ? 'Manage tenants, provision admins, and operate the platform dashboard.'
@@ -162,7 +168,7 @@ export function AuthShell({
                 <img
                   src={resolvedTenant.logoUrl}
                   alt={brandName}
-                  className="w-10 h-10 rounded-2xl object-cover"
+                  className="h-8 w-auto max-w-[140px] object-contain"
                 />
               ) : (
                 <div className="w-10 h-10 rounded-2xl bg-[#0D1B3E] flex items-center justify-center">
@@ -170,12 +176,14 @@ export function AuthShell({
                 </div>
               )}
             </Link>
-            <div>
-              <p className="font-black text-[#0D1B3E] text-lg leading-tight">{brandName}</p>
-              <p className="text-xs text-slate-400 font-medium">
-                {isPlatformVariant ? 'Platform access' : 'Secure portal'}
-              </p>
-            </div>
+            {!resolvedTenant?.logoUrl && (
+              <div>
+                <p className="font-black text-[#0D1B3E] text-lg leading-tight">{brandName}</p>
+                <p className="text-xs text-slate-400 font-medium">
+                  {isPlatformVariant ? 'Platform access' : 'Secure portal'}
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Card */}

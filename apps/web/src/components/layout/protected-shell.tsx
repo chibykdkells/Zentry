@@ -101,6 +101,7 @@ export function ProtectedShell({ title, children }: ProtectedShellProps) {
         <Sidebar
           brandLabel={getSidebarTitle(role, hydrated ? tenant?.name : null)}
           sectionLabel={sectionLabel}
+          logoUrl={hydrated ? tenant?.logoUrl : null}
           items={visiblePrimary.map(({ label, href }) => ({
             label,
             href: appendTenantContextToPath(href, tenantSlug),

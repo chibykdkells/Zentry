@@ -17,6 +17,7 @@ export interface TenantAdminOverview {
     name: string;
     slug: string;
     logoUrl: string | null;
+    iconUrl: string | null;
     primaryColor: string;
     accentColor: string;
     textColor: string;

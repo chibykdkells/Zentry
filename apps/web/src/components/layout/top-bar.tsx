@@ -50,23 +50,33 @@ export function TopBar({ title, className }: TopBarProps) {
       {/* Left: Logo or page title */}
       <div className="flex items-center gap-2">
         <Link href={homeHref} className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-navy">
-            <span className="text-brand-accent font-black text-xs">{brandInitial}</span>
-          </div>
-          <div className="min-w-0">
-            {title ? (
-              <>
-                <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-brand-muted">
-                  Workspace
-                </span>
-                <span className="block truncate text-sm font-semibold text-brand-ink">{title}</span>
-              </>
-            ) : (
-              <span className="text-lg font-black tracking-tight text-brand-navy">
-                {brandName}
-              </span>
-            )}
-          </div>
+          {resolvedTenant?.logoUrl && !title ? (
+            <img
+              src={resolvedTenant.logoUrl}
+              alt={brandName}
+              className="h-7 w-auto max-w-[120px] object-contain"
+            />
+          ) : (
+            <>
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-brand-navy">
+                <span className="text-brand-accent font-black text-xs">{brandInitial}</span>
+              </div>
+              <div className="min-w-0">
+                {title ? (
+                  <>
+                    <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-brand-muted">
+                      Workspace
+                    </span>
+                    <span className="block truncate text-sm font-semibold text-brand-ink">{title}</span>
+                  </>
+                ) : (
+                  <span className="text-lg font-black tracking-tight text-brand-navy">
+                    {brandName}
+                  </span>
+                )}
+              </div>
+            </>
+          )}
         </Link>
       </div>
 
