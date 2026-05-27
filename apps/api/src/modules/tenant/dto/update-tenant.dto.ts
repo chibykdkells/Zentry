@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const UpdateTenantSchema = z.object({
   name: z.string().min(2).max(100).optional(),
   logoUrl: z.string().url().nullable().optional(),
+  iconUrl: z.string().url().nullable().optional(),
   primaryColor: z
     .string()
     .regex(/^#[0-9A-Fa-f]{6}$/)

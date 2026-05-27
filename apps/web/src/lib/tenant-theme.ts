@@ -140,6 +140,18 @@ export function getTenantThemeBootstrapScript() {
         root.style.setProperty('--brand-button', tenant.buttonColor || tenant.primaryColor || '#0D1B3E');
         root.style.setProperty('--brand-button-strong', darkenHex(tenant.buttonColor || tenant.primaryColor || '#0D1B3E'));
         root.style.setProperty('--font-sans', fontMap[tenant.fontStyle] || fontMap.modern);
+
+        if (tenant.iconUrl) {
+          const existing = document.querySelector('link[rel~="icon"]');
+          if (existing) {
+            existing.setAttribute('href', tenant.iconUrl);
+          } else {
+            const link = document.createElement('link');
+            link.rel = 'icon';
+            link.href = tenant.iconUrl;
+            document.head.appendChild(link);
+          }
+        }
       } catch {
         // Keep default brand values if tenant theme bootstrap fails.
       }

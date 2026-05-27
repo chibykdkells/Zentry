@@ -20,6 +20,16 @@ function sanitizeHexColor(value: string | null, fallback: string) {
   return /^#[0-9a-fA-F]{6}$/.test(value ?? '') ? (value as string) : fallback;
 }
 
+function sanitizeUrl(value: string | null): string | null {
+  if (!value) return null;
+  try {
+    const u = new URL(value);
+    return u.protocol === 'https:' ? u.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
 export function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const tenantName = sanitizeName(searchParams.get('tenantName'), DEFAULT_NAME);
@@ -32,6 +42,7 @@ export function GET(request: NextRequest) {
     searchParams.get('accentColor'),
     DEFAULT_ACCENT_COLOR,
   );
+  const customIconUrl = sanitizeUrl(searchParams.get('iconUrl'));
 
   const iconBaseParams = new URLSearchParams({
     tenantName,
@@ -79,26 +90,31 @@ export function GET(request: NextRequest) {
     orientation: 'portrait-primary',
     categories: ['finance', 'utilities', 'productivity'],
     lang: 'en-NG',
-    icons: [
-      {
-        src: `/pwa/icon?${iconBaseParams.toString()}&size=192`,
-        sizes: '192x192',
-        type: 'image/png',
-        purpose: 'any',
-      },
-      {
-        src: `/pwa/icon?${iconBaseParams.toString()}&size=512`,
-        sizes: '512x512',
-        type: 'image/png',
-        purpose: 'any',
-      },
-      {
-        src: `/pwa/icon?${iconBaseParams.toString()}&size=512`,
-        sizes: '512x512',
-        type: 'image/png',
-        purpose: 'maskable',
-      },
-    ],
+    icons: customIconUrl
+      ? [
+          { src: customIconUrl, sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: customIconUrl, sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ]
+      : [
+          {
+            src: `/pwa/icon?${iconBaseParams.toString()}&size=192`,
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any',
+          },
+          {
+            src: `/pwa/icon?${iconBaseParams.toString()}&size=512`,
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any',
+          },
+          {
+            src: `/pwa/icon?${iconBaseParams.toString()}&size=512`,
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable',
+          },
+        ],
     shortcuts,
   };
 

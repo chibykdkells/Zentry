@@ -68,6 +68,7 @@ function buildTenantManifestUrl(tenant: {
   slug: string;
   primaryColor: string;
   accentColor: string;
+  iconUrl?: string | null;
 }) {
   const params = new URLSearchParams({
     tenantName: tenant.name,
@@ -75,6 +76,7 @@ function buildTenantManifestUrl(tenant: {
     primaryColor: tenant.primaryColor,
     accentColor: tenant.accentColor,
   });
+  if (tenant.iconUrl) params.set('iconUrl', tenant.iconUrl);
 
   return `/pwa/manifest?${params.toString()}`;
 }

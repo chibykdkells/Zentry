@@ -41,6 +41,7 @@ export interface TenantPublic {
   name: string;
   slug: string;
   logoUrl: string | null;
+  iconUrl: string | null;
   primaryColor: string;
   accentColor: string;
   textColor: string;

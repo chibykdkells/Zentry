@@ -1895,6 +1895,8 @@ export class TenantService {
         name: dto.name ?? tenant.name,
         logoUrl:
           dto.logoUrl === undefined ? tenant.logoUrl : (dto.logoUrl ?? null),
+        iconUrl:
+          dto.iconUrl === undefined ? tenant.iconUrl : (dto.iconUrl ?? null),
         primaryColor: dto.primaryColor ?? tenant.primaryColor,
         accentColor: dto.accentColor ?? tenant.accentColor,
         textColor: dto.textColor ?? tenant.textColor,
@@ -1985,6 +1987,7 @@ export class TenantService {
       name: tenant.name,
       slug: tenant.slug,
       logoUrl: tenant.logoUrl,
+      iconUrl: tenant.iconUrl,
       primaryColor: tenant.primaryColor,
       accentColor: tenant.accentColor,
       textColor: tenant.textColor,
@@ -2300,7 +2303,7 @@ export class TenantService {
           <p style="margin:0;font-size:13px;color:#94a3b8;line-height:1.6">For security, please change your password immediately after your first login. Do not share these credentials with anyone.</p>
         </td></tr>
         <tr><td style="padding:20px 40px 32px;border-top:1px solid #f1f5f9;text-align:center">
-          <p style="margin:0;font-size:12px;color:#cbd5e1">Fast. Trusted. Government Services, Simplified.</p>
+          <p style="margin:0;font-size:12px;color:#cbd5e1">Fast. Trusted. Document Services, Simplified.</p>
         </td></tr>
       </table>
     </td></tr>

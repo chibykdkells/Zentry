@@ -149,6 +149,7 @@ model Tenant {
   customDomain         String?   @unique
   customDomainVerified Boolean   @default(false)
   logoUrl              String?
+  iconUrl              String?
   primaryColor         String    @default("#0D1B3E")
   accentColor          String    @default("#F5A623")
   textColor            String    @default("#10203C")
