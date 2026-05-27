@@ -73,7 +73,7 @@ export function Sidebar({
             <img
               src={logoUrl}
               alt={brandLabel}
-              className="h-8 w-auto max-w-[140px] object-contain"
+              className="h-11 w-auto max-w-[180px] object-contain"
             />
             <span className="block text-[11px] font-medium uppercase tracking-[0.16em] text-slate-400">
               {sectionLabel}

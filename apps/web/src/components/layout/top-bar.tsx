@@ -54,7 +54,7 @@ export function TopBar({ title, className }: TopBarProps) {
             <img
               src={resolvedTenant.logoUrl}
               alt={brandName}
-              className="h-7 w-auto max-w-[120px] object-contain"
+              className="h-9 w-auto max-w-[150px] object-contain"
             />
           ) : (
             <>

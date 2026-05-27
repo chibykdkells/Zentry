@@ -70,7 +70,7 @@ export function AuthShell({
               <img
                 src={resolvedTenant.logoUrl}
                 alt={brandName}
-                className="h-9 w-auto max-w-[160px] object-contain"
+                className="h-12 w-auto max-w-[220px] object-contain"
               />
             ) : (
               <>
@@ -91,7 +91,7 @@ export function AuthShell({
               <img
                 src={resolvedTenant.logoUrl}
                 alt={brandName}
-                className="h-16 w-auto max-w-[220px] object-contain"
+                className="h-28 w-auto max-w-[320px] object-contain"
               />
             </div>
           ) : (
@@ -168,7 +168,7 @@ export function AuthShell({
                 <img
                   src={resolvedTenant.logoUrl}
                   alt={brandName}
-                  className="h-8 w-auto max-w-[140px] object-contain"
+                  className="h-10 w-auto max-w-[180px] object-contain"
                 />
               ) : (
                 <div className="w-10 h-10 rounded-2xl bg-[#0D1B3E] flex items-center justify-center">

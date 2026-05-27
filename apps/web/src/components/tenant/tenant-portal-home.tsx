@@ -76,7 +76,7 @@ export function TenantPortalHome({ tenantSlug, initialTenant = null }: TenantPor
                 <img
                   src={resolvedTenant.logoUrl}
                   alt={brandName}
-                  className="h-9 w-auto max-w-[160px] object-contain"
+                  className="h-12 w-auto max-w-[220px] object-contain"
                 />
               ) : (
                 <>
