@@ -137,7 +137,7 @@ export default function ServicesPage() {
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-brand-ink">Services</h1>
-          <p className="mt-0.5 text-sm text-brand-muted">Browse and request government and VTU services</p>
+          <p className="mt-0.5 text-sm text-brand-muted">Browse and request document and VTU services</p>
         </div>
       </div>
 

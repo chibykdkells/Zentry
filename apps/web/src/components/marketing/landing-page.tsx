@@ -88,7 +88,7 @@ function PortalScreen() {
         <p className="font-bold text-[#0D1B3E] leading-tight" style={{ fontSize: 10 }}>Welcome to</p>
         <p className="font-extrabold text-[#0D1B3E]" style={{ fontSize: 15 }}>yourbiz.com</p>
         <p className="text-gray-400 mt-1 mb-5" style={{ fontSize: 8 }}>
-          Government services, made easy
+          Document services, made easy
         </p>
 
         <div className="w-full flex flex-col gap-2">
@@ -353,7 +353,7 @@ export function LandingPage() {
                 <span className="text-[#F5A623] text-xs font-semibold uppercase tracking-wide">White-label SaaS Platform</span>
               </div>
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white leading-tight mb-6">
-                Launch Your Government Services Business in Days
+                Launch Your Document Services Business in Days
               </h1>
               <p className="text-lg text-gray-300 mb-10 leading-relaxed">
                 ZenDocx gives your business a complete, ready-to-use escrow marketplace for JAMB, NIMC, NECO, and VTU services — with wallet management, CBT job fulfilment, disputes, and admin analytics all built in.
@@ -414,7 +414,7 @@ export function LandingPage() {
           <div className="mt-14 grid grid-cols-2 sm:grid-cols-4 gap-6">
             {[
               { value: '< 48hrs', label: 'Time to go live' },
-              { value: '4 services', label: 'Government service types' },
+              { value: '4 services', label: 'Document service types' },
               { value: '100%', label: 'Escrow protected' },
               { value: '0 code', label: 'Required from you' },
             ].map((stat) => (
@@ -571,7 +571,7 @@ export function LandingPage() {
       <section className="py-20 px-4 sm:px-6 bg-[#0D1B3E]">
         <div className="max-w-3xl mx-auto text-center">
           <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">Ready to launch your platform?</h2>
-          <p className="text-gray-300 mb-10">Join businesses already using ZenDocx to power their government services operations.</p>
+          <p className="text-gray-300 mb-10">Join businesses already using ZenDocx to power their document services operations.</p>
           <a
             href="mailto:hello@zendocx.net?subject=Demo Request"
             className="inline-block px-10 py-4 bg-[#F5A623] text-[#0D1B3E] font-bold rounded-xl hover:bg-[#e8961a] transition-colors"
@@ -590,7 +590,7 @@ export function LandingPage() {
             </div>
             <span className="font-bold text-[#0D1B3E] text-sm">ZenDocx</span>
           </div>
-          <p className="text-xs text-gray-400">© {new Date().getFullYear()} ZenDocx. Fast. Trusted. Government Services, Simplified.</p>
+          <p className="text-xs text-gray-400">© {new Date().getFullYear()} ZenDocx. Fast. Trusted. Document Services, Simplified.</p>
           <div className="flex items-center gap-6">
             <a href="mailto:hello@zendocx.net" className="text-xs text-gray-400 hover:text-[#0D1B3E]">hello@zendocx.net</a>
             <a href="/platform/login" className="text-xs text-gray-400 hover:text-[#0D1B3E]">Platform Login</a>

@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 
 const DEFAULT_NAME = 'ZenDocx';
 const DEFAULT_DESCRIPTION =
-  'Fast. Trusted. Government Services, Simplified.';
+  'Fast. Trusted. Document Services, Simplified.';
 const DEFAULT_PRIMARY_COLOR = '#0D1B3E';
 const DEFAULT_ACCENT_COLOR = '#F5A623';
 

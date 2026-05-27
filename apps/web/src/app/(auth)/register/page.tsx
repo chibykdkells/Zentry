@@ -8,7 +8,7 @@ export default function RegisterPage() {
     <RegistrationForm
       role={UserRole.INDIVIDUAL}
       title="Create your account"
-      description="Open a personal ZenDocx account for government services, identity support, and wallet-based payments."
+      description="Open a personal ZenDocx account for document services, identity support, and wallet-based payments."
       footer={
         <>
           Already have an account?{' '}
