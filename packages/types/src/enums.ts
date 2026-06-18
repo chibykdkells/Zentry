@@ -96,7 +96,6 @@ export enum NotificationType {
 
 export enum PaymentGateway {
   FINTAVAPAY = 'FINTAVAPAY',
-  PAYSTACK = 'PAYSTACK',
   FLUTTERWAVE = 'FLUTTERWAVE',
 }
 

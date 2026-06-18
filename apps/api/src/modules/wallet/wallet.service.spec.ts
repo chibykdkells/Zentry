@@ -64,7 +64,7 @@ describe('WalletService', () => {
     };
 
     paymentService = {
-      gatewayName: PaymentGateway.PAYSTACK,
+      gatewayName: PaymentGateway.FINTAVAPAY,
       initiatePayment: jest.fn(),
       verifyPayment: jest.fn(),
     };
@@ -101,7 +101,7 @@ describe('WalletService', () => {
     prisma.transaction.update.mockResolvedValue({});
     prisma.auditLog.create.mockResolvedValue({});
     paymentService.initiatePayment.mockResolvedValue({
-      paymentUrl: 'https://checkout.paystack.com/abc123',
+      paymentUrl: 'https://fintavapay.com/checkout/test-ref',
       reference: 'txn-ref-1',
       gatewayRef: 'gateway-ref-1',
       mode: 'live',
@@ -153,7 +153,7 @@ describe('WalletService', () => {
     prisma.transaction.update.mockResolvedValue({});
     prisma.auditLog.create.mockResolvedValue({});
     paymentService.initiatePayment.mockResolvedValue({
-      paymentUrl: 'https://checkout.paystack.com/abc123',
+      paymentUrl: 'https://fintavapay.com/checkout/test-ref',
       reference: 'txn-ref-2',
       gatewayRef: 'gateway-ref-2',
       mode: 'live',
@@ -187,7 +187,7 @@ describe('WalletService', () => {
     prisma.transaction.update.mockResolvedValue({});
     prisma.auditLog.create.mockResolvedValue({});
     paymentService.initiatePayment.mockResolvedValue({
-      paymentUrl: 'https://checkout.paystack.com/abc123',
+      paymentUrl: 'https://fintavapay.com/checkout/test-ref',
       reference: 'txn-ref-3',
       gatewayRef: 'gateway-ref-3',
       mode: 'live',
@@ -203,13 +203,13 @@ describe('WalletService', () => {
       expect.objectContaining({
         where: { reference: expect.any(String) },
         data: expect.objectContaining({
-          gateway: PaymentGateway.PAYSTACK,
+          gateway: PaymentGateway.FINTAVAPAY,
           gatewayRef: 'gateway-ref-3',
         }),
       }),
     );
     expect(result.data.status).toBe(TransactionStatus.PENDING);
-    expect(result.data.gateway).toBe(PaymentGateway.PAYSTACK);
+    expect(result.data.gateway).toBe(PaymentGateway.FINTAVAPAY);
     expect(result.data.amountNaira).toBe(1000);
     expect(prisma.transaction.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -229,7 +229,7 @@ describe('WalletService', () => {
       status: TransactionStatus.PENDING,
       amount: 10000n,
       reference: 'ZDX-TXN-123',
-      gateway: PaymentGateway.PAYSTACK,
+      gateway: PaymentGateway.FINTAVAPAY,
       gatewayRef: 'gateway-ref-1',
       metadata: {
         callbackUrl: 'https://zendocx.net/wallet',
@@ -275,7 +275,7 @@ describe('WalletService', () => {
       status: TransactionStatus.PENDING,
       amount: 10000n,
       reference: 'ZDX-TXN-456',
-      gateway: PaymentGateway.PAYSTACK,
+      gateway: PaymentGateway.FINTAVAPAY,
       gatewayRef: 'gateway-ref-2',
       metadata: {
         callbackUrl: 'https://zendocx.net/wallet',

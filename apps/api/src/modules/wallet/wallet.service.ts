@@ -3568,8 +3568,6 @@ export class WalletService {
 
   private extractSignatureHeader(request: Request) {
     switch (this.paymentService.gatewayName) {
-      case PaymentGateway.PAYSTACK:
-        return request.headers['x-paystack-signature'];
       case PaymentGateway.FLUTTERWAVE:
         return (
           request.headers['verif-hash'] ??

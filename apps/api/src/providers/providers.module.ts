@@ -10,7 +10,6 @@ import {
 import { FintavapayProvider } from './payment/fintavapay.provider';
 import { FlutterwaveProvider } from './payment/flutterwave.provider';
 import { PaymentService } from './payment/payment.service';
-import { PaystackProvider } from './payment/paystack.provider';
 import { ResendEmailProvider } from './email/resend.provider';
 import { EmailService } from './email/email.service';
 import { ProviderOneVtuProvider } from './vtu/provider-one.provider';
@@ -26,7 +25,6 @@ import { ProviderCredentialsService } from './provider-credentials.service';
 @Module({
   providers: [
     FintavapayProvider,
-    PaystackProvider,
     FlutterwaveProvider,
     ProviderOneVtuProvider,
     TermiiSmsProvider,
@@ -38,28 +36,24 @@ import { ProviderCredentialsService } from './provider-credentials.service';
       useFactory: (
         config: ConfigService,
         fintavapay: FintavapayProvider,
-        paystack: PaystackProvider,
         flutterwave: FlutterwaveProvider,
       ) => {
         const activeProvider = config.get<string>(
           'ACTIVE_PAYMENT_PROVIDER',
-          'PAYSTACK',
+          'FINTAVAPAY',
         );
 
         switch (activeProvider) {
-          case 'FINTAVAPAY':
-            return fintavapay;
           case 'FLUTTERWAVE':
             return flutterwave;
-          case 'PAYSTACK':
+          case 'FINTAVAPAY':
           default:
-            return paystack;
+            return fintavapay;
         }
       },
       inject: [
         ConfigService,
         FintavapayProvider,
-        PaystackProvider,
         FlutterwaveProvider,
       ],
     },
