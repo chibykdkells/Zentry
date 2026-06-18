@@ -2639,7 +2639,13 @@ export class WalletService {
             checkoutMode: initiation.mode ?? 'live',
             paymentUrl: initiation.paymentUrl ?? null,
             callbackUrl,
-            virtualAccount: initiation.virtualAccount ?? null,
+            virtualAccount: initiation.virtualAccount
+              ? {
+                  accountNumber: initiation.virtualAccount.accountNumber,
+                  bankName: initiation.virtualAccount.bankName,
+                  expiresAt: initiation.virtualAccount.expiresAt.toISOString(),
+                }
+              : null,
           },
         },
       });

@@ -42,6 +42,12 @@ export class PaymentService {
           : new Error('Payment initiation failed');
       }
 
+      // Dev sandbox fallback — only possible when callbackUrl is set (redirect-based flow)
+      if (!input.callbackUrl) {
+        throw error instanceof Error
+          ? error
+          : new Error('Payment initiation failed (no callbackUrl for sandbox fallback)');
+      }
       return {
         paymentUrl: this.createDevelopmentCheckoutUrl(
           input.callbackUrl,
