@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import toast from 'react-hot-toast';
-import { OrderStatus, FulfillmentType } from '@zendocx/types';
+import { OrderStatus } from '@zendocx/types';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -413,12 +413,14 @@ export default function TenantOrdersPage() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(1);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Dispute tab state
   const [disputeSearch, setDisputeSearch] = useState('');
   const [debouncedDisputeSearch, setDebouncedDisputeSearch] = useState('');
   const [disputePage, setDisputePage] = useState(1);
   const [disputeStatusFilter, setDisputeStatusFilter] = useState('ALL');
+  const disputeSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const orderFilters: TenantAdminOrderFilters = {
     page,
@@ -440,8 +442,8 @@ export default function TenantOrdersPage() {
 
   const handleSearchChange = (val: string) => {
     setSearch(val);
-    clearTimeout((handleSearchChange as unknown as { _t?: ReturnType<typeof setTimeout> })._t);
-    (handleSearchChange as unknown as { _t?: ReturnType<typeof setTimeout> })._t = setTimeout(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
       setDebouncedSearch(val);
       setPage(1);
     }, 400);
@@ -449,8 +451,8 @@ export default function TenantOrdersPage() {
 
   const handleDisputeSearchChange = (val: string) => {
     setDisputeSearch(val);
-    clearTimeout((handleDisputeSearchChange as unknown as { _t?: ReturnType<typeof setTimeout> })._t);
-    (handleDisputeSearchChange as unknown as { _t?: ReturnType<typeof setTimeout> })._t = setTimeout(() => {
+    if (disputeSearchTimerRef.current) clearTimeout(disputeSearchTimerRef.current);
+    disputeSearchTimerRef.current = setTimeout(() => {
       setDebouncedDisputeSearch(val);
       setDisputePage(1);
     }, 400);
