@@ -36,8 +36,8 @@ import type {
 const IPV4_HTTP_AGENT  = new http.Agent({ family: 4 });
 const IPV4_HTTPS_AGENT = new https.Agent({ family: 4 });
 
-/** Hard cap in ms — must finish before Fly proxy + mobile browser drops the connection. */
-const REQUEST_TIMEOUT_MS = 5_000;
+/** Hard cap in ms — FintavaPay can take 3-8s from Fly.io; keep under mobile browser idle timeout (~30s). */
+const REQUEST_TIMEOUT_MS = 12_000;
 
 @Injectable()
 export class FintavapayProvider implements IPaymentProvider {
@@ -90,19 +90,31 @@ export class FintavapayProvider implements IPaymentProvider {
     const expireMinutes = input.expireTimeInMin ?? 30;
     const amountNaira   = this.koboToNaira(input.amountKobo);
 
-    const response = await axios.post(
-      `${this.baseUrl}/virtual-wallet/generate`,
-      {
-        customerName:      input.customerName ?? input.email,
-        phone:             input.phone ?? '',
-        email:             input.email,
-        amount:            amountNaira,
-        expireTimeInMin:   expireMinutes,
-        merchantReference: input.reference,
-        description:       'ZenDocx wallet funding',
-      },
-      this.axiosConfig,
-    );
+    let response: Awaited<ReturnType<typeof axios.post>>;
+    try {
+      response = await axios.post(
+        `${this.baseUrl}/virtual-wallet/generate`,
+        {
+          customerName:      input.customerName ?? input.email,
+          phone:             input.phone ?? '',
+          email:             input.email,
+          amount:            amountNaira,
+          expireTimeInMin:   expireMinutes,
+          merchantReference: input.reference,
+          description:       'ZenDocx wallet funding',
+        },
+        this.axiosConfig,
+      );
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { status?: number; data?: unknown }; code?: string; message?: string };
+      this.logger.error(
+        `FintavaPay /virtual-wallet/generate failed — ` +
+        `status=${axiosErr.response?.status ?? 'none'} ` +
+        `code=${axiosErr.code ?? 'none'} ` +
+        `body=${JSON.stringify(axiosErr.response?.data ?? axiosErr.message)}`,
+      );
+      throw err;
+    }
 
     // Fintava wraps the result — handle both flat and nested response shapes.
     const raw  = response.data as Record<string, unknown>;
