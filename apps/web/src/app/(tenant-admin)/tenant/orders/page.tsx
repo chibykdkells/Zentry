@@ -220,8 +220,8 @@ function OrderDetailPanel({ orderId, onClose }: { orderId: string; onClose: () =
             <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3">
               <p className="text-[11px] font-semibold uppercase tracking-widest text-blue-500">Assigned CBT center</p>
               <p className="mt-1 text-sm font-semibold text-slate-900">
-                {((order as unknown as { assignedCbt?: { cbtProfile?: { centerName?: string }; firstName?: string; lastName?: string } }).assignedCbt?.cbtProfile?.centerName)
-                  ?? `${(order as unknown as { assignedCbt?: { firstName?: string } }).assignedCbt?.firstName ?? ''} ${(order as unknown as { assignedCbt?: { lastName?: string } }).assignedCbt?.lastName ?? ''}`.trim()
+                {(((order as unknown as { assignedCbt?: { cbtProfile?: { centerName?: string }; firstName?: string; lastName?: string } }).assignedCbt?.cbtProfile?.centerName)
+                  ?? `${(order as unknown as { assignedCbt?: { firstName?: string } }).assignedCbt?.firstName ?? ''} ${(order as unknown as { assignedCbt?: { lastName?: string } }).assignedCbt?.lastName ?? ''}`.trim())
                   || '—'}
               </p>
               <p className="text-xs text-slate-500">{(order as unknown as { assignedCbt?: { email?: string } }).assignedCbt?.email}</p>
