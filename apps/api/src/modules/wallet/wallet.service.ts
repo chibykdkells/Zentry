@@ -293,7 +293,9 @@ export class WalletService {
   }
 
   async getMyWalletOverview(userId: string, tenantId: string | null) {
-    await this.reconcileRecentPendingFundings(userId);
+    // Fire-and-forget — reconciliation makes external gateway API calls and must
+    // never block the wallet page load. Any errors are caught inside the method.
+    void this.reconcileRecentPendingFundings(userId);
 
     const wallet = await this.prisma.wallet.findFirst({
       where: {
@@ -2127,7 +2129,7 @@ export class WalletService {
     query: GetWalletTransactionsQueryDto,
     tenantId: string | null,
   ) {
-    await this.reconcileRecentPendingFundings(userId);
+    void this.reconcileRecentPendingFundings(userId);
 
     const wallet = await this.prisma.wallet.findFirst({
       where: {

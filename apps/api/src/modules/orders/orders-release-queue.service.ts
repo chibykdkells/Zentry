@@ -321,7 +321,9 @@ export class OrdersReleaseQueueService implements OnModuleInit {
         );
       }
 
-      // Find tenant admin wallet (if this is a tenant order)
+      // Find tenant admin wallet (if this is a tenant order with a non-zero fee).
+      // A missing wallet here would silently lose the tenant's commission — throw
+      // instead so the Bull job retries and an operator is alerted.
       const tenantWallet =
         order.tenantId && order.tenantFee > 0n
           ? await tx.wallet.findFirst({
@@ -334,6 +336,12 @@ export class OrdersReleaseQueueService implements OnModuleInit {
               select: { id: true, userId: true, availableBalance: true, totalEarned: true },
             })
           : null;
+
+      if (order.tenantId && order.tenantFee > 0n && !tenantWallet) {
+        throw new ConflictException(
+          `Tenant wallet not found for tenant ${order.tenantId} — escrow release aborted to prevent commission loss`,
+        );
+      }
 
       // Commission splits
       // - CBT earns their full commission

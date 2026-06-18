@@ -128,16 +128,10 @@ export class FintavapayProvider implements IPaymentProvider {
       (data['status'] as string | undefined)?.toLowerCase() ?? '';
     const success = status === 'success' || status === 'successful' || status === 'completed';
 
-    // Amount may come as Naira float or as Kobo integer depending on env
+    // FintavaPay API docs state amounts are always in Naira (float).
     const rawAmount = data['amount'] as number | undefined;
-    // Heuristic: if the number looks like it's already in Kobo (> 1000 for ₦10),
-    // use it directly; otherwise multiply by 100.
     const amountKobo =
-      rawAmount !== undefined
-        ? rawAmount > 1000
-          ? BigInt(Math.round(rawAmount))
-          : this.nairaToKobo(rawAmount)
-        : 0n;
+      rawAmount !== undefined ? this.nairaToKobo(rawAmount) : 0n;
 
     const gatewayRef =
       (data['id'] as string | undefined) ??
@@ -273,13 +267,10 @@ export class FintavapayProvider implements IPaymentProvider {
       (data['CustomerReference'] as string | undefined) ??
       '';
 
+    // FintavaPay API docs state amounts are always in Naira (float).
     const rawAmount = data['amount'] as number | undefined;
     const amountKobo =
-      rawAmount !== undefined
-        ? rawAmount > 1000
-          ? BigInt(Math.round(rawAmount))
-          : this.nairaToKobo(rawAmount)
-        : 0n;
+      rawAmount !== undefined ? this.nairaToKobo(rawAmount) : 0n;
 
     const gatewayRef =
       (data['id'] as string | undefined) ??
