@@ -155,7 +155,7 @@ export class OrdersController {
     );
   }
 
-  @Roles(UserRole.SUPER_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN)
   @Get('admin')
   getAdminOrders(
     @CurrentUser() user: JwtUser,
@@ -164,7 +164,7 @@ export class OrdersController {
     return this.ordersService.getAdminOrders(query, user.tenantId);
   }
 
-  @Roles(UserRole.SUPER_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN)
   @Get('admin/disputes')
   getAdminDisputes(
     @CurrentUser() user: JwtUser,
@@ -173,7 +173,7 @@ export class OrdersController {
     return this.ordersService.getAdminDisputes(query, user.tenantId);
   }
 
-  @Roles(UserRole.SUPER_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN)
   @Get('admin/:orderId')
   getAdminOrderDetail(
     @CurrentUser() user: JwtUser,
@@ -182,7 +182,7 @@ export class OrdersController {
     return this.ordersService.getAdminOrderDetail(orderId, user.tenantId);
   }
 
-  @Roles(UserRole.SUPER_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN)
   @Get('admin/:orderId/release-preview')
   getAdminOrderReleasePreview(
     @CurrentUser() user: JwtUser,
@@ -194,7 +194,7 @@ export class OrdersController {
     );
   }
 
-  @Roles(UserRole.SUPER_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN)
   @Patch('admin/:orderId/notes')
   updateAdminOrderNotes(
     @CurrentUser() user: JwtUser,
@@ -208,7 +208,7 @@ export class OrdersController {
     );
   }
 
-  @Roles(UserRole.SUPER_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN)
   @Patch('admin/:orderId/dispute')
   reviewAdminOrderDispute(
     @CurrentUser() user: JwtUser,
@@ -223,7 +223,7 @@ export class OrdersController {
     );
   }
 
-  @Roles(UserRole.SUPER_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN)
   @Patch('admin/:orderId/dispute-financial-follow-up')
   reviewAdminOrderDisputeFinancialFollowUp(
     @CurrentUser() user: JwtUser,
