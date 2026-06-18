@@ -23,6 +23,7 @@ export interface InitiatePaymentInput {
 export interface VirtualAccountDetails {
   accountNumber: string;
   bankName: string;
+  accountName?: string;
   /** When the virtual account expires */
   expiresAt: Date;
 }

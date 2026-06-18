@@ -2683,14 +2683,17 @@ export class WalletService {
           checkoutMode: initiation.mode ?? 'live',
         },
       };
-    } catch {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`initiateFunding failed for user ${userId}: ${msg}`);
+
       await this.prisma.transaction.update({
         where: { reference },
         data: {
           status: TransactionStatus.FAILED,
           metadata: {
             initiatedVia: 'wallet-page',
-            failure: 'Payment initialization failed',
+            failure: msg,
           },
         },
       });

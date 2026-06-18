@@ -120,15 +120,25 @@ export class FintavapayProvider implements IPaymentProvider {
     const raw  = response.data as Record<string, unknown>;
     const data = (raw['data'] ?? raw) as Record<string, unknown>;
 
+    // FintavaPay actual field names (confirmed from live API response):
+    //   virtualAcctNo  — the account number to transfer to
+    //   bank           — the bank name (e.g. "Loma Bank")
+    //   virtualAcctName — the account name (beneficiary name)
     const accountNumber =
+      (data['virtualAcctNo'] as string | undefined) ??
       (data['accountNumber'] as string | undefined) ??
       (data['account_number'] as string | undefined) ??
       '';
 
     const bankName =
+      (data['bank'] as string | undefined) ??
       (data['bankName'] as string | undefined) ??
       (data['bank_name'] as string | undefined) ??
-      (data['bank'] as string | undefined) ??
+      '';
+
+    const accountName =
+      (data['virtualAcctName'] as string | undefined) ??
+      (data['accountName'] as string | undefined) ??
       '';
 
     const gatewayRef =
@@ -143,7 +153,7 @@ export class FintavapayProvider implements IPaymentProvider {
       reference: input.reference,
       gatewayRef,
       paymentUrl: undefined,
-      virtualAccount: { accountNumber, bankName, expiresAt },
+      virtualAccount: { accountNumber, bankName, accountName, expiresAt },
     };
   }
 
