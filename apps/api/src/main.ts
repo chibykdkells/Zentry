@@ -16,6 +16,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import type { NextFunction, Request, Response } from 'express';
 import { AppModule } from './app.module';
+import { PrismaService } from './modules/prisma/prisma.service';
 import { ZodValidationPipe } from './common/pipes/zod-validation.pipe';
 
 function bigIntToJSON(this: bigint): string {
@@ -39,6 +40,7 @@ async function bootstrap() {
   });
 
   const config = app.get(ConfigService);
+  const prisma = app.get(PrismaService);
   const port = config.get<number>('PORT', 4000);
   const isProduction = config.get('NODE_ENV') === 'production';
   const allowedOrigins = config
@@ -48,6 +50,29 @@ async function bootstrap() {
     .filter(Boolean);
 
   const platformDomain = config.get<string>('PLATFORM_DOMAIN', 'zendocx.net');
+
+  // Cache of tenant custom-domain origins (e.g. "https://ecafe.app").
+  // Refreshed every 5 minutes so newly registered domains are picked up
+  // without a restart.
+  let customDomainOrigins = new Set<string>();
+  const refreshCustomDomainOrigins = async () => {
+    try {
+      const tenants = await prisma.tenant.findMany({
+        where: { customDomain: { not: null }, isActive: true },
+        select: { customDomain: true },
+      });
+      customDomainOrigins = new Set(
+        tenants
+          .map((t) => t.customDomain?.trim().toLowerCase())
+          .filter((d): d is string => Boolean(d))
+          .flatMap((d) => [`https://${d}`, `http://${d}`]),
+      );
+    } catch {
+      // Non-fatal — keep using the previous cache
+    }
+  };
+  await refreshCustomDomainOrigins();
+  setInterval(() => { void refreshCustomDomainOrigins(); }, 5 * 60 * 1000);
 
   const isPrivateDevHostname = (hostname: string) => {
     return (
@@ -107,6 +132,12 @@ async function bootstrap() {
         }
       } catch {
         // fall through to rejection
+      }
+
+      // Allow custom tenant domains (e.g. ecafe.app) resolved from the DB.
+      if (customDomainOrigins.has(origin.toLowerCase())) {
+        callback(null, true);
+        return;
       }
 
       if (!isProduction) {

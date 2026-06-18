@@ -89,41 +89,18 @@ export class AuthController {
   }
 
   private getRefreshCookieDomain(): string | undefined {
+    // Only honour an explicit COOKIE_DOMAIN env var. Deriving a domain from
+    // FRONTEND_URL / API_URL is unsafe: when the API lives on a different apex
+    // domain (e.g. fly.dev vs zendocx.net) browsers silently reject the
+    // Set-Cookie, so no refresh-token is ever stored and every session restore
+    // fails with a bounce back to login. Without a domain attribute the browser
+    // scopes the cookie to the API server's exact hostname — always valid for
+    // cross-origin withCredentials requests with SameSite=None; Secure.
     const explicitDomain = this.configService
       .get<string>('COOKIE_DOMAIN')
       ?.trim();
-    if (explicitDomain) {
-      return explicitDomain.startsWith('.')
-        ? explicitDomain
-        : `.${explicitDomain}`;
-    }
-
-    const configuredUrl =
-      this.configService.get<string>('FRONTEND_URL')?.trim() ||
-      this.configService.get<string>('API_URL')?.trim() ||
-      '';
-
-    if (!configuredUrl) {
-      return undefined;
-    }
-
-    try {
-      const hostname = new URL(configuredUrl).hostname.toLowerCase();
-      const segments = hostname.split('.').filter(Boolean);
-
-      if (
-        hostname === 'localhost' ||
-        hostname === '127.0.0.1' ||
-        /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname) ||
-        segments.length < 2
-      ) {
-        return undefined;
-      }
-
-      return `.${segments.slice(-2).join('.')}`;
-    } catch {
-      return undefined;
-    }
+    if (!explicitDomain) return undefined;
+    return explicitDomain.startsWith('.') ? explicitDomain : `.${explicitDomain}`;
   }
 
   private setRefreshTokenCookie(
