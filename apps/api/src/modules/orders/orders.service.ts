@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -614,6 +615,8 @@ type ReleaseState =
 
 @Injectable()
 export class OrdersService {
+  private readonly logger = new Logger(OrdersService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
@@ -3303,6 +3306,7 @@ export class OrdersService {
     }
 
     if (
+      supportedCategorySlugs.length > 0 &&
       !supportedCategorySlugs.includes(candidateOrder.service.category.slug)
     ) {
       throw new ForbiddenException(
@@ -3310,73 +3314,75 @@ export class OrdersService {
       );
     }
 
-    const order = await this.prisma.$transaction(async (tx) => {
-      const claimResult = await tx.order.updateMany({
-        where: {
-          id: orderId,
-          fulfillmentType: 'MANUAL',
-          assignedCbtId: null,
-          status: OrderStatus.PENDING,
-          ...(tenantId ? { tenantId } : {}),
-        },
-        data: {
-          assignedCbtId: userId,
-          assignedAt: claimedAt,
-          status: OrderStatus.ASSIGNED,
-          deliveryDeadline: new Date(claimedAt.getTime() + DELIVERY_DEADLINE_MINUTES * 60 * 1000),
-        },
-      });
+    // Atomic claim: updateMany is the check-and-set guard. Running it outside a
+    // wrapping transaction means any HttpException we throw afterwards propagates
+    // cleanly to NestJS — Prisma v6 can swallow exceptions thrown inside a
+    // $transaction callback, converting them to a generic 500.
+    const claimResult = await this.prisma.order.updateMany({
+      where: {
+        id: orderId,
+        fulfillmentType: 'MANUAL',
+        assignedCbtId: null,
+        status: OrderStatus.PENDING,
+        ...(tenantId ? { tenantId } : {}),
+      },
+      data: {
+        assignedCbtId: userId,
+        assignedAt: claimedAt,
+        status: OrderStatus.ASSIGNED,
+        deliveryDeadline: new Date(
+          claimedAt.getTime() + DELIVERY_DEADLINE_MINUTES * 60 * 1000,
+        ),
+      },
+    });
 
-      if (claimResult.count === 0) {
-        const existingOrder = await tx.order.findUnique({
-          where: { id: orderId },
-          select: {
-            id: true,
-            tenantId: true,
-            fulfillmentType: true,
-            status: true,
-            assignedCbtId: true,
-          },
-        });
-
-        if (!existingOrder) {
-          throw new NotFoundException('Job not found');
-        }
-
-        if ((existingOrder.tenantId ?? null) !== (tenantId ?? null)) {
-          throw new NotFoundException('Job not found');
-        }
-
-        if (existingOrder.fulfillmentType !== 'MANUAL') {
-          throw new BadRequestException(
-            'Only manual jobs can be claimed by CBT centers.',
-          );
-        }
-
-        if (
-          existingOrder.assignedCbtId &&
-          existingOrder.assignedCbtId !== userId
-        ) {
-          throw new ConflictException(
-            'This job has already been claimed by another CBT center.',
-          );
-        }
-
-        throw new ConflictException(
-          'This job is no longer available to claim.',
-        );
-      }
-
-      const claimedOrder = await tx.order.findUnique({
+    if (claimResult.count === 0) {
+      // Diagnose why the atomic claim missed — fetch current state to give a
+      // meaningful error instead of a generic 500.
+      const existingOrder = await this.prisma.order.findUnique({
         where: { id: orderId },
-        select: orderDetailSelect,
+        select: {
+          id: true,
+          tenantId: true,
+          fulfillmentType: true,
+          status: true,
+          assignedCbtId: true,
+        },
       });
 
-      if (!claimedOrder) {
+      if (!existingOrder || (existingOrder.tenantId ?? null) !== (tenantId ?? null)) {
         throw new NotFoundException('Job not found');
       }
 
-      await tx.notification.create({
+      if (existingOrder.fulfillmentType !== 'MANUAL') {
+        throw new BadRequestException(
+          'Only manual jobs can be claimed by CBT centers.',
+        );
+      }
+
+      if (existingOrder.assignedCbtId && existingOrder.assignedCbtId !== userId) {
+        throw new ConflictException(
+          'This job has already been claimed by another CBT center.',
+        );
+      }
+
+      throw new ConflictException('This job is no longer available to claim.');
+    }
+
+    // Fetch full order detail and write side-effects in a single transaction.
+    // Notification/audit failures must never undo a successful claim, so each
+    // write is individually guarded.
+    const claimedOrder = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: orderDetailSelect,
+    });
+
+    if (!claimedOrder) {
+      throw new NotFoundException('Job not found after claim — possible data race');
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.notification.create({
         data: {
           userId: claimedOrder.requester.id,
           orderId: claimedOrder.id,
@@ -3389,9 +3395,8 @@ export class OrdersService {
             centerName: cbtUser.cbtProfile!.centerName,
           },
         },
-      });
-
-      await tx.notification.create({
+      }),
+      this.prisma.notification.create({
         data: {
           userId,
           orderId: claimedOrder.id,
@@ -3403,9 +3408,8 @@ export class OrdersService {
             requesterEmail: claimedOrder.requester.email,
           },
         },
-      });
-
-      await tx.auditLog.create({
+      }),
+      this.prisma.auditLog.create({
         data: {
           userId,
           action: 'ORDER_CLAIMED',
@@ -3418,34 +3422,44 @@ export class OrdersService {
             assignedAt: claimedAt.toISOString(),
           },
         },
-      });
-
-      return claimedOrder;
+      }),
+    ]).catch((error: unknown) => {
+      this.logger.error(
+        `Non-critical side-effects failed after claiming order ${orderId}`,
+        error,
+      );
     });
 
-    await this.ordersDeadlineQueueService.scheduleDeadline(
-      orderId,
-      new Date(claimedAt.getTime() + DELIVERY_DEADLINE_MINUTES * 60 * 1000),
-    );
+    try {
+      await this.ordersDeadlineQueueService.scheduleDeadline(
+        orderId,
+        new Date(claimedAt.getTime() + DELIVERY_DEADLINE_MINUTES * 60 * 1000),
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to schedule delivery deadline for order ${orderId}`,
+        error,
+      );
+    }
 
     // Real-time: notify requester their order was assigned
-    this.notificationsService.pushNotificationToUser(order.requester.id, {
+    this.notificationsService.pushNotificationToUser(claimedOrder.requester.id, {
       type: 'ORDER_ASSIGNED',
       title: 'Your order has been assigned',
-      message: `${order.service.name} is now assigned to ${cbtUser.cbtProfile!.centerName}.`,
-      orderId: order.id,
+      message: `${claimedOrder.service.name} is now assigned to ${cbtUser.cbtProfile!.centerName}.`,
+      orderId: claimedOrder.id,
     });
     this.notificationsService.broadcastClaimedJob({
-      orderId: order.id,
-      serviceId: order.service.id,
-      serviceName: order.service.name,
+      orderId: claimedOrder.id,
+      serviceId: claimedOrder.service.id,
+      serviceName: claimedOrder.service.name,
       tenantId,
       assignedCbtId: userId,
     });
 
     return {
       message: 'Job claimed successfully.',
-      data: this.serializeOrderDetail(order),
+      data: this.serializeOrderDetail(claimedOrder),
     };
   }
 

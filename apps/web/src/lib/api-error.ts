@@ -14,6 +14,7 @@ export function getApiErrorMessage(error: unknown, fallback: string): string {
     if (status === 404) {
       return 'We could not find what you were looking for right now.';
     }
+    if (status === 409) return 'This action conflicts with the current state. Please refresh and try again.';
     if (status && status >= 500) {
       return 'Something went wrong on our side. Please try again shortly.';
     }

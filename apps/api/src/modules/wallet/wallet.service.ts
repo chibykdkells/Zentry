@@ -2576,6 +2576,7 @@ export class WalletService {
         email: true,
         firstName: true,
         lastName: true,
+        phone: true,
         wallet: {
           select: {
             id: true,
@@ -2592,6 +2593,7 @@ export class WalletService {
     const amountKobo = BigInt(Math.round(dto.amountNaira * 100));
     const reference = generateTransactionRef();
     const callbackUrl = this.buildFundingCallbackUrl(requestOrigin);
+    const customerName = `${user.firstName} ${user.lastName}`.trim();
 
     await this.prisma.transaction.create({
       data: {
@@ -2607,10 +2609,7 @@ export class WalletService {
         metadata: {
           initiatedVia: 'wallet-page',
           callbackUrl,
-          requester: {
-            name: `${user.firstName} ${user.lastName}`.trim(),
-            email: user.email,
-          },
+          requester: { name: customerName, email: user.email },
         },
       },
     });
@@ -2619,8 +2618,11 @@ export class WalletService {
       const initiation = await this.paymentService.initiatePayment({
         amountKobo,
         email: user.email,
+        customerName,
+        phone: user.phone ?? undefined,
         reference,
         callbackUrl,
+        expireTimeInMin: 30,
         metadata: {
           userId: user.id,
           transactionType: 'WALLET_FUNDING',
@@ -2635,8 +2637,9 @@ export class WalletService {
           metadata: {
             initiatedVia: 'wallet-page',
             checkoutMode: initiation.mode ?? 'live',
-            paymentUrl: initiation.paymentUrl,
+            paymentUrl: initiation.paymentUrl ?? null,
             callbackUrl,
+            virtualAccount: initiation.virtualAccount ?? null,
           },
         },
       });
@@ -2663,7 +2666,8 @@ export class WalletService {
             : 'Wallet funding initialized.',
         data: {
           reference,
-          paymentUrl: initiation.paymentUrl,
+          paymentUrl: initiation.paymentUrl ?? null,
+          virtualAccount: initiation.virtualAccount ?? null,
           gateway: this.paymentService.gatewayName,
           amountKobo: amountKobo.toString(),
           amountNaira: dto.amountNaira,
@@ -3561,9 +3565,10 @@ export class WalletService {
           request.headers['x-flutterwave-signature']
         );
       case PaymentGateway.FINTAVAPAY:
+        return request.headers['x-fintava-signature'];
       default:
         return (
-          request.headers['x-fintavapay-signature'] ??
+          request.headers['x-fintava-signature'] ??
           request.headers['x-webhook-signature']
         );
     }
@@ -3572,6 +3577,8 @@ export class WalletService {
   private isSuccessfulPaymentEvent(event: string) {
     const normalized = event.toLowerCase();
     return (
+      normalized === 'account_funded' ||
+      normalized.includes('funded') ||
       normalized.includes('success') ||
       normalized.includes('successful') ||
       normalized.includes('completed')

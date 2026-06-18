@@ -14,151 +14,215 @@ import type {
 } from '../interfaces';
 
 /**
- * FintavaPay payment provider.
- * NOTE: Update endpoints/field names once FintavaPay API docs are reviewed.
- * All amounts are in Kobo — FintavaPay (Nigerian gateway) uses Kobo natively.
+ * FintavaPay payment provider — virtual-account (NIP transfer) based.
+ * Docs: https://fintava.readme.io/reference/getting-started-with-fintava-api
+ *
+ * Key differences from redirect-based gateways (Paystack/Flutterwave):
+ *  - Payment initiation returns a virtual bank account, not a checkout URL.
+ *    The user transfers money to the account via their bank app.
+ *  - Amounts in API requests/responses are Naira (float), not Kobo.
+ *    We convert: amountKobo / 100n → Naira for requests,
+ *                responseNaira * 100 → Kobo for internal storage.
+ *  - Webhook event for successful funding: "account_funded"
+ *  - Webhook signature header: "x-fintava-signature" (HMAC-SHA512)
+ *  - Payouts: POST /bank/credit/merchant (uses sortCode, not bank_code)
  */
 @Injectable()
 export class FintavapayProvider implements IPaymentProvider {
   readonly gatewayName = 'FINTAVAPAY';
   private readonly logger = new Logger(FintavapayProvider.name);
   private readonly baseUrl: string;
-  private readonly publicKey: string;
   private readonly secretKey: string;
   private readonly webhookSecret: string;
 
+  /** Default virtual account lifetime in minutes */
+  private readonly DEFAULT_EXPIRE_MINUTES = 30;
+
   constructor(private readonly config: ConfigService) {
-    this.baseUrl = config.get<string>(
-      'FINTAVAPAY_BASE_URL',
-      'https://api.fintavapay.com',
-    );
-    this.publicKey = config.get<string>('FINTAVAPAY_PUBLIC_KEY', '');
+    this.baseUrl = config
+      .get<string>('FINTAVAPAY_BASE_URL', 'https://dev.fintavapay.com/api/dev')
+      .replace(/\/+$/, '');
     this.secretKey = config.get<string>('FINTAVAPAY_SECRET_KEY', '');
     this.webhookSecret = config.get<string>('FINTAVAPAY_WEBHOOK_SECRET', '');
+  }
+
+  private get headers() {
+    return {
+      Authorization: `Bearer ${this.secretKey}`,
+      'Content-Type': 'application/json',
+    };
+  }
+
+  /** Convert Kobo (BigInt) → Naira float for API requests */
+  private koboToNaira(kobo: bigint): number {
+    return Number(kobo) / 100;
+  }
+
+  /** Convert Naira float → Kobo BigInt for internal storage */
+  private nairaToKobo(naira: number): bigint {
+    return BigInt(Math.round(naira * 100));
   }
 
   async initiatePayment(
     input: InitiatePaymentInput,
   ): Promise<InitiatePaymentResult> {
+    const expireMinutes = input.expireTimeInMin ?? this.DEFAULT_EXPIRE_MINUTES;
+    const amountNaira = this.koboToNaira(input.amountKobo);
+
     const response = await axios.post(
-      `${this.baseUrl}/v1/transaction/initialize`,
+      `${this.baseUrl}/virtual-wallet/generate`,
       {
-        amount: Number(input.amountKobo),
+        customerName: input.customerName ?? input.email,
+        phone: input.phone ?? '',
         email: input.email,
-        reference: input.reference,
-        callback_url: input.callbackUrl,
-        public_key: this.publicKey,
-        metadata: input.metadata,
+        amount: amountNaira,
+        expireTimeInMin: expireMinutes,
+        merchantReference: input.reference,
+        description: 'ZenDocx wallet funding',
       },
-      {
-        headers: {
-          Authorization: `Bearer ${this.secretKey}`,
-          'Content-Type': 'application/json',
-        },
-      },
+      { headers: this.headers },
     );
 
-    const { data } = response.data as {
-      data: { payment_url: string; reference: string; access_code: string };
-    };
+    // Fintava wraps the result; handle both flat and nested response shapes
+    const raw = response.data as Record<string, unknown>;
+    const data = (raw['data'] ?? raw) as Record<string, unknown>;
+
+    const accountNumber =
+      (data['accountNumber'] as string | undefined) ??
+      (data['account_number'] as string | undefined) ??
+      '';
+
+    const bankName =
+      (data['bankName'] as string | undefined) ??
+      (data['bank_name'] as string | undefined) ??
+      (data['bank'] as string | undefined) ??
+      '';
+
+    const gatewayRef =
+      (data['id'] as string | undefined) ??
+      (data['walletId'] as string | undefined) ??
+      (data['reference'] as string | undefined) ??
+      input.reference;
+
+    const expiresAt = new Date(Date.now() + expireMinutes * 60 * 1000);
 
     return {
-      paymentUrl: data.payment_url,
-      reference: data.reference,
-      gatewayRef: data.access_code,
+      reference: input.reference,
+      gatewayRef,
+      // No redirect URL — FintavaPay uses bank transfer
+      paymentUrl: undefined,
+      virtualAccount: { accountNumber, bankName, expiresAt },
     };
   }
 
   async verifyPayment(reference: string): Promise<VerifyPaymentResult> {
     const response = await axios.get(
-      `${this.baseUrl}/v1/transaction/verify/${reference}`,
-      {
-        headers: { Authorization: `Bearer ${this.secretKey}` },
-      },
+      `${this.baseUrl}/transaction/reference/${reference}`,
+      { headers: this.headers },
     );
 
-    const { data } = response.data as {
-      data: {
-        status: string;
-        amount: number;
-        reference: string;
-        id: string;
-        paid_at: string;
-      };
-    };
+    const raw = response.data as Record<string, unknown>;
+    const data = (raw['data'] ?? raw) as Record<string, unknown>;
+
+    const status =
+      (data['status'] as string | undefined)?.toLowerCase() ?? '';
+    const success = status === 'success' || status === 'successful' || status === 'completed';
+
+    // Amount may come as Naira float or as Kobo integer depending on env
+    const rawAmount = data['amount'] as number | undefined;
+    // Heuristic: if the number looks like it's already in Kobo (> 1000 for ₦10),
+    // use it directly; otherwise multiply by 100.
+    const amountKobo =
+      rawAmount !== undefined
+        ? rawAmount > 1000
+          ? BigInt(Math.round(rawAmount))
+          : this.nairaToKobo(rawAmount)
+        : 0n;
+
+    const gatewayRef =
+      (data['id'] as string | undefined) ??
+      (data['transactionId'] as string | undefined) ??
+      (data['transaction_id'] as string | undefined) ??
+      reference;
+
+    const paidAtRaw =
+      (data['paidAt'] as string | undefined) ??
+      (data['paid_at'] as string | undefined) ??
+      (data['createdAt'] as string | undefined);
 
     return {
-      success: data.status === 'success',
-      amountKobo: BigInt(data.amount),
-      reference: data.reference,
-      gatewayRef: data.id,
-      paidAt: data.paid_at ? new Date(data.paid_at) : undefined,
+      success,
+      amountKobo,
+      reference,
+      gatewayRef,
+      paidAt: paidAtRaw ? new Date(paidAtRaw) : undefined,
     };
   }
 
   async initiateTransfer(
     input: InitiateTransferInput,
   ): Promise<InitiateTransferResult> {
+    const amountNaira = this.koboToNaira(input.amountKobo);
+
     const response = await axios.post(
-      `${this.baseUrl}/v1/transfer/initiate`,
+      `${this.baseUrl}/bank/credit/merchant`,
       {
-        amount: Number(input.amountKobo),
-        account_number: input.accountNumber,
-        bank_code: input.bankCode,
-        account_name: input.accountName,
-        reference: input.reference,
+        accountNumber: input.accountNumber,
+        accountName: input.accountName,
+        sortCode: input.bankCode,
+        amount: amountNaira,
+        CustomerReference: input.reference,
         narration: input.narration,
       },
-      {
-        headers: {
-          Authorization: `Bearer ${this.secretKey}`,
-          'Content-Type': 'application/json',
-        },
-      },
+      { headers: this.headers },
     );
 
-    const { data } = response.data as {
-      data: {
-        reference: string;
-        transfer_code: string;
-        status: string;
-      };
-    };
+    const raw = response.data as Record<string, unknown>;
+    const data = (raw['data'] ?? raw) as Record<string, unknown>;
 
-    const status =
-      data.status?.toLowerCase() === 'success' ? 'SUCCESS' : 'PENDING';
+    const statusRaw = (data['status'] as string | undefined)?.toLowerCase() ?? '';
+    const status: 'SUCCESS' | 'PENDING' =
+      statusRaw === 'success' || statusRaw === 'successful' ? 'SUCCESS' : 'PENDING';
 
-    return {
-      transferRef: data.reference ?? input.reference,
-      gatewayRef: data.transfer_code ?? data.reference,
-      status,
-    };
+    const transferRef =
+      (data['reference'] as string | undefined) ??
+      (data['CustomerReference'] as string | undefined) ??
+      input.reference;
+
+    const gatewayRef =
+      (data['id'] as string | undefined) ??
+      (data['transactionId'] as string | undefined) ??
+      transferRef;
+
+    return { transferRef, gatewayRef, status };
   }
 
   async getBanks(): Promise<BankListItem[]> {
-    const response = await axios.get(`${this.baseUrl}/v1/banks`, {
-      headers: { Authorization: `Bearer ${this.secretKey}` },
-    });
+    try {
+      const response = await axios.get(`${this.baseUrl}/bank/list`, {
+        headers: this.headers,
+      });
 
-    const raw: unknown = response.data;
-    let list: { code: string; name: string }[] = [];
+      const raw = response.data as unknown;
+      let list: { sortCode?: string; code?: string; name?: string; bankName?: string }[] = [];
 
-    if (Array.isArray(raw)) {
-      list = raw as { code: string; name: string }[];
-    } else if (
-      raw !== null &&
-      typeof raw === 'object' &&
-      'data' in raw &&
-      Array.isArray((raw as { data: unknown }).data)
-    ) {
-      list = (raw as { data: { code: string; name: string }[] }).data;
+      if (Array.isArray(raw)) {
+        list = raw as typeof list;
+      } else if (raw !== null && typeof raw === 'object' && 'data' in raw) {
+        const nested = (raw as { data: unknown }).data;
+        if (Array.isArray(nested)) list = nested as typeof list;
+      }
+
+      return list
+        .filter((b) => b && (b.sortCode ?? b.code) && (b.name ?? b.bankName))
+        .map((b) => ({
+          code: (b.sortCode ?? b.code ?? '').trim(),
+          name: (b.name ?? b.bankName ?? '').trim(),
+        }));
+    } catch {
+      this.logger.warn('FintavaPay bank list unavailable — returning empty list');
+      return [];
     }
-
-    return list
-      .filter(
-        (b) => b && typeof b.code === 'string' && typeof b.name === 'string',
-      )
-      .map((b) => ({ code: b.code.trim(), name: b.name.trim() }));
   }
 
   parseWebhook(rawBody: Buffer, signatureHeader: string): WebhookParseResult {
@@ -187,17 +251,41 @@ export class FintavapayProvider implements IPaymentProvider {
       return empty;
     }
 
-    const body = JSON.parse(rawBody.toString()) as {
-      event: string;
-      data: { reference: string; amount: number; id: string };
-    };
+    let body: Record<string, unknown>;
+    try {
+      body = JSON.parse(rawBody.toString()) as Record<string, unknown>;
+    } catch {
+      this.logger.warn('FintavaPay webhook body is not valid JSON');
+      return empty;
+    }
 
-    return {
-      isValid: true,
-      event: body.event,
-      reference: body.data.reference,
-      amountKobo: BigInt(body.data.amount),
-      gatewayRef: body.data.id,
-    };
+    // Fintava uses "type" for the event name (not "event")
+    const event =
+      (body['type'] as string | undefined) ??
+      (body['event'] as string | undefined) ??
+      '';
+
+    const data = (body['data'] ?? {}) as Record<string, unknown>;
+
+    const reference =
+      (data['merchantReference'] as string | undefined) ??
+      (data['reference'] as string | undefined) ??
+      (data['CustomerReference'] as string | undefined) ??
+      '';
+
+    const rawAmount = data['amount'] as number | undefined;
+    const amountKobo =
+      rawAmount !== undefined
+        ? rawAmount > 1000
+          ? BigInt(Math.round(rawAmount))
+          : this.nairaToKobo(rawAmount)
+        : 0n;
+
+    const gatewayRef =
+      (data['id'] as string | undefined) ??
+      (data['transactionId'] as string | undefined) ??
+      '';
+
+    return { isValid: true, event, reference, amountKobo, gatewayRef };
   }
 }

@@ -365,6 +365,26 @@ describe('OrdersService', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
+  it('allows claiming any job when the CBT center has no category assignments', async () => {
+    prisma.user.findFirst.mockResolvedValue(buildApprovedCbtUser([]));
+    prisma.order.findUnique.mockResolvedValue({
+      id: 'order-1',
+      tenantId: 'tenant-1',
+      service: {
+        category: {
+          slug: 'waec-services',
+        },
+      },
+    });
+    prisma.$transaction.mockResolvedValue(buildOrderDetailRecord());
+
+    await expect(
+      service.claimCbtJob('cbt-1', 'order-1', 'tenant-1'),
+    ).resolves.not.toBeInstanceOf(ForbiddenException);
+
+    expect(prisma.$transaction).toHaveBeenCalled();
+  });
+
   it('blocks direct pending-job access when the category is unsupported', async () => {
     prisma.user.findFirst.mockResolvedValue(
       buildApprovedCbtUser(['identity-services']),

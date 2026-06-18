@@ -248,6 +248,14 @@ export function useClaimCbtJob() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['orders'] });
     },
+    onError: async (error: unknown) => {
+      const status = (error as { response?: { status?: number } })?.response?.status;
+      // Refresh the pool when the job was already claimed by someone else so
+      // the stale entry disappears without needing a manual reload.
+      if (status === 409) {
+        await queryClient.invalidateQueries({ queryKey: ['orders', 'cbt', 'job-pool'] });
+      }
+    },
   });
 }
 

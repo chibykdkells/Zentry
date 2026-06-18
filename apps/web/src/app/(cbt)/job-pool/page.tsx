@@ -49,9 +49,14 @@ export default function JobPoolPage() {
       toast.success(response.message ?? 'Job claimed successfully.');
       router.push('/my-jobs');
     } catch (error) {
-      toast.error(
-        getApiErrorMessage(error, 'Could not claim this job right now.'),
-      );
+      const status = (error as { response?: { status?: number } })?.response?.status;
+      const message = getApiErrorMessage(error, 'Could not claim this job right now.');
+      toast.error(message);
+      // Job was already claimed by someone else — refresh pool and clear selection
+      if (status === 409) {
+        setSelectedJobId(null);
+        void claimJob.reset();
+      }
     }
   };
 

@@ -7,22 +7,43 @@ export interface InitiatePaymentInput {
   /** Amount in Kobo */
   amountKobo: bigint;
   email: string;
+  /** Customer full name — required by virtual-account gateways (e.g. FintavaPay) */
+  customerName?: string;
+  /** Customer phone — required by virtual-account gateways (e.g. FintavaPay) */
+  phone?: string;
   /** Internal unique reference (ZDX-TXN-...) */
   reference: string;
-  /** Where gateway should redirect the user after payment */
-  callbackUrl: string;
+  /** Where gateway should redirect the user after payment (redirect-based gateways only) */
+  callbackUrl?: string;
+  /** How long the payment session should remain valid (minutes) — virtual-account gateways */
+  expireTimeInMin?: number;
   metadata?: Record<string, unknown>;
 }
 
+export interface VirtualAccountDetails {
+  accountNumber: string;
+  bankName: string;
+  /** When the virtual account expires */
+  expiresAt: Date;
+}
+
 export interface InitiatePaymentResult {
-  /** URL to redirect the user to for payment */
-  paymentUrl: string;
+  /**
+   * URL to redirect the user to for payment.
+   * Undefined for virtual-account gateways (e.g. FintavaPay) — use virtualAccount instead.
+   */
+  paymentUrl?: string;
   /** Our internal reference */
   reference: string;
   /** Gateway's own session/access identifier */
   gatewayRef: string;
   /** Indicates whether the provider returned a live or development checkout */
   mode?: 'live' | 'sandbox';
+  /**
+   * Populated by virtual-account gateways (e.g. FintavaPay).
+   * Show these details to the user so they can make a bank transfer.
+   */
+  virtualAccount?: VirtualAccountDetails;
 }
 
 export interface VerifyPaymentResult {
