@@ -169,7 +169,7 @@ export function FundWalletModal({ open, onClose, onSuccess }: FundWalletModalPro
         setStep('confirmed');
         onSuccess?.();
       } else {
-        setInlineError('Payment not received yet. Please wait a moment and try again.');
+        setInlineError('Transfer not received yet. Please allow 1–2 minutes after sending and try again.');
       }
     } catch (error: unknown) {
       setInlineError(getApiErrorMessage(error, 'Could not verify payment right now.'));

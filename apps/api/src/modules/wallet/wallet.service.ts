@@ -2723,12 +2723,19 @@ export class WalletService {
       });
     }
 
-    const verification = await this.paymentService.verifyPayment(reference);
+    let verification: Awaited<ReturnType<typeof this.paymentService.verifyPayment>>;
+    try {
+      verification = await this.paymentService.verifyPayment(reference);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`verifyPayment threw for reference ${reference}: ${msg}`);
+      throw new BadRequestException(
+        'Payment has not been confirmed yet. Please try again shortly.',
+      );
+    }
 
     if (!verification.success) {
-      // Do NOT mark FAILED here — Paystack may not have finalised the charge
-      // yet when the user lands on the callback page. Leave the transaction
-      // PENDING so the webhook can still credit it.
+      // Leave PENDING — the webhook will credit it once FintavaPay processes the transfer.
       throw new BadRequestException(
         'Payment has not been confirmed yet. Please try again shortly.',
       );
@@ -2738,7 +2745,7 @@ export class WalletService {
       transaction,
       amountKobo: verification.amountKobo,
       gatewayRef: verification.gatewayRef,
-      gatewayFeeKobo: verification.feeKobo,
+      gatewayFeeKobo: 0n,
       source: 'gateway-verification',
     });
   }
