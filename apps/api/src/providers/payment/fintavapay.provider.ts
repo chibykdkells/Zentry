@@ -90,7 +90,7 @@ export class FintavapayProvider implements IPaymentProvider {
     const expireMinutes = input.expireTimeInMin ?? 30;
     const amountNaira   = this.koboToNaira(input.amountKobo);
 
-    let response: Awaited<ReturnType<typeof axios.post>>;
+    let response: import('axios').AxiosResponse;
     try {
       response = await axios.post(
         `${this.baseUrl}/virtual-wallet/generate`,
@@ -106,12 +106,12 @@ export class FintavapayProvider implements IPaymentProvider {
         this.axiosConfig,
       );
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { status?: number; data?: unknown }; code?: string; message?: string };
+      const e = err as { response?: { status?: number; data?: unknown }; code?: string; message?: string };
       this.logger.error(
         `FintavaPay /virtual-wallet/generate failed — ` +
-        `status=${axiosErr.response?.status ?? 'none'} ` +
-        `code=${axiosErr.code ?? 'none'} ` +
-        `body=${JSON.stringify(axiosErr.response?.data ?? axiosErr.message)}`,
+        `status=${String(e.response?.status ?? 'none')} ` +
+        `code=${e.code ?? 'none'} ` +
+        `body=${JSON.stringify(e.response?.data ?? e.message)}`,
       );
       throw err;
     }
