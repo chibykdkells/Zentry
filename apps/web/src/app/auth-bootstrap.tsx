@@ -65,6 +65,25 @@ export function AuthBootstrap() {
             !currentState.accessToken
           ) {
             clearAuth();
+
+            // Redirect to login — AuthBootstrap doesn't go through the
+            // api-client interceptor, so we must redirect manually here.
+            if (typeof window !== 'undefined') {
+              const tenantSlug = resolveTenantSlugForRequest();
+              const loginUrl = new URL(
+                tenantSlug ? '/login' : '/access-required',
+                window.location.origin,
+              );
+              loginUrl.searchParams.set('reason', 'session-expired');
+              if (tenantSlug) {
+                loginUrl.searchParams.set('tenant', tenantSlug);
+              }
+              const currentPath = `${window.location.pathname}${window.location.search}`;
+              if (currentPath !== loginUrl.pathname) {
+                loginUrl.searchParams.set('next', currentPath);
+              }
+              window.location.href = loginUrl.toString();
+            }
           }
         }
       }
