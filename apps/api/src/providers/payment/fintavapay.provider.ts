@@ -16,28 +16,27 @@ import type {
 } from '../interfaces';
 
 /**
- * FintavaPay payment provider — static virtual account (Loma Bank NUBAN) based.
- * Docs: FINTAVA_INTEGRATION.md in repo root
+ * FintavaPay payment provider — per-transaction virtual account based.
+ * Docs: https://fintava.readme.io/reference/generate-virtual-wallet
  *
  * Key integration facts:
- *  - Both sandbox and live use the same base URL (https://apifintavapay.com/api/dev).
- *    The environment is determined by which API key is provided.
- *  - Each customer gets a permanent Loma Bank NUBAN via POST /create/customer.
- *    There are no per-transaction virtual accounts.
- *  - Request amounts are in whole Naira (float).
- *  - Webhook payload amounts are in Kobo (divide by 100 or store raw as Kobo).
+ *  - Endpoint: POST /virtual-wallet/generate — generates a one-time virtual account.
+ *  - Base URL: https://dev.fintavapay.com/api/dev (both sandbox and live use this URL;
+ *    environment is determined by the API key, not the URL).
+ *  - Request amounts are in whole Naira (float). Fintava rejects decimals.
+ *  - Webhook payload amounts are in Kobo — store directly as BigInt (do NOT multiply by 100).
  *  - Webhook signature header: "x-fintava-signature" — may be hex OR base64 HMAC-SHA512.
- *  - Force IPv4 (family: 4) — Fintava DNS occasionally returns IPv6 on Fly.io, hanging
- *    indefinitely. Apply to every outbound HTTP call.
- *  - Hard 5-second timeout — mobile clients drop idle connections at ~8-10s. Fintava can
- *    take 3-6s. Race every request against a 5s timer so the API always responds first.
+ *  - Force IPv4 (family: 4) on every outbound call — Fintava DNS occasionally returns IPv6
+ *    on Fly.io, causing indefinite hangs.
+ *  - Hard 5-second timeout — mobile clients drop idle connections at ~8-10s; Fintava can
+ *    take 3-6s. Race every request against 5s so the API always responds first.
  */
 
 // Axios agents that force IPv4 on all outbound Fintava calls.
 const IPV4_HTTP_AGENT  = new http.Agent({ family: 4 });
 const IPV4_HTTPS_AGENT = new https.Agent({ family: 4 });
 
-/** Hard cap in ms — must be shorter than Fly proxy + mobile connection drop (~8-10s). */
+/** Hard cap in ms — must finish before Fly proxy + mobile browser drops the connection. */
 const REQUEST_TIMEOUT_MS = 5_000;
 
 @Injectable()
@@ -49,18 +48,12 @@ export class FintavapayProvider implements IPaymentProvider {
   private readonly webhookSecret: string;
 
   constructor(private readonly config: ConfigService) {
-    const rawUrl = config
-      .get<string>('FINTAVAPAY_BASE_URL', 'https://apifintavapay.com/api/dev')
+    this.baseUrl = config
+      .get<string>('FINTAVAPAY_BASE_URL', 'https://dev.fintavapay.com/api/dev')
       .trim()
       .replace(/\/+$/, '');
 
-    // Normalize legacy hostname — docs say to use apifintavapay.com
-    this.baseUrl = rawUrl.replace(
-      /^https?:\/\/dev\.fintavapay\.com(\/.*)?$/i,
-      (_match, path) => `https://apifintavapay.com${path ?? '/api/dev'}`,
-    );
-
-    this.secretKey = config.get<string>('FINTAVAPAY_SECRET_KEY', '');
+    this.secretKey    = config.get<string>('FINTAVAPAY_SECRET_KEY', '');
     this.webhookSecret = config.get<string>('FINTAVAPAY_WEBHOOK_SECRET', '');
   }
 
@@ -71,18 +64,19 @@ export class FintavapayProvider implements IPaymentProvider {
     };
   }
 
+  /** Shared axios config: auth headers + IPv4 forcing + hard timeout. */
   private get axiosConfig() {
     return {
-      headers: this.headers,
-      timeout: REQUEST_TIMEOUT_MS,
-      httpAgent: IPV4_HTTP_AGENT,
+      headers:    this.headers,
+      timeout:    REQUEST_TIMEOUT_MS,
+      httpAgent:  IPV4_HTTP_AGENT,
       httpsAgent: IPV4_HTTPS_AGENT,
     };
   }
 
-  /** Convert Kobo (BigInt) → Naira float for outbound API requests. */
+  /** Convert Kobo (BigInt) → whole Naira for outbound API requests. */
   private koboToNaira(kobo: bigint): number {
-    return Number(kobo) / 100;
+    return Math.floor(Number(kobo) / 100);
   }
 
   /** Convert Naira float → Kobo BigInt for internal storage (verifyPayment responses). */
@@ -90,123 +84,54 @@ export class FintavapayProvider implements IPaymentProvider {
     return BigInt(Math.round(naira * 100));
   }
 
-  /**
-   * Initiates wallet funding.
-   *
-   * NOTE: FintavaPay uses static per-customer NUBANs, not per-transaction virtual
-   * accounts. This method calls POST /create/customer to provision a NUBAN for the
-   * user on first use. The NUBAN is returned as the virtualAccount; subsequent
-   * calls for the same user should skip the API call and return the stored NUBAN
-   * directly (handled at the wallet service layer via fintavaNuban on the User).
-   *
-   * Until the wallet service is updated to pass the existingNuban, this method
-   * calls /create/customer on every initiation. FintavaPay returns 409 for
-   * existing customers — we parse the NUBAN from the 409 body when available.
-   */
   async initiatePayment(
     input: InitiatePaymentInput,
   ): Promise<InitiatePaymentResult> {
-    const expiresAt = new Date(Date.now() + (input.expireTimeInMin ?? 30) * 60 * 1000);
+    const expireMinutes = input.expireTimeInMin ?? 30;
+    const amountNaira   = this.koboToNaira(input.amountKobo);
 
-    // If the caller already resolved a stored NUBAN, skip the API call entirely.
-    const existingNuban = (input.metadata as Record<string, unknown> | undefined)?.['fintavaNuban'] as string | undefined;
-    if (existingNuban) {
-      return {
-        reference: input.reference,
-        gatewayRef: existingNuban,
-        paymentUrl: undefined,
-        virtualAccount: {
-          accountNumber: existingNuban,
-          bankName: 'Loma Bank',
-          expiresAt,
-        },
-      };
-    }
+    const response = await axios.post(
+      `${this.baseUrl}/virtual-wallet/generate`,
+      {
+        customerName:      input.customerName ?? input.email,
+        phone:             input.phone ?? '',
+        email:             input.email,
+        amount:            amountNaira,
+        expireTimeInMin:   expireMinutes,
+        merchantReference: input.reference,
+        description:       'ZenDocx wallet funding',
+      },
+      this.axiosConfig,
+    );
 
-    // No stored NUBAN — call /create/customer to provision one.
-    const nameParts = (input.customerName ?? input.email).split(' ');
-    const firstName = nameParts[0] ?? input.email;
-    const lastName  = nameParts.slice(1).join(' ') || firstName;
+    // Fintava wraps the result — handle both flat and nested response shapes.
+    const raw  = response.data as Record<string, unknown>;
+    const data = (raw['data'] ?? raw) as Record<string, unknown>;
 
-    const payload: Record<string, unknown> = {
-      firstName,
-      lastName,
-      email: input.email,
-      phoneNumber: (input.phone ?? '').replace(/^\+234/, '0'),
-      fundingMethod: 'STATIC_FUND',
-      // BVN + dateOfBirth are required by Fintava for NIBSS verification.
-      // Pass them via input.metadata when available.
-      ...((input.metadata as Record<string, unknown> | undefined)?.['bvn']
-        ? { bvn: (input.metadata as Record<string, unknown>)['bvn'] }
-        : {}),
-      ...((input.metadata as Record<string, unknown> | undefined)?.['dateOfBirth']
-        ? { dateOfBirth: (input.metadata as Record<string, unknown>)['dateOfBirth'] }
-        : {}),
-      ...((input.metadata as Record<string, unknown> | undefined)?.['nin']
-        ? { nin: (input.metadata as Record<string, unknown>)['nin'] }
-        : {}),
-      // address/state/lga default to placeholder if not provided
-      address: (input.metadata as Record<string, unknown> | undefined)?.['address'] as string ?? 'Nigeria',
-      state:   (input.metadata as Record<string, unknown> | undefined)?.['state'] as string ?? 'Lagos',
-      lga:     (input.metadata as Record<string, unknown> | undefined)?.['lga'] as string ?? 'Lagos',
-    };
+    const accountNumber =
+      (data['accountNumber'] as string | undefined) ??
+      (data['account_number'] as string | undefined) ??
+      '';
 
-    let accountNumber = '';
+    const bankName =
+      (data['bankName'] as string | undefined) ??
+      (data['bank_name'] as string | undefined) ??
+      (data['bank'] as string | undefined) ??
+      '';
 
-    try {
-      const response = await axios.post(
-        `${this.baseUrl}/create/customer`,
-        payload,
-        this.axiosConfig,
-      );
+    const gatewayRef =
+      (data['id'] as string | undefined) ??
+      (data['walletId'] as string | undefined) ??
+      (data['reference'] as string | undefined) ??
+      input.reference;
 
-      const raw  = response.data as Record<string, unknown>;
-      const data = (raw['data'] ?? raw) as Record<string, unknown>;
-      const userInfo = data['userInfo'] as Record<string, unknown> | undefined;
-
-      accountNumber =
-        String(userInfo?.['walletId'] ?? data['accountNumber'] ?? data['nuban'] ?? '');
-    } catch (err: unknown) {
-      // 409 = customer already exists — try to extract NUBAN from body
-      const axiosErr = err as { response?: { status?: number; data?: unknown } };
-      if (axiosErr.response?.status === 409) {
-        const body = axiosErr.response.data as Record<string, unknown> | undefined;
-        const bodyData = (body?.['data'] ?? body) as Record<string, unknown> | undefined;
-        const userInfo = bodyData?.['userInfo'] as Record<string, unknown> | undefined;
-        const recovered =
-          String(userInfo?.['walletId'] ?? bodyData?.['accountNumber'] ?? bodyData?.['nuban'] ?? '');
-        if (recovered) {
-          accountNumber = recovered;
-          this.logger.log(`FintavaPay 409 — recovered existing NUBAN ${recovered} for ${input.email}`);
-        } else {
-          // No NUBAN in 409 body — it will arrive via dedicatedaccount.assign.success webhook
-          this.logger.warn(
-            `FintavaPay 409 for ${input.email} with no NUBAN in body. ` +
-            `Awaiting dedicatedaccount.assign.success webhook to auto-link.`,
-          );
-          throw new Error(
-            'Your Fintava wallet account already exists but the account number could not be retrieved. ' +
-            'It will be linked automatically — please try again in a few minutes.',
-          );
-        }
-      } else {
-        throw err;
-      }
-    }
-
-    if (!accountNumber) {
-      throw new Error('FintavaPay did not return a virtual account number. Please try again.');
-    }
+    const expiresAt = new Date(Date.now() + expireMinutes * 60 * 1000);
 
     return {
       reference: input.reference,
-      gatewayRef: accountNumber,
+      gatewayRef,
       paymentUrl: undefined,
-      virtualAccount: {
-        accountNumber,
-        bankName: 'Loma Bank',
-        expiresAt,
-      },
+      virtualAccount: { accountNumber, bankName, expiresAt },
     };
   }
 
@@ -220,10 +145,11 @@ export class FintavapayProvider implements IPaymentProvider {
     const data = (raw['data'] ?? raw) as Record<string, unknown>;
 
     const status  = (data['status'] as string | undefined)?.toLowerCase() ?? '';
-    const success = status === 'success' || status === 'successful' || status === 'completed';
+    const success =
+      status === 'success' || status === 'successful' || status === 'completed';
 
-    // verifyPayment response amounts are in Naira (float) — convert to Kobo for storage.
-    const rawAmount = data['amount'] as number | undefined;
+    // verifyPayment response amounts are in Naira — convert to Kobo for internal storage.
+    const rawAmount  = data['amount'] as number | undefined;
     const amountKobo = rawAmount !== undefined ? this.nairaToKobo(rawAmount) : 0n;
 
     const gatewayRef =
@@ -254,12 +180,12 @@ export class FintavapayProvider implements IPaymentProvider {
     const response = await axios.post(
       `${this.baseUrl}/bank/credit/merchant`,
       {
-        accountNumber: input.accountNumber,
-        accountName:   input.accountName,
-        sortCode:      input.bankCode,
-        amount:        Math.floor(amountNaira), // Fintava rejects decimals
+        accountNumber:     input.accountNumber,
+        accountName:       input.accountName,
+        sortCode:          input.bankCode,
+        amount:            amountNaira,
         CustomerReference: input.reference,
-        narration:     input.narration,
+        narration:         input.narration,
       },
       this.axiosConfig,
     );
@@ -286,7 +212,7 @@ export class FintavapayProvider implements IPaymentProvider {
 
   async getBanks(): Promise<BankListItem[]> {
     try {
-      const response = await axios.get(`${this.baseUrl}/banks`, this.axiosConfig);
+      const response = await axios.get(`${this.baseUrl}/bank/list`, this.axiosConfig);
 
       const raw = response.data as unknown;
       let list: { sortCode?: string; code?: string; name?: string; bankName?: string }[] = [];
@@ -324,15 +250,15 @@ export class FintavapayProvider implements IPaymentProvider {
       return empty;
     }
 
-    // Fintava environments may send the HMAC digest as hex OR base64. Try both.
-    const bodyStr     = rawBody.toString();
+    // Fintava may send the HMAC digest as hex OR base64 — try both.
     const computedHex    = crypto.createHmac('sha512', this.webhookSecret).update(rawBody).digest('hex');
     const computedBase64 = crypto.createHmac('sha512', this.webhookSecret).update(rawBody).digest('base64');
 
-    const signatureValid = this.safeSignatureEqual(signatureHeader, computedHex, 'hex') ||
-                           this.safeSignatureEqual(signatureHeader, computedBase64, 'base64') ||
-                           signatureHeader === computedHex ||
-                           signatureHeader === computedBase64;
+    const signatureValid =
+      this.safeSignatureEqual(signatureHeader, computedHex, 'hex') ||
+      this.safeSignatureEqual(signatureHeader, computedBase64, 'base64') ||
+      signatureHeader === computedHex ||
+      signatureHeader === computedBase64;
 
     if (!signatureValid) {
       this.logger.warn('FintavaPay webhook signature mismatch');
@@ -341,29 +267,29 @@ export class FintavapayProvider implements IPaymentProvider {
 
     let body: Record<string, unknown>;
     try {
-      body = JSON.parse(bodyStr) as Record<string, unknown>;
+      body = JSON.parse(rawBody.toString()) as Record<string, unknown>;
     } catch {
       this.logger.warn('FintavaPay webhook body is not valid JSON');
       return empty;
     }
 
     const event =
-      (body['event'] as string | undefined) ??
       (body['type'] as string | undefined) ??
+      (body['event'] as string | undefined) ??
       '';
 
     const data = (body['data'] ?? {}) as Record<string, unknown>;
 
     const reference =
+      (data['merchantReference'] as string | undefined) ??
       (data['CustomerReference'] as string | undefined) ??
       (data['customerReference'] as string | undefined) ??
-      (data['merchantReference'] as string | undefined) ??
       (data['reference'] as string | undefined) ??
       '';
 
-    // IMPORTANT: Webhook payload amounts are in KOBO (not Naira).
-    // e.g. amount: 500000 = ₦5,000. Store directly as BigInt without conversion.
-    const rawAmount = data['amount'] as number | undefined;
+    // IMPORTANT: Webhook payload amounts are in Kobo (not Naira).
+    // e.g. amount: 500000 = ₦5,000. Store the raw value directly as BigInt.
+    const rawAmount  = data['amount'] as number | undefined;
     const amountKobo = rawAmount !== undefined ? BigInt(Math.floor(rawAmount)) : 0n;
 
     const gatewayRef =
@@ -374,7 +300,7 @@ export class FintavapayProvider implements IPaymentProvider {
     return { isValid: true, event, reference, amountKobo, gatewayRef };
   }
 
-  /** Timing-safe buffer comparison for HMAC signatures. Returns false on any error. */
+  /** Timing-safe comparison for HMAC signatures. Returns false on any error. */
   private safeSignatureEqual(
     incoming: string,
     computed: string,
