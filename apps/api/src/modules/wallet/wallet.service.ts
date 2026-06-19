@@ -1516,6 +1516,8 @@ export class WalletService {
           select: {
             id: true,
             amount: true,
+            feeKobo: true,
+            payoutKobo: true,
             bankName: true,
             bankCode: true,
             accountNumber: true,
@@ -1593,6 +1595,8 @@ export class WalletService {
           select: {
             id: true,
             amount: true,
+            feeKobo: true,
+            payoutKobo: true,
             bankName: true,
             bankCode: true,
             accountNumber: true,
@@ -2613,6 +2617,8 @@ export class WalletService {
     }
 
     const amountKobo = BigInt(Math.round(dto.amountNaira * 100));
+    const fundingFeeKobo = BigInt(Math.ceil(Number(amountKobo) * 0.0299));
+    const fundingTotalKobo = amountKobo + fundingFeeKobo;
     const reference = generateTransactionRef();
     const callbackUrl = this.buildFundingCallbackUrl(requestOrigin);
     const customerName = `${user.firstName} ${user.lastName}`.trim();
@@ -2638,7 +2644,7 @@ export class WalletService {
 
     try {
       const initiation = await this.paymentService.initiatePayment({
-        amountKobo,
+        amountKobo: fundingTotalKobo,
         email: user.email,
         customerName,
         phone: user.phone ?? undefined,
@@ -2698,6 +2704,7 @@ export class WalletService {
           virtualAccount: initiation.virtualAccount ?? null,
           gateway: this.paymentService.gatewayName,
           amountKobo: amountKobo.toString(),
+          fundingTotalKobo: fundingTotalKobo.toString(),
           amountNaira: dto.amountNaira,
           status: TransactionStatus.PENDING,
           checkoutMode: initiation.mode ?? 'live',
@@ -2809,7 +2816,7 @@ export class WalletService {
     const transaction = await this.findFundingTransaction(parsed.reference);
     const result = await this.completeFundingTransaction({
       transaction,
-      amountKobo: parsed.amountKobo,
+      amountKobo: transaction.amount,
       gatewayRef: parsed.gatewayRef,
       gatewayFeeKobo: parsed.feeKobo,
       source: 'payment-webhook',

@@ -176,14 +176,9 @@ export function WithdrawalRequestForm() {
 
       {Number(watchedAmount) > 0 && (
         <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm">
-          <p className="mb-3 font-semibold text-slate-700">Charge breakdown</p>
           <div className="space-y-2">
             <div className="flex justify-between text-slate-600">
-              <span>Amount requested</span>
-              <span>{formatNaira(String(Math.round(Number(watchedAmount) * 100)))}</span>
-            </div>
-            <div className="flex justify-between text-rose-600">
-              <span>Service charge (2.99%)</span>
+              <span>Transaction fee (2.99%)</span>
               <span>− {formatNaira(String(feeKobo))}</span>
             </div>
             <div className="flex justify-between border-t border-slate-200 pt-2 font-semibold text-slate-900">

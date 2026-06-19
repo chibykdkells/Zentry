@@ -33,6 +33,7 @@ interface FundingInitResponse {
   virtualAccount: VirtualAccount | null;
   gateway: string;
   amountKobo: string;
+  fundingTotalKobo: string;
   amountNaira: number;
   status: string;
   checkoutMode: 'live' | 'sandbox';
@@ -239,7 +240,7 @@ export function FundWalletModal({ open, onClose, onSuccess }: FundWalletModalPro
                 Amount to transfer
               </p>
               <p className="mt-1 text-3xl font-bold tracking-tight">
-                {formatNaira(result.amountKobo)}
+                {formatNaira(result.fundingTotalKobo ?? result.amountKobo)}
               </p>
               <div className="mt-3 flex items-center gap-2">
                 <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold text-white/90">
