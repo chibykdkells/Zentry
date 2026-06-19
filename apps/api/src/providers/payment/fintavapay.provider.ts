@@ -234,10 +234,11 @@ export class FintavapayProvider implements IPaymentProvider {
 
   async getBanks(): Promise<BankListItem[]> {
     try {
-      const response = await axios.get(`${this.baseUrl}/bank/list`, this.axiosConfig);
+      // Correct endpoint: /banks (not /bank/list)
+      const response = await axios.get(`${this.baseUrl}/banks`, this.axiosConfig);
 
       const raw = response.data as unknown;
-      let list: { sortCode?: string; code?: string; name?: string; bankName?: string }[] = [];
+      let list: { code?: string; name?: string; sortCode?: string; bankName?: string }[] = [];
 
       if (Array.isArray(raw)) {
         list = raw as typeof list;
@@ -247,9 +248,9 @@ export class FintavapayProvider implements IPaymentProvider {
       }
 
       return list
-        .filter((b) => b && (b.sortCode ?? b.code) && (b.name ?? b.bankName))
+        .filter((b) => b && (b.code ?? b.sortCode) && (b.name ?? b.bankName))
         .map((b) => ({
-          code: (b.sortCode ?? b.code ?? '').trim(),
+          code: (b.code ?? b.sortCode ?? '').trim(),
           name: (b.name ?? b.bankName ?? '').trim(),
         }));
     } catch {
