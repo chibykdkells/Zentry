@@ -1,5 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 import {
+  ArrowDownCircle,
   Bell,
   Briefcase,
   ClipboardList,
@@ -89,6 +90,7 @@ export const tenantPrimaryNav: AppNavItem[] = [
   { label: 'Orders', href: '/tenant/orders', icon: ClipboardList },
   { label: 'Users', href: '/tenant/users', icon: Users },
   { label: 'Wallet', href: '/wallet', icon: Wallet },
+  { label: 'Withdrawals', href: '/tenant/withdrawals', icon: ArrowDownCircle },
   { label: 'CBT Centers', href: '/tenant/cbt-management', icon: Users },
   { label: 'Services', href: '/tenant/services', icon: Zap },
   { label: 'API Integrations', href: '/tenant/providers', icon: Wrench },
