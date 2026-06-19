@@ -9,6 +9,7 @@ import {
   discoverCustomDomainTenantSlug,
   isCustomTenantDomain,
   persistActiveTenantSlug,
+  resolveTenantSlugForRequest,
 } from '@/lib/tenant-runtime';
 
 export function AuthBootstrap() {
