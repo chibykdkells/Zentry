@@ -12,7 +12,17 @@ import { FeedbackBanner } from '@/components/shared/feedback-banner';
 import { useCreateWithdrawalRequest } from '@/hooks/use-withdrawal-requests';
 import { useBanks } from '@/hooks/use-wallet';
 import { getApiErrorMessage } from '@/lib/api-error';
+import { formatNaira } from '@/lib/format';
 import { cn } from '@/lib/utils';
+
+const WITHDRAWAL_FEE_RATE = 0.0299; // 2.99%
+
+function calcFeeBreakdown(amountNaira: number) {
+  const amountKobo = Math.round(amountNaira * 100);
+  const feeKobo = Math.ceil(amountKobo * WITHDRAWAL_FEE_RATE);
+  const payoutKobo = amountKobo - feeKobo;
+  return { feeKobo, payoutKobo };
+}
 
 export function WithdrawalRequestForm() {
   const mutation = useCreateWithdrawalRequest();
@@ -40,10 +50,9 @@ export function WithdrawalRequestForm() {
     },
   });
 
-  const selectedBankCode = useWatch({
-    control,
-    name: 'bankCode',
-  });
+  const selectedBankCode = useWatch({ control, name: 'bankCode' });
+  const watchedAmount = useWatch({ control, name: 'amountNaira' });
+  const { feeKobo, payoutKobo } = calcFeeBreakdown(Number(watchedAmount) || 0);
 
   const handleBankChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const code = e.target.value;
@@ -164,6 +173,26 @@ export function WithdrawalRequestForm() {
           />
         </Field>
       </div>
+
+      {Number(watchedAmount) > 0 && (
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm">
+          <p className="mb-3 font-semibold text-slate-700">Charge breakdown</p>
+          <div className="space-y-2">
+            <div className="flex justify-between text-slate-600">
+              <span>Amount requested</span>
+              <span>{formatNaira(String(Math.round(Number(watchedAmount) * 100)))}</span>
+            </div>
+            <div className="flex justify-between text-rose-600">
+              <span>Service charge (2.99%)</span>
+              <span>− {formatNaira(String(feeKobo))}</span>
+            </div>
+            <div className="flex justify-between border-t border-slate-200 pt-2 font-semibold text-slate-900">
+              <span>You will receive</span>
+              <span>{formatNaira(String(payoutKobo))}</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       <FeedbackBanner
         tone="info"

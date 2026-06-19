@@ -295,10 +295,11 @@ function WithdrawalReviewCard({
           </p>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          <Metric label="Amount" value={formatNaira(request.amount)} />
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Metric label="Requested" value={formatNaira(request.amount)} />
+          <Metric label="Fee (2.99%)" value={`− ${formatNaira(request.feeKobo)}`} />
+          <Metric label="Payout to user" value={formatNaira(request.payoutKobo)} />
           <Metric label="Gateway ref" value={request.gatewayRef ?? 'Pending'} />
-          <Metric label="Last note" value={request.processorNote ?? 'No note'} />
         </div>
       </div>
 

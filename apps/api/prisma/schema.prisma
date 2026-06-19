@@ -528,6 +528,8 @@ model WithdrawalRequest {
   userId        String
   user          User             @relation(fields: [userId], references: [id])
   amount        BigInt
+  feeKobo       BigInt           @default(0)
+  payoutKobo    BigInt           @default(0)
   bankName      String
   bankCode      String
   accountNumber String

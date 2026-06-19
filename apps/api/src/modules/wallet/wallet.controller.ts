@@ -88,7 +88,7 @@ export class WalletController {
     );
   }
 
-  @Roles(UserRole.SUPER_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN)
   @Get('admin/withdrawals')
   getAdminWithdrawals(
     @Query() query: GetAdminWithdrawalsQueryDto,
@@ -97,7 +97,7 @@ export class WalletController {
     return this.walletService.getAdminWithdrawals(query, user.tenantId);
   }
 
-  @Roles(UserRole.SUPER_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN)
   @Patch('admin/withdrawals/:withdrawalRequestId')
   reviewWithdrawalRequest(
     @CurrentUser() user: JwtUser,

@@ -14,6 +14,8 @@ const ADMIN_WITHDRAWALS_QUERY_KEY = ['wallet', 'withdrawals', 'admin'] as const;
 export interface WithdrawalRequestItem {
   id: string;
   amount: string;
+  feeKobo: string;
+  payoutKobo: string;
   bankName: string;
   bankCode: string;
   accountNumber: string;

@@ -207,6 +207,8 @@ type WithdrawalRequestRecord = Prisma.WithdrawalRequestGetPayload<{
   select: {
     id: true;
     amount: true;
+    feeKobo: true;
+    payoutKobo: true;
     bankName: true;
     bankCode: true;
     accountNumber: true;
@@ -232,6 +234,8 @@ type AdminWithdrawalRequestRecord = Prisma.WithdrawalRequestGetPayload<{
   select: {
     id: true;
     amount: true;
+    feeKobo: true;
+    payoutKobo: true;
     bankName: true;
     bankCode: true;
     accountNumber: true;
@@ -1003,6 +1007,8 @@ export class WalletService {
         select: {
           id: true,
           amount: true,
+          feeKobo: true,
+          payoutKobo: true,
           bankName: true,
           bankCode: true,
           accountNumber: true,
@@ -1117,6 +1123,8 @@ export class WalletService {
         select: {
           id: true,
           amount: true,
+          feeKobo: true,
+          payoutKobo: true,
           bankName: true,
           bankCode: true,
           accountNumber: true,
@@ -1228,6 +1236,10 @@ export class WalletService {
       throw new BadRequestException('Enter a valid withdrawal amount.');
     }
 
+    // 2.99% withdrawal charge — platform retains (2.99% - 1.5%) = 1.49% after FintavaPay fee
+    const feeKobo = BigInt(Math.ceil(Number(amount) * 0.0299));
+    const payoutKobo = amount - feeKobo;
+
     const result = await this.prisma.$transaction(async (tx) => {
       const wallet = await tx.wallet.findFirst({
         where: {
@@ -1258,6 +1270,8 @@ export class WalletService {
           userId,
           tenantId,
           amount,
+          feeKobo,
+          payoutKobo,
           bankName: dto.bankName.trim(),
           bankCode: dto.bankCode.trim(),
           accountNumber: dto.accountNumber.trim(),
@@ -1267,6 +1281,8 @@ export class WalletService {
         select: {
           id: true,
           amount: true,
+          feeKobo: true,
+          payoutKobo: true,
           bankName: true,
           bankCode: true,
           accountNumber: true,
@@ -1370,6 +1386,8 @@ export class WalletService {
           id: true,
           userId: true,
           amount: true,
+          feeKobo: true,
+          payoutKobo: true,
           bankName: true,
           bankCode: true,
           accountNumber: true,
@@ -1681,8 +1699,10 @@ export class WalletService {
     if (dto.status === WithdrawalStatus.APPROVED) {
       const payoutRef = `ZDX-PAYOUT-${result.id.replace(/-/g, '').slice(0, 16).toUpperCase()}`;
       try {
+        // Transfer payoutKobo (amount minus 2.99% fee). Fall back to amount if legacy record has no payoutKobo.
+        const transferAmount = result.payoutKobo > 0n ? result.payoutKobo : result.amount;
         const transferResult = await this.paymentService.initiateTransfer({
-          amountKobo: result.amount,
+          amountKobo: transferAmount,
           accountNumber: result.accountNumber,
           bankCode: result.bankCode,
           accountName: result.accountName,
@@ -3026,6 +3046,8 @@ export class WalletService {
     return {
       id: request.id,
       amount: request.amount.toString(),
+      feeKobo: request.feeKobo.toString(),
+      payoutKobo: request.payoutKobo.toString(),
       bankName: request.bankName,
       bankCode: request.bankCode,
       accountNumber: this.maskAccountNumber(request.accountNumber),
