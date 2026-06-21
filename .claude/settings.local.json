@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(fly redis *)",
+      "Bash(git add *)",
+      "Bash(npx vercel *)",
+      "Bash(curl -s \"https://www.zendocx.net/\")",
+      "Bash(curl -sIL -A \"Mozilla/5.0\" \"https://www.zendocx.net/admin/\")",
+      "Bash(curl -sIL -A \"Mozilla/5.0\" \"https://www.zendocx.net/platform/login\")",
+      "Bash(curl -sIL -A \"Mozilla/5.0\" \"https://www.zendocx.net/\")",
+      "Bash(curl -sI -A \"Mozilla/5.0\" \"https://zendocx-web-app.vercel.app/admin\")"
+    ]
+  }
+}
