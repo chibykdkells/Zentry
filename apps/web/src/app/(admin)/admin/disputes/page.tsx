@@ -102,7 +102,7 @@ export default function AdminDisputesPage() {
   );
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-4 md:flex md:h-full md:flex-col xl:overflow-hidden md:p-8">
+    <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-8">
       <PageHeader
         title="Disputes"
         description="Live dispute cases, redo requests, and financial exposure in one place."
@@ -122,8 +122,8 @@ export default function AdminDisputesPage() {
         ))}
       </div>
 
-      <div className="grid gap-6 xl:h-[min(48rem,calc(100vh-18rem))] xl:grid-cols-[1.02fr_0.98fr] xl:overflow-hidden">
-        <section className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm xl:flex xl:min-h-0 xl:flex-col">
+      <div className="grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
+        <section className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
           <div className="space-y-4">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">
@@ -207,7 +207,7 @@ export default function AdminDisputesPage() {
             </div>
           ) : disputes.length ? (
             <>
-              <ScrollCardBody className="mt-6" bodyClassName="space-y-4" maxHeightClassName="xl:min-h-0 xl:flex-1">
+              <ScrollCardBody className="mt-6" bodyClassName="space-y-4" maxHeightClassName="">
                 {disputes.map((item) => (
                   <button
                     key={item.id}
@@ -301,7 +301,7 @@ export default function AdminDisputesPage() {
           )}
         </section>
 
-        <div className="space-y-6 xl:min-h-0 xl:overflow-y-auto xl:pr-1">
+        <div className="space-y-6">
           <AccountPanel
             title="Admin dispute guidance"
             description="These highlights keep the dispute workflow aligned with the current release engine and later financial resolution work."

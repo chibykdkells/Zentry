@@ -403,7 +403,7 @@ export default function AdminOrdersPage() {
   );
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-4 md:flex md:h-full md:flex-col xl:overflow-hidden md:p-8">
+    <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-8">
       <PageHeader
         title="Orders"
         description="Review order flow across the whole platform."
@@ -434,8 +434,8 @@ export default function AdminOrdersPage() {
         ))}
       </div>
 
-      <div className="grid gap-6 xl:h-[calc(100vh-15rem)] xl:grid-cols-[1.08fr_0.92fr] xl:overflow-hidden">
-        <section className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm xl:flex xl:min-h-0 xl:flex-col">
+      <div className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
+        <section className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
           <div className="space-y-4">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">
@@ -604,7 +604,7 @@ export default function AdminOrdersPage() {
             </div>
           ) : orders.length ? (
             <>
-              <div className="mt-6 min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+              <div className="mt-6 space-y-4">
                 {orders.map((order) => (
                   <button
                     key={order.id}
@@ -716,7 +716,7 @@ export default function AdminOrdersPage() {
         </section>
 
         {!usesMobileSheet ? (
-          <section className="overflow-y-auto rounded-[1.75rem] border border-slate-300 bg-[linear-gradient(180deg,#f8fafc_0%,#eef4ff_100%)] p-6 shadow-sm ring-1 ring-[#0D1B3E]/5 xl:min-h-0">
+          <section className="rounded-[1.75rem] border border-slate-300 bg-[linear-gradient(180deg,#f8fafc_0%,#eef4ff_100%)] p-6 shadow-sm ring-1 ring-[#0D1B3E]/5">
             {inspectionContent}
           </section>
         ) : null}
