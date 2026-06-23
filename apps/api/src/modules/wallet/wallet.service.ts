@@ -37,6 +37,10 @@ import {
   ReviewWithdrawalRequestDto,
 } from './dto';
 
+const FUNDING_FEE_RATE_BASIS_POINTS = 250n;
+const FUNDING_FEE_CAP_KOBO = 60_000n;
+const BASIS_POINTS_DENOMINATOR = 10_000n;
+
 type WalletWithRecentTransactions = Prisma.WalletGetPayload<{
   select: {
     id: true;
@@ -484,6 +488,9 @@ export class WalletService {
         SELECT COALESCE(
           SUM(
             CASE
+              WHEN jsonb_typeof(COALESCE(metadata::jsonb, '{}'::jsonb)) = 'object'
+                AND COALESCE(metadata::jsonb, '{}'::jsonb) ? 'fundingFeeKobo'
+              THEN NULLIF(metadata::jsonb->>'fundingFeeKobo', '')::bigint
               WHEN jsonb_typeof(COALESCE(metadata::jsonb, '{}'::jsonb)) = 'object'
                 AND COALESCE(metadata::jsonb, '{}'::jsonb) ? 'gatewayFeeKobo'
               THEN NULLIF(metadata::jsonb->>'gatewayFeeKobo', '')::bigint
@@ -2011,7 +2018,7 @@ export class WalletService {
       process.env.NODE_ENV === 'development' && checkoutMode === 'sandbox'
         ? {
             success: true,
-            amountKobo: transaction.amount.toString(),
+            amountKobo: this.getExpectedFundingPaymentKobo(transaction).toString(),
             gatewayRef: transaction.gatewayRef ?? `sandbox-${transaction.reference}`,
             paidAt: null,
             error: null,
@@ -2046,7 +2053,10 @@ export class WalletService {
       reasons.push(
         'The payment provider has not confirmed this reference as successful yet.',
       );
-    } else if (verification.amountKobo !== transaction.amount.toString()) {
+    } else if (
+      verification.amountKobo !==
+      this.getExpectedFundingPaymentKobo(transaction).toString()
+    ) {
       reasons.push(
         'The provider confirmed a different amount than the pending wallet funding record.',
       );
@@ -2101,9 +2111,9 @@ export class WalletService {
       process.env.NODE_ENV === 'development' && checkoutMode === 'sandbox'
         ? {
             success: true,
-            amountKobo: transaction.amount,
+            amountKobo: this.getExpectedFundingPaymentKobo(transaction),
             gatewayRef: transaction.gatewayRef ?? `sandbox-${transaction.reference}`,
-            feeKobo: 0n,
+            feeKobo: this.getStoredFundingFeeKobo(transaction),
           }
         : await this.paymentService.verifyPayment(normalizedReference);
 
@@ -2117,7 +2127,7 @@ export class WalletService {
       transaction,
       amountKobo: verification.amountKobo,
       gatewayRef: verification.gatewayRef,
-      gatewayFeeKobo: verification.feeKobo,
+      fundingFeeKobo: this.getStoredFundingFeeKobo(transaction),
       source: 'admin-reconciliation',
     });
 
@@ -2130,6 +2140,7 @@ export class WalletService {
         newValues: {
           reference: transaction.reference,
           amountKobo: transaction.amount.toString(),
+          fundingFeeKobo: this.getStoredFundingFeeKobo(transaction).toString(),
           gateway: transaction.gateway,
           gatewayRef: verification.gatewayRef,
         },
@@ -2617,7 +2628,7 @@ export class WalletService {
     }
 
     const amountKobo = BigInt(Math.round(dto.amountNaira * 100));
-    const fundingFeeKobo = BigInt(Math.ceil(Number(amountKobo) * 0.0299));
+    const fundingFeeKobo = this.calculateFundingFeeKobo(amountKobo);
     const fundingTotalKobo = amountKobo + fundingFeeKobo;
     const reference = generateTransactionRef();
     const callbackUrl = this.buildFundingCallbackUrl(requestOrigin);
@@ -2637,6 +2648,8 @@ export class WalletService {
         metadata: {
           initiatedVia: 'wallet-page',
           callbackUrl,
+          fundingFeeKobo: fundingFeeKobo.toString(),
+          fundingTotalKobo: fundingTotalKobo.toString(),
           requester: { name: customerName, email: user.email },
         },
       },
@@ -2667,6 +2680,8 @@ export class WalletService {
             checkoutMode: initiation.mode ?? 'live',
             paymentUrl: initiation.paymentUrl ?? null,
             callbackUrl,
+            fundingFeeKobo: fundingFeeKobo.toString(),
+            fundingTotalKobo: fundingTotalKobo.toString(),
             virtualAccount: initiation.virtualAccount
               ? {
                   accountNumber: initiation.virtualAccount.accountNumber,
@@ -2686,6 +2701,8 @@ export class WalletService {
           entityId: reference,
           newValues: {
             amountKobo: amountKobo.toString(),
+            fundingFeeKobo: fundingFeeKobo.toString(),
+            fundingTotalKobo: fundingTotalKobo.toString(),
             gateway: this.paymentService.gatewayName,
             reference,
             checkoutMode: initiation.mode ?? 'live',
@@ -2704,6 +2721,7 @@ export class WalletService {
           virtualAccount: initiation.virtualAccount ?? null,
           gateway: this.paymentService.gatewayName,
           amountKobo: amountKobo.toString(),
+          fundingFeeKobo: fundingFeeKobo.toString(),
           fundingTotalKobo: fundingTotalKobo.toString(),
           amountNaira: dto.amountNaira,
           status: TransactionStatus.PENDING,
@@ -2720,6 +2738,8 @@ export class WalletService {
           status: TransactionStatus.FAILED,
           metadata: {
             initiatedVia: 'wallet-page',
+            fundingFeeKobo: fundingFeeKobo.toString(),
+            fundingTotalKobo: fundingTotalKobo.toString(),
             failure: msg,
           },
         },
@@ -2743,9 +2763,9 @@ export class WalletService {
     if (process.env.NODE_ENV === 'development' && checkoutMode === 'sandbox') {
       return this.completeFundingTransaction({
         transaction,
-        amountKobo: transaction.amount,
+        amountKobo: this.getExpectedFundingPaymentKobo(transaction),
         gatewayRef: transaction.gatewayRef ?? `sandbox-${reference}`,
-        gatewayFeeKobo: 0n,
+        fundingFeeKobo: this.getStoredFundingFeeKobo(transaction),
         source: 'sandbox-confirmation',
       });
     }
@@ -2772,7 +2792,7 @@ export class WalletService {
       transaction,
       amountKobo: verification.amountKobo,
       gatewayRef: verification.gatewayRef,
-      gatewayFeeKobo: 0n,
+      fundingFeeKobo: this.getStoredFundingFeeKobo(transaction),
       source: 'gateway-verification',
     });
   }
@@ -2816,9 +2836,9 @@ export class WalletService {
     const transaction = await this.findFundingTransaction(parsed.reference);
     const result = await this.completeFundingTransaction({
       transaction,
-      amountKobo: transaction.amount,
+      amountKobo: this.getExpectedFundingPaymentKobo(transaction),
       gatewayRef: parsed.gatewayRef,
-      gatewayFeeKobo: parsed.feeKobo,
+      fundingFeeKobo: this.getStoredFundingFeeKobo(transaction),
       source: 'payment-webhook',
     });
 
@@ -3211,6 +3231,41 @@ export class WalletService {
     return value as Record<string, Prisma.JsonValue>;
   }
 
+  private calculateFundingFeeKobo(amountKobo: bigint) {
+    const percentageFee =
+      (amountKobo * FUNDING_FEE_RATE_BASIS_POINTS +
+        BASIS_POINTS_DENOMINATOR -
+        1n) /
+      BASIS_POINTS_DENOMINATOR;
+
+    return percentageFee > FUNDING_FEE_CAP_KOBO
+      ? FUNDING_FEE_CAP_KOBO
+      : percentageFee;
+  }
+
+  private getStoredFundingFeeKobo(transaction: FundingTransactionRecord) {
+    const metadata = this.toMetadataRecord(transaction.metadata);
+    const rawFee = metadata.fundingFeeKobo ?? metadata.gatewayFeeKobo;
+
+    if (typeof rawFee === 'string' && /^\d+$/.test(rawFee)) {
+      return BigInt(rawFee);
+    }
+
+    if (
+      typeof rawFee === 'number' &&
+      Number.isSafeInteger(rawFee) &&
+      rawFee >= 0
+    ) {
+      return BigInt(rawFee);
+    }
+
+    return 0n;
+  }
+
+  private getExpectedFundingPaymentKobo(transaction: FundingTransactionRecord) {
+    return transaction.amount + this.getStoredFundingFeeKobo(transaction);
+  }
+
   private async findFundingTransaction(reference: string) {
     const transaction = await this.prisma.transaction.findUnique({
       where: { reference },
@@ -3406,7 +3461,7 @@ export class WalletService {
           transaction,
           amountKobo: verification.amountKobo,
           gatewayRef: verification.gatewayRef,
-          gatewayFeeKobo: verification.feeKobo,
+          fundingFeeKobo: this.getStoredFundingFeeKobo(transaction),
           source: 'gateway-verification',
         });
       } catch (error) {
@@ -3423,13 +3478,13 @@ export class WalletService {
     transaction,
     amountKobo,
     gatewayRef,
-    gatewayFeeKobo,
+    fundingFeeKobo,
     source,
   }: {
     transaction: FundingTransactionRecord;
     amountKobo: bigint;
     gatewayRef: string;
-    gatewayFeeKobo?: bigint;
+    fundingFeeKobo?: bigint;
     source:
       | 'payment-webhook'
       | 'gateway-verification'
@@ -3447,7 +3502,12 @@ export class WalletService {
       };
     }
 
-    if (amountKobo !== transaction.amount) {
+    const expectedPaymentKobo = this.getExpectedFundingPaymentKobo(transaction);
+    const walletCreditKobo = transaction.amount;
+    const chargedFundingFeeKobo =
+      fundingFeeKobo ?? this.getStoredFundingFeeKobo(transaction);
+
+    if (amountKobo !== expectedPaymentKobo) {
       await this.markFundingTransactionFailed(
         transaction.id,
         'Confirmed gateway amount did not match the pending funding amount',
@@ -3496,12 +3556,12 @@ export class WalletService {
       }
 
       const balanceBefore = wallet.availableBalance;
-      const balanceAfter = balanceBefore + amountKobo;
+      const balanceAfter = balanceBefore + walletCreditKobo;
 
       await tx.wallet.update({
         where: { id: wallet.id },
         data: {
-          availableBalance: { increment: amountKobo },
+          availableBalance: { increment: walletCreditKobo },
         },
       });
 
@@ -3522,12 +3582,9 @@ export class WalletService {
               ? (transaction.metadata as Record<string, unknown>)
               : {}),
             confirmationSource: source,
-            ...(gatewayFeeKobo !== undefined
-              ? {
-                  gatewayFeeKobo: gatewayFeeKobo.toString(),
-                  gatewayNetKobo: (amountKobo - gatewayFeeKobo).toString(),
-                }
-              : {}),
+            fundingFeeKobo: chargedFundingFeeKobo.toString(),
+            gatewayFeeKobo: chargedFundingFeeKobo.toString(),
+            gatewayNetKobo: (amountKobo - chargedFundingFeeKobo).toString(),
           },
         },
         select: {
@@ -3545,10 +3602,10 @@ export class WalletService {
           userId: transaction.userId,
           type: 'WALLET_FUNDED',
           title: 'Wallet funded successfully',
-          message: `Your wallet has been credited with ${formatNaira(amountKobo)}.`,
+          message: `Your wallet has been credited with ${formatNaira(walletCreditKobo)}.`,
           metadata: {
             reference: transaction.reference,
-            amountKobo: amountKobo.toString(),
+            amountKobo: walletCreditKobo.toString(),
           },
         },
       });
@@ -3561,7 +3618,9 @@ export class WalletService {
           entityId: transaction.id,
           newValues: {
             reference: transaction.reference,
-            amountKobo: amountKobo.toString(),
+            amountKobo: walletCreditKobo.toString(),
+            fundingFeeKobo: chargedFundingFeeKobo.toString(),
+            fundingTotalKobo: amountKobo.toString(),
             gatewayRef,
             source,
           },

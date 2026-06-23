@@ -319,6 +319,9 @@ export class AnalyticsService {
           SUM(
             CASE
               WHEN jsonb_typeof(COALESCE(metadata::jsonb, '{}'::jsonb)) = 'object'
+                AND COALESCE(metadata::jsonb, '{}'::jsonb) ? 'fundingFeeKobo'
+              THEN NULLIF(metadata::jsonb->>'fundingFeeKobo', '')::bigint
+              WHEN jsonb_typeof(COALESCE(metadata::jsonb, '{}'::jsonb)) = 'object'
                 AND COALESCE(metadata::jsonb, '{}'::jsonb) ? 'gatewayFeeKobo'
               THEN NULLIF(metadata::jsonb->>'gatewayFeeKobo', '')::bigint
               ELSE 0
