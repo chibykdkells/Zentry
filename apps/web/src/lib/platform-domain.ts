@@ -23,6 +23,12 @@ export const PLATFORM_DOMAIN = normalizePlatformDomain(
   process.env.NEXT_PUBLIC_PLATFORM_DOMAIN ?? process.env.NEXT_PUBLIC_APP_URL,
 );
 
+function getPlatformApexDomain(): string {
+  return PLATFORM_DOMAIN.startsWith('www.')
+    ? PLATFORM_DOMAIN.slice('www.'.length)
+    : PLATFORM_DOMAIN;
+}
+
 export function isPrivateDevelopmentHostname(hostname: string): boolean {
   const normalized = hostname.trim().toLowerCase();
   return (
@@ -35,15 +41,22 @@ export function isPrivateDevelopmentHostname(hostname: string): boolean {
 
 export function isPlatformHostname(hostname: string): boolean {
   const normalized = hostname.trim().toLowerCase();
-  return normalized === PLATFORM_DOMAIN || normalized.endsWith(`.${PLATFORM_DOMAIN}`);
+  const apexDomain = getPlatformApexDomain();
+  return (
+    normalized === apexDomain ||
+    normalized === `www.${apexDomain}` ||
+    normalized.endsWith(`.${apexDomain}`)
+  );
 }
 
 export function isCustomTenantHostname(hostname: string): boolean {
   const normalized = hostname.trim().toLowerCase();
+  const apexDomain = getPlatformApexDomain();
   return (
     Boolean(normalized) &&
-    normalized !== PLATFORM_DOMAIN &&
-    !normalized.endsWith(`.${PLATFORM_DOMAIN}`) &&
+    normalized !== apexDomain &&
+    normalized !== `www.${apexDomain}` &&
+    !normalized.endsWith(`.${apexDomain}`) &&
     !isPrivateDevelopmentHostname(normalized)
   );
 }
@@ -53,12 +66,13 @@ export function extractTenantSlugFromPlatformHostname(
   reservedSubdomains: Set<string>,
 ): string | null {
   const normalized = hostname.trim().toLowerCase();
-  if (!normalized.endsWith(`.${PLATFORM_DOMAIN}`)) {
+  const apexDomain = getPlatformApexDomain();
+  if (!normalized.endsWith(`.${apexDomain}`)) {
     return null;
   }
 
   const slug = normalized.replace(
-    new RegExp(`\\.${PLATFORM_DOMAIN.replace('.', '\\.')}$`),
+    new RegExp(`\\.${apexDomain.replace(/\./g, '\\.')}$`),
     '',
   );
   if (!slug || reservedSubdomains.has(slug)) {

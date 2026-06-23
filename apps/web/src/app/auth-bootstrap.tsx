@@ -71,16 +71,24 @@ export function AuthBootstrap() {
             // api-client interceptor, so we must redirect manually here.
             if (typeof window !== 'undefined') {
               const tenantSlug = resolveTenantSlugForRequest();
+              const currentPath = `${window.location.pathname}${window.location.search}`;
+              const isAdminPath = window.location.pathname.startsWith('/admin');
               const loginUrl = new URL(
-                tenantSlug ? '/login' : '/access-required',
+                isAdminPath
+                  ? '/platform/login'
+                  : tenantSlug
+                    ? '/login'
+                    : '/access-required',
                 window.location.origin,
               );
               loginUrl.searchParams.set('reason', 'session-expired');
-              if (tenantSlug) {
+              if (tenantSlug && loginUrl.pathname === '/login') {
                 loginUrl.searchParams.set('tenant', tenantSlug);
               }
-              const currentPath = `${window.location.pathname}${window.location.search}`;
-              if (currentPath !== loginUrl.pathname) {
+              if (
+                loginUrl.pathname !== '/access-required' &&
+                currentPath !== loginUrl.pathname
+              ) {
                 loginUrl.searchParams.set('next', currentPath);
               }
               window.location.href = loginUrl.toString();

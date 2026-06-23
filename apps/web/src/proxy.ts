@@ -153,9 +153,10 @@ export function proxy(request: NextRequest) {
     const redirectTarget = `${pathname}${search}`;
 
     if (pathname.startsWith('/admin')) {
-      const accessRequiredUrl = new URL('/access-required', request.url);
-      accessRequiredUrl.searchParams.set('reason', 'platform-link');
-      return persistTenantCookie(NextResponse.redirect(accessRequiredUrl));
+      // The refresh cookie is issued by the API host and is not always visible
+      // to this web middleware on the platform host. Let the admin RouteGuard
+      // and AuthBootstrap verify/restore the platform session client-side.
+      return persistTenantCookie(NextResponse.next());
     }
 
     if (!hasTenantContext) {

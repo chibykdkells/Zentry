@@ -70,7 +70,7 @@ function buildLoginRedirectUrl() {
   const tenantSlug = resolveTenantSlugForRequest();
   const loginUrl = new URL(
     window.location.pathname.startsWith('/admin')
-      ? '/platform'
+      ? '/platform/login'
       : tenantSlug
         ? '/login'
         : '/access-required',
