@@ -3237,10 +3237,14 @@ export class WalletService {
         BASIS_POINTS_DENOMINATOR -
         1n) /
       BASIS_POINTS_DENOMINATOR;
+    const wholeNairaFee =
+      percentageFee % 100n === 0n
+        ? percentageFee
+        : percentageFee + (100n - (percentageFee % 100n));
 
-    return percentageFee > FUNDING_FEE_CAP_KOBO
+    return wholeNairaFee > FUNDING_FEE_CAP_KOBO
       ? FUNDING_FEE_CAP_KOBO
-      : percentageFee;
+      : wholeNairaFee;
   }
 
   private getStoredFundingFeeKobo(transaction: FundingTransactionRecord) {

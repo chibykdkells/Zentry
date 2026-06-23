@@ -268,6 +268,54 @@ describe('WalletService', () => {
     expect(result.data.fundingTotalKobo).toBe('102500');
   });
 
+  it('rounds fractional funding fees up to a whole naira for FintavaPay virtual accounts', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      email: 'user@example.com',
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+      wallet: {
+        id: 'wallet-1',
+        availableBalance: 0n,
+      },
+    });
+    prisma.transaction.create.mockResolvedValue({});
+    prisma.transaction.update.mockResolvedValue({});
+    prisma.auditLog.create.mockResolvedValue({});
+    paymentService.initiatePayment.mockResolvedValue({
+      paymentUrl: 'https://fintavapay.com/checkout/test-ref',
+      reference: 'txn-ref-4b',
+      gatewayRef: 'gateway-ref-4b',
+      mode: 'live',
+    });
+
+    const result = await service.initiateFunding(
+      'user-1',
+      { amountNaira: 100 },
+      'https://zendocx.net',
+    );
+
+    expect(paymentService.initiatePayment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amountKobo: 10300n,
+      }),
+    );
+    expect(prisma.transaction.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          amount: 10000n,
+          metadata: expect.objectContaining({
+            fundingFeeKobo: '300',
+            fundingTotalKobo: '10300',
+          }),
+        }),
+      }),
+    );
+    expect(result.data.amountKobo).toBe('10000');
+    expect(result.data.fundingFeeKobo).toBe('300');
+    expect(result.data.fundingTotalKobo).toBe('10300');
+  });
+
   it('caps wallet funding fees at 600 naira', async () => {
     prisma.user.findUnique.mockResolvedValue({
       id: 'user-1',

@@ -75,8 +75,14 @@ export class FintavapayProvider implements IPaymentProvider {
   }
 
   /** Convert Kobo (BigInt) → whole Naira for outbound API requests. */
-  private koboToNaira(kobo: bigint): number {
-    return Math.floor(Number(kobo) / 100);
+  private koboToWholeNaira(kobo: bigint, context: string): number {
+    if (kobo % 100n !== 0n) {
+      throw new Error(
+        `FintavaPay ${context} must be a whole naira amount; received ${kobo.toString()} kobo`,
+      );
+    }
+
+    return Number(kobo / 100n);
   }
 
   /** Convert Naira float → Kobo BigInt for internal storage (verifyPayment responses). */
@@ -88,7 +94,7 @@ export class FintavapayProvider implements IPaymentProvider {
     input: InitiatePaymentInput,
   ): Promise<InitiatePaymentResult> {
     const expireMinutes = input.expireTimeInMin ?? 30;
-    const amountNaira   = this.koboToNaira(input.amountKobo);
+    const amountNaira   = this.koboToWholeNaira(input.amountKobo, 'payment');
 
     let response: import('axios').AxiosResponse;
     try {
@@ -197,7 +203,7 @@ export class FintavapayProvider implements IPaymentProvider {
   async initiateTransfer(
     input: InitiateTransferInput,
   ): Promise<InitiateTransferResult> {
-    const amountNaira = this.koboToNaira(input.amountKobo);
+    const amountNaira = this.koboToWholeNaira(input.amountKobo, 'transfer');
 
     const response = await axios.post(
       `${this.baseUrl}/bank/credit/merchant`,

@@ -7,6 +7,7 @@ export const InitiateWalletFundingSchema = z.object({
       required_error: 'Funding amount is required',
     })
     .finite('Enter a valid funding amount')
+    .int('Funding amount must be a whole naira amount')
     .min(100, 'Minimum funding amount is ₦100')
     .max(5000000, 'Maximum funding amount per funding request is ₦5,000,000'),
 });

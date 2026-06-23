@@ -5,7 +5,7 @@ export class InitiateWalletFundingDto {
   static schema = InitiateWalletFundingSchema;
 
   @IsNumber(
-    { maxDecimalPlaces: 2 },
+    { maxDecimalPlaces: 0 },
     { message: 'Enter a valid funding amount' },
   )
   @Min(100, { message: 'Minimum funding amount is ₦100' })
