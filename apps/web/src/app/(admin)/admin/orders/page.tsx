@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { AdminDisputeReviewPanel } from '@/components/admin/admin-dispute-review-panel';
+import { getApiErrorMessage } from '@/lib/api-error';
 import { MobileSheet } from '@/components/shared/mobile-sheet';
 import { EmptyState } from '@/components/shared/empty-state';
 import { FilePreviewGallery } from '@/components/shared/file-preview-gallery';
@@ -28,6 +29,7 @@ import {
   useAdminOrderReleasePreview,
   useAdminOrders,
   useUpdateAdminOrderNotes,
+  useUnblockCbtJobClaim,
 } from '@/hooks/use-orders';
 import { useMediaQuery } from '@/hooks/use-media-query';
 import { usePlatformAdminTenants } from '@/hooks/use-platform-admin-tenants';
@@ -77,6 +79,23 @@ export default function AdminOrdersPage() {
     error: detailError,
     reload: reloadDetail,
   } = useAdminOrderDetail(effectiveSelectedOrderId);
+  const unblock = useUnblockCbtJobClaim();
+
+  const handleUnblock = async (cbtId: string) => {
+    if (!detail) return;
+
+    try {
+      await unblock.mutateAsync({ orderId: detail.id, cbtId });
+      toast.success('CBT is now allowed to reclaim this returned job.');
+      reloadDetail();
+      reload();
+    } catch (err) {
+      toast.error(
+        getApiErrorMessage(err, 'Could not unblock this CBT claim.'),
+      );
+    }
+  };
+
   const {
     preview,
     loading: previewLoading,
@@ -222,6 +241,59 @@ export default function AdminOrdersPage() {
               />
             </div>
           </div>
+
+          {detail.blockedCbtClaimsCount > 0 ? (
+            <div className="rounded-3xl border border-rose-100 bg-rose-50/70 p-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-rose-900">
+                    Blocked CBT claims
+                  </h3>
+                  <p className="mt-1 text-sm text-rose-700">
+                    These CBTs were blocked from reclaiming this returned job.
+                    Clear a block to allow a manual re-claim.
+                  </p>
+                </div>
+                <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-rose-700">
+                  {detail.blockedCbtClaimsCount} blocked
+                </span>
+              </div>
+              <div className="mt-4 space-y-3">
+                {detail.blockedCbtClaims.map((blocked) => (
+                  <div
+                    key={blocked.cbtId}
+                    className="rounded-2xl border border-rose-200 bg-white px-4 py-4"
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">
+                          CBT {blocked.cbtId}
+                        </p>
+                        <p className="mt-1 text-sm text-slate-500">
+                          Reason: {blocked.reason}
+                        </p>
+                        <p className="mt-1 text-xs uppercase tracking-[0.14em] text-slate-400">
+                          {formatDate(blocked.createdAt)}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void handleUnblock(blocked.cbtId)}
+                        disabled={unblock.isPending}
+                        className="inline-flex items-center justify-center rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {unblock.isPending ? (
+                          <Loader2 size={16} className="animate-spin" />
+                        ) : (
+                          'Allow reclaim'
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           <div className="rounded-3xl border border-slate-100 bg-slate-50/70 p-5">
             <AdminNotesEditor key={detail.id} detail={detail} />

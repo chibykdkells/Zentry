@@ -78,6 +78,8 @@ export interface OrderDetail extends OrderListItem {
   providerResponse: Record<string, unknown> | null;
   cbtNotes: string | null;
   adminNotes: string | null;
+  blockedCbtClaims: Array<{ cbtId: string; reason: string; createdAt: string }>;
+  blockedCbtClaimsCount: number;
   timeExtensionRequests: Array<{ id: string; status: string; createdAt: string }> | null;
   state: {
     isActive: boolean;
@@ -410,6 +412,26 @@ export function useUpdateAdminOrderNotes() {
           adminNotes,
         },
       );
+      return response.data;
+    },
+    onSuccess: async (_response, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['orders'] });
+      await queryClient.invalidateQueries({
+        queryKey: ['orders', 'admin', 'detail', variables.orderId],
+      });
+    },
+  });
+}
+
+export function useUnblockCbtJobClaim() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ orderId, cbtId }: { orderId: string; cbtId: string }) => {
+      const response = await apiClient.patch<{
+        message: string;
+        data: { orderId: string; cbtId: string };
+      }>(`/orders/admin/${orderId}/unblock-cbt/${cbtId}`);
       return response.data;
     },
     onSuccess: async (_response, variables) => {

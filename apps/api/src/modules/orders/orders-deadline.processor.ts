@@ -74,7 +74,7 @@ export class OrdersDeadlineProcessor {
           orderId,
           type: NotificationType.JOB_UNASSIGNED,
           title: 'Job returned to pool',
-          message: `Your 10-minute delivery window for ${order.service.name} expired. The job has been returned to the pool.`,
+          message: `Your delivery window for ${order.service.name} expired. The job has been returned to the pool.`,
           metadata: { orderNumber: order.orderNumber },
         },
       });
@@ -91,7 +91,7 @@ export class OrdersDeadlineProcessor {
               orderId,
               type: NotificationType.JOB_UNASSIGNED,
               title: 'CBT missed delivery deadline',
-              message: `Order ${order.orderNumber} was returned to the job pool — the assigned CBT center missed the 10-minute delivery window.`,
+              message: `Order ${order.orderNumber} was returned to the job pool — the assigned CBT center missed the delivery window.`,
               metadata: { orderNumber: order.orderNumber, cbtId },
             },
           });

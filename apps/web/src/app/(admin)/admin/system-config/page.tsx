@@ -13,6 +13,7 @@ import { formatDate } from '@/lib/format';
 // Human-readable label overrides
 const KEY_LABELS: Record<string, string> = {
   DISPUTE_WINDOW_HOURS: 'Dispute window (hours)',
+  CBT_DELIVERY_WINDOW_MINUTES: 'CBT delivery window (minutes)',
   MIN_WITHDRAWAL_KOBO: 'Min withdrawal (Kobo)',
   MAX_WITHDRAWAL_KOBO: 'Max withdrawal (Kobo)',
   PLATFORM_COMMISSION_RATE_BPS: 'Platform commission (basis points)',
@@ -20,6 +21,8 @@ const KEY_LABELS: Record<string, string> = {
 };
 
 const KEY_HINTS: Record<string, string> = {
+  CBT_DELIVERY_WINDOW_MINUTES:
+    '1–1440 minutes; how long a CBT has to deliver a manual order before it returns to the pool.',
   DISPUTE_WINDOW_HOURS: '1–72 hours',
   MIN_WITHDRAWAL_KOBO: 'e.g. 100000 = ₦1,000',
   MAX_WITHDRAWAL_KOBO: 'e.g. 50000000 = ₦500,000',

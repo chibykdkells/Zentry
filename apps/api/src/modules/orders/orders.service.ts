@@ -300,6 +300,13 @@ const orderDetailSelect = Prisma.validator<Prisma.OrderSelect>()({
       },
     },
   },
+  jobBlocks: {
+    select: {
+      cbtId: true,
+      reason: true,
+      createdAt: true,
+    },
+  },
   transactions: {
     orderBy: { createdAt: 'desc' },
     select: {
@@ -691,6 +698,20 @@ export class OrdersService {
 
   private async sendSmsSafely(input: { to: string; message: string }) {
     await this.smsService.sendSms(input).catch(() => undefined);
+  }
+
+  private async getCbtDeliveryWindowMinutes(): Promise<number> {
+    const config = await this.prisma.systemConfig.findUnique({
+      where: { key: 'CBT_DELIVERY_WINDOW_MINUTES' },
+      select: { value: true },
+    });
+
+    const parsed = Number(config?.value ?? '');
+    if (Number.isInteger(parsed) && parsed >= 1 && parsed <= 1440) {
+      return parsed;
+    }
+
+    return DELIVERY_DEADLINE_MINUTES;
   }
 
   private async sendOrderPlacedEmail(input: {
@@ -1873,6 +1894,47 @@ export class OrdersService {
     return {
       message: 'Admin notes updated',
       data: this.serializeOrderDetail(updatedOrder),
+    };
+  }
+
+  async unblockCbtJobClaim(
+    adminUserId: string,
+    orderId: string,
+    cbtId: string,
+    tenantId: string | null,
+  ) {
+    const order = await this.prisma.order.findFirst({
+      where: { id: orderId, ...(tenantId ? { tenantId } : {}) },
+      select: { id: true, status: true },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    if (order.status !== OrderStatus.PENDING) {
+      throw new BadRequestException(
+        'Only pending returned jobs can be unblocked for reclaim.',
+      );
+    }
+
+    await this.prisma.cbtJobBlock.deleteMany({
+      where: { orderId, cbtId },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId: adminUserId,
+        action: 'CBT_JOB_BLOCK_CLEARED',
+        entity: 'CbtJobBlock',
+        entityId: orderId,
+        newValues: { cbtId, orderId },
+      },
+    });
+
+    return {
+      message: 'CBT job claim block cleared. The CBT can attempt to claim the returned job again.',
+      data: { orderId, cbtId },
     };
   }
 
@@ -3274,11 +3336,15 @@ export class OrdersService {
     const isBlocked = await this.prisma.cbtJobBlock.findUnique({
       where: { orderId_cbtId: { orderId, cbtId: userId } },
     });
+
     if (isBlocked) {
       throw new ForbiddenException(
         'You are not eligible to claim this job.',
       );
     }
+
+    // CBT job blocks are retained for audit, but missed assignments no longer
+    // prevent the job from returning to the pool and becoming claimable again.
 
     const candidateOrder = await this.prisma.order.findUnique({
       where: { id: orderId },
@@ -3314,6 +3380,8 @@ export class OrdersService {
       );
     }
 
+    const deliveryWindowMinutes = await this.getCbtDeliveryWindowMinutes();
+
     // Atomic claim: updateMany is the check-and-set guard. Running it outside a
     // wrapping transaction means any HttpException we throw afterwards propagates
     // cleanly to NestJS — Prisma v6 can swallow exceptions thrown inside a
@@ -3331,7 +3399,7 @@ export class OrdersService {
         assignedAt: claimedAt,
         status: OrderStatus.ASSIGNED,
         deliveryDeadline: new Date(
-          claimedAt.getTime() + DELIVERY_DEADLINE_MINUTES * 60 * 1000,
+          claimedAt.getTime() + deliveryWindowMinutes * 60 * 1000,
         ),
       },
     });
@@ -3433,7 +3501,7 @@ export class OrdersService {
     try {
       await this.ordersDeadlineQueueService.scheduleDeadline(
         orderId,
-        new Date(claimedAt.getTime() + DELIVERY_DEADLINE_MINUTES * 60 * 1000),
+        new Date(claimedAt.getTime() + deliveryWindowMinutes * 60 * 1000),
       );
     } catch (error) {
       this.logger.error(
@@ -5778,6 +5846,11 @@ export class OrdersService {
     const evidenceFiles = order.dispute
       ? this.toDisputeEvidenceFiles(order.dispute.evidenceUrls)
       : [];
+    const blockedCbtClaims = order.jobBlocks.map((block) => ({
+      cbtId: block.cbtId,
+      reason: block.reason,
+      createdAt: block.createdAt,
+    }));
 
     return {
       id: order.id,
@@ -5834,6 +5907,8 @@ export class OrdersService {
             cbtProfile: order.assignedCbt.cbtProfile,
           }
         : null,
+      blockedCbtClaims,
+      blockedCbtClaimsCount: blockedCbtClaims.length,
       transactions: order.transactions.map((transaction) => ({
         id: transaction.id,
         type: transaction.type,

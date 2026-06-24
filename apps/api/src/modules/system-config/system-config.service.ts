@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 export const SYSTEM_CONFIG_KEYS = {
   DISPUTE_WINDOW_HOURS: 'DISPUTE_WINDOW_HOURS',
+  CBT_DELIVERY_WINDOW_MINUTES: 'CBT_DELIVERY_WINDOW_MINUTES',
   MIN_WITHDRAWAL_KOBO: 'MIN_WITHDRAWAL_KOBO',
   PLATFORM_COMMISSION_RATE_BPS: 'PLATFORM_COMMISSION_RATE_BPS',
   CBT_COMMISSION_RATE_BPS: 'CBT_COMMISSION_RATE_BPS',
@@ -24,6 +25,12 @@ const CONFIG_META: Record<
       'Hours a requester can raise a dispute after CBT result upload (default: 2)',
     validator: (v) =>
       Number.isInteger(Number(v)) && Number(v) >= 1 && Number(v) <= 72,
+  },
+  CBT_DELIVERY_WINDOW_MINUTES: {
+    description:
+      'Minutes a CBT has to deliver a manual job before it returns to the pool (default: 60)',
+    validator: (v) =>
+      Number.isInteger(Number(v)) && Number(v) >= 1 && Number(v) <= 1440,
   },
   MIN_WITHDRAWAL_KOBO: {
     description: 'Minimum withdrawal amount in Kobo (default: 100000 = ₦1,000)',
@@ -50,6 +57,7 @@ const CONFIG_META: Record<
 
 const DEFAULTS: Record<SystemConfigKey, string> = {
   DISPUTE_WINDOW_HOURS: '2',
+  CBT_DELIVERY_WINDOW_MINUTES: '60',
   MIN_WITHDRAWAL_KOBO: '100000',
   PLATFORM_COMMISSION_RATE_BPS: '1000',
   CBT_COMMISSION_RATE_BPS: '8000',

@@ -174,6 +174,21 @@ export class OrdersController {
   }
 
   @Roles(UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN)
+  @Patch('admin/:orderId/unblock-cbt/:cbtId')
+  unblockCbtJobClaim(
+    @CurrentUser() user: JwtUser,
+    @Param('orderId') orderId: string,
+    @Param('cbtId') cbtId: string,
+  ) {
+    return this.ordersService.unblockCbtJobClaim(
+      user.sub,
+      orderId,
+      cbtId,
+      user.tenantId,
+    );
+  }
+
+  @Roles(UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN)
   @Get('admin/:orderId')
   getAdminOrderDetail(
     @CurrentUser() user: JwtUser,

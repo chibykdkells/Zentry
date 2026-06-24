@@ -950,6 +950,7 @@ async function main() {
 
   const configs = [
     { key: 'DISPUTE_WINDOW_HOURS',         value: '2',       description: 'Hours after result upload before escrow auto-releases' },
+    { key: 'CBT_DELIVERY_WINDOW_MINUTES',  value: '60',      description: 'Minutes a CBT has to deliver a manual job before it returns to the pool' },
     { key: 'PLATFORM_COMMISSION_RATE',     value: '500',     description: 'Platform commission rate in basis points (500 = 5%)' },
     { key: 'PLATFORM_MIN_WITHDRAWAL_KOBO', value: '100000',  description: 'Minimum withdrawal amount in Kobo (₦1,000)' },
     { key: 'MAINTENANCE_MODE',             value: 'false',   description: 'Set to true to put platform in maintenance mode' },
