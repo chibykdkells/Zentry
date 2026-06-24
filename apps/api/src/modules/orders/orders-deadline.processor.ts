@@ -62,12 +62,6 @@ export class OrdersDeadlineProcessor {
         },
       });
 
-      await tx.cbtJobBlock.upsert({
-        where: { orderId_cbtId: { orderId, cbtId } },
-        create: { orderId, cbtId, reason: 'deadline_missed' },
-        update: {},
-      });
-
       await tx.notification.create({
         data: {
           userId: cbtId,
