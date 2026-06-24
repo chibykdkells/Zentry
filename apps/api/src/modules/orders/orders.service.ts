@@ -1912,12 +1912,8 @@ export class OrdersService {
       throw new NotFoundException('Order not found');
     }
 
-    if (order.status !== OrderStatus.PENDING) {
-      throw new BadRequestException(
-        'Only pending returned jobs can be unblocked for reclaim.',
-      );
-    }
-
+    // Admin unblock should clear the CBT job block regardless of the current
+    // order status so the CBT can re-claim the job once it is available again.
     await this.prisma.cbtJobBlock.deleteMany({
       where: { orderId, cbtId },
     });
