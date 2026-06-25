@@ -442,3 +442,23 @@ export function useUnblockCbtJobClaim() {
     },
   });
 }
+
+export function useUnblockAllCbtJobClaims() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ orderId }: { orderId: string }) => {
+      const response = await apiClient.patch<{
+        message: string;
+        data: { orderId: string };
+      }>(`/orders/admin/${orderId}/unblock-cbt`);
+      return response.data;
+    },
+    onSuccess: async (_response, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['orders'] });
+      await queryClient.invalidateQueries({
+        queryKey: ['orders', 'admin', 'detail', variables.orderId],
+      });
+    },
+  });
+}

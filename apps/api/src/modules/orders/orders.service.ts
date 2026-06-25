@@ -1934,6 +1934,40 @@ export class OrdersService {
     };
   }
 
+  async unblockAllCbtJobClaims(
+    adminUserId: string,
+    orderId: string,
+    tenantId: string | null,
+  ) {
+    const order = await this.prisma.order.findFirst({
+      where: { id: orderId, ...(tenantId ? { tenantId } : {}) },
+      select: { id: true },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    await this.prisma.cbtJobBlock.deleteMany({
+      where: { orderId },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId: adminUserId,
+        action: 'CBT_JOB_BLOCKS_CLEARED',
+        entity: 'CbtJobBlock',
+        entityId: orderId,
+        newValues: { orderId, clearedAll: true },
+      },
+    });
+
+    return {
+      message: 'All CBT job claim blocks cleared. The job can now be reclaimed by any eligible CBT.',
+      data: { orderId },
+    };
+  }
+
   async reviewDispute(
     adminUserId: string,
     orderId: string,

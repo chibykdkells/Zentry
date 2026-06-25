@@ -30,6 +30,7 @@ import {
   useAdminOrders,
   useUpdateAdminOrderNotes,
   useUnblockCbtJobClaim,
+  useUnblockAllCbtJobClaims,
 } from '@/hooks/use-orders';
 import { useMediaQuery } from '@/hooks/use-media-query';
 import { usePlatformAdminTenants } from '@/hooks/use-platform-admin-tenants';
@@ -80,9 +81,19 @@ export default function AdminOrdersPage() {
     reload: reloadDetail,
   } = useAdminOrderDetail(effectiveSelectedOrderId);
   const unblock = useUnblockCbtJobClaim();
+  const unblockAll = useUnblockAllCbtJobClaims();
 
   const handleUnblock = async (cbtId: string) => {
     if (!detail) return;
+
+    const isDangerousReset = detail.status !== 'PENDING';
+    const confirmMessage = isDangerousReset
+      ? 'This job is not currently pending. Clicking OK will clear the existing CBT block and allow the CBT to reclaim it when it becomes available again. Continue?'
+      : 'This will clear the CBT block and allow the CBT to reclaim the returned job. Continue?';
+
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
 
     try {
       await unblock.mutateAsync({ orderId: detail.id, cbtId });
@@ -92,6 +103,30 @@ export default function AdminOrdersPage() {
     } catch (err) {
       toast.error(
         getApiErrorMessage(err, 'Could not unblock this CBT claim.'),
+      );
+    }
+  };
+
+  const handleUnblockAll = async () => {
+    if (!detail) return;
+
+    const isDangerousReset = detail.status !== 'PENDING';
+    const confirmMessage = isDangerousReset
+      ? 'This order is not currently pending. Clearing all CBT blocks will allow any eligible CBT to reclaim it once it returns to the pool. Continue?'
+      : 'This will clear all CBT blocks and allow any eligible CBT to reclaim the returned job. Continue?';
+
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      await unblockAll.mutateAsync({ orderId: detail.id });
+      toast.success('All CBT blocks cleared. Any eligible CBT can now reclaim this job.');
+      reloadDetail();
+      reload();
+    } catch (err) {
+      toast.error(
+        getApiErrorMessage(err, 'Could not reset CBT blocks for this order.'),
       );
     }
   };
@@ -244,7 +279,7 @@ export default function AdminOrdersPage() {
 
           {detail.blockedCbtClaimsCount > 0 ? (
             <div className="rounded-3xl border border-rose-100 bg-rose-50/70 p-5">
-              <div className="flex items-start justify-between gap-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h3 className="text-sm font-semibold text-rose-900">
                     Blocked CBT claims
@@ -254,9 +289,23 @@ export default function AdminOrdersPage() {
                     Clear a block to allow a manual re-claim.
                   </p>
                 </div>
-                <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-rose-700">
-                  {detail.blockedCbtClaimsCount} blocked
-                </span>
+                <div className="flex flex-col items-start gap-2 sm:items-end">
+                  <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-rose-700">
+                    {detail.blockedCbtClaimsCount} blocked
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void handleUnblockAll()}
+                    disabled={unblockAll.isPending}
+                    className="inline-flex items-center justify-center rounded-2xl border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {unblockAll.isPending ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      'Reset all claims'
+                    )}
+                  </button>
+                </div>
               </div>
               <div className="mt-4 space-y-3">
                 {detail.blockedCbtClaims.map((blocked) => (

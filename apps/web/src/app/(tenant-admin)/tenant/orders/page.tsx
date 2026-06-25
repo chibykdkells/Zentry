@@ -30,6 +30,10 @@ import {
   type TenantAdminDisputeFilters,
   type TenantAdminOrderFilters,
 } from '@/hooks/use-tenant-admin-orders';
+import {
+  useUnblockCbtJobClaim,
+  useUnblockAllCbtJobClaims,
+} from '@/hooks/use-orders';
 import { getApiErrorMessage } from '@/lib/api-error';
 import { formatDate, formatNaira } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -128,9 +132,11 @@ function OrderRow({ order, onClick }: { order: TenantAdminOrderSummary; onClick:
 // ─── Order detail panel ────────────────────────────────────────────────────────
 
 function OrderDetailPanel({ orderId, onClose }: { orderId: string; onClose: () => void }) {
-  const { order, loading, error } = useTenantAdminOrderDetail(orderId);
+  const { order, loading, error, reload } = useTenantAdminOrderDetail(orderId);
   const updateNotes = useUpdateOrderNotes();
   const reviewDispute = useReviewDispute();
+  const unblock = useUnblockCbtJobClaim();
+  const unblockAll = useUnblockAllCbtJobClaims();
 
   const [notes, setNotes] = useState('');
   const [editingNotes, setEditingNotes] = useState(false);
@@ -146,6 +152,48 @@ function OrderDetailPanel({ orderId, onClose }: { orderId: string; onClose: () =
       setEditingNotes(false);
     } catch (err) {
       toast.error(getApiErrorMessage(err, 'Could not save notes'));
+    }
+  };
+
+  const handleUnblock = async (cbtId: string) => {
+    if (!order) return;
+
+    const isDangerousReset = order.status !== OrderStatus.PENDING;
+    const confirmMessage = isDangerousReset
+      ? 'This order is currently claimed or assigned. Clearing the CBT block will allow the CBT to reclaim it again once available. Continue?'
+      : 'This will clear the CBT block and allow the CBT to reclaim this returned job. Continue?';
+
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      await unblock.mutateAsync({ orderId: order.id, cbtId });
+      toast.success('CBT can now attempt to reclaim this job.');
+      reload();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Could not unblock this CBT claim.'));
+    }
+  };
+
+  const handleUnblockAll = async () => {
+    if (!order) return;
+
+    const isDangerousReset = order.status !== OrderStatus.PENDING;
+    const confirmMessage = isDangerousReset
+      ? 'This order is currently not pending. Clearing all CBT blocks will allow any eligible CBT to reclaim it once it becomes available again. Continue?'
+      : 'This will clear all CBT blocks and allow any eligible CBT to reclaim this returned job. Continue?';
+
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      await unblockAll.mutateAsync({ orderId: order.id });
+      toast.success('All CBT blocks cleared. Any eligible CBT can now reclaim this job.');
+      reload();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Could not reset CBT blocks for this order.'));
     }
   };
 
@@ -243,6 +291,55 @@ function OrderDetailPanel({ orderId, onClose }: { orderId: string; onClose: () =
               <p className="text-xs text-amber-600">This job is still in the pool awaiting a claim.</p>
             </div>
           )}
+
+          {(order as unknown as { blockedCbtClaimsCount?: number }).blockedCbtClaimsCount > 0 ? (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4 space-y-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle size={16} className="text-rose-600" />
+                  <p className="text-sm font-semibold text-rose-800">Blocked CBT claims</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleUnblockAll()}
+                  disabled={unblockAll.isPending}
+                  className="inline-flex items-center justify-center rounded-2xl border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {unblockAll.isPending ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    'Reset all claims'
+                  )}
+                </button>
+              </div>
+              <p className="text-sm text-rose-700">
+                These CBTs are currently blocked from reclaiming this job. Resetting a block allows them to try again once the order is available.
+              </p>
+              {(order as unknown as { blockedCbtClaims?: Array<{ cbtId: string; reason: string; createdAt: string }> }).blockedCbtClaims.map((blocked) => (
+                <div key={blocked.cbtId} className="rounded-2xl border border-rose-200 bg-white px-4 py-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">CBT {blocked.cbtId}</p>
+                      <p className="mt-1 text-sm text-slate-500">Reason: {blocked.reason}</p>
+                      <p className="mt-1 text-xs uppercase tracking-[0.14em] text-slate-400">{formatDate(blocked.createdAt)}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void handleUnblock(blocked.cbtId)}
+                      disabled={unblock.isPending}
+                      className="inline-flex items-center justify-center rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {unblock.isPending ? (
+                        <Loader2 size={16} className="animate-spin" />
+                      ) : (
+                        'Reset and allow reclaim'
+                      )}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
 
           {/* Dispute */}
           {(order as unknown as { dispute?: unknown }).dispute ? (
