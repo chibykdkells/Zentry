@@ -255,7 +255,11 @@ function WithdrawalReviewCard({
     !!request.processorNote?.toLowerCase().includes('payout failed');
 
   const canApprove = request.status === WithdrawalStatus.PENDING;
-  const canRetryPayout = request.status === WithdrawalStatus.APPROVED;
+  // Retry only when no real transfer has gone out: approved (auto-payout failed),
+  // or processing with no gateway ref (status advanced without an actual transfer).
+  const canRetryPayout =
+    request.status === WithdrawalStatus.APPROVED ||
+    (request.status === WithdrawalStatus.PROCESSING && !request.gatewayRef);
   const canProcess = request.status === WithdrawalStatus.APPROVED;
   const canComplete =
     request.status === WithdrawalStatus.APPROVED ||

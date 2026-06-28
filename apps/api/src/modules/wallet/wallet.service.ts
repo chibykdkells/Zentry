@@ -1849,6 +1849,7 @@ export class WalletService {
         bankCode: true,
         accountName: true,
         status: true,
+        gatewayRef: true,
         userId: true,
       },
     });
@@ -1857,9 +1858,17 @@ export class WalletService {
       throw new NotFoundException('Withdrawal request not found.');
     }
 
-    if (request.status !== WithdrawalStatus.APPROVED) {
+    // Retry is safe only when no transfer has actually gone out yet: an APPROVED
+    // request (auto-payout failed) or a PROCESSING one with no gateway ref (e.g.
+    // status was advanced manually). A PROCESSING request that already has a
+    // gateway ref means a real transfer is in flight — never re-send that.
+    const retryable =
+      request.status === WithdrawalStatus.APPROVED ||
+      (request.status === WithdrawalStatus.PROCESSING && !request.gatewayRef);
+
+    if (!retryable) {
       throw new BadRequestException(
-        'Only an approved withdrawal with a failed payout can be retried.',
+        'This withdrawal cannot be retried — only an approved payout, or a processing one that was never actually sent, can be re-initiated.',
       );
     }
 
