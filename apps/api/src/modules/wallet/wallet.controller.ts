@@ -112,6 +112,19 @@ export class WalletController {
     );
   }
 
+  @Roles(UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN)
+  @Post('admin/withdrawals/:withdrawalRequestId/retry-payout')
+  retryWithdrawalPayout(
+    @CurrentUser() user: JwtUser,
+    @Param('withdrawalRequestId') withdrawalRequestId: string,
+  ) {
+    return this.walletService.retryWithdrawalPayout(
+      user.sub,
+      withdrawalRequestId,
+      user.tenantId,
+    );
+  }
+
   @Get('me')
   getMyWallet(@CurrentUser() user: JwtUser) {
     return this.walletService.getMyWalletOverview(user.sub, user.tenantId);

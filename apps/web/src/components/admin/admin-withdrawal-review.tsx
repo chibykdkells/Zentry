@@ -7,6 +7,7 @@ import { AccountPanel } from '@/components/shared/account-panel';
 import { EmptyState } from '@/components/shared/empty-state';
 import {
   useAdminWithdrawalRequests,
+  useRetryWithdrawalPayout,
   useReviewWithdrawalRequest,
 } from '@/hooks/use-withdrawal-requests';
 import { formatDate, formatNaira } from '@/lib/format';
@@ -245,10 +246,16 @@ function WithdrawalReviewCard({
   request: ReturnType<typeof useAdminWithdrawalRequests>['requests'][number];
 }) {
   const mutation = useReviewWithdrawalRequest();
+  const retry = useRetryWithdrawalPayout();
   const [note, setNote] = useState(request.processorNote ?? '');
   const [gatewayRef, setGatewayRef] = useState(request.gatewayRef ?? '');
 
+  const payoutFailed =
+    request.status === WithdrawalStatus.APPROVED &&
+    !!request.processorNote?.toLowerCase().includes('payout failed');
+
   const canApprove = request.status === WithdrawalStatus.PENDING;
+  const canRetryPayout = request.status === WithdrawalStatus.APPROVED;
   const canProcess = request.status === WithdrawalStatus.APPROVED;
   const canComplete =
     request.status === WithdrawalStatus.APPROVED ||
@@ -330,11 +337,29 @@ function WithdrawalReviewCard({
         </label>
       </div>
 
+      {payoutFailed ? (
+        <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3">
+          <p className="text-sm font-semibold text-rose-800">
+            Automated payout did not go through
+          </p>
+          <p className="mt-1 text-sm text-rose-700">{request.processorNote}</p>
+          <p className="mt-1 text-xs text-rose-600">
+            The funds are still reserved. Fix the cause if needed, then retry the
+            payout.
+          </p>
+        </div>
+      ) : null}
+
       <div className="mt-4 flex flex-wrap gap-3">
         <ActionButton
           label="Approve"
           onClick={() => update(WithdrawalStatus.APPROVED)}
           disabled={!canApprove || mutation.isPending}
+        />
+        <ActionButton
+          label={retry.isPending ? 'Retrying…' : 'Retry payout'}
+          onClick={() => retry.mutate({ withdrawalRequestId: request.id })}
+          disabled={!canRetryPayout || retry.isPending}
         />
         <ActionButton
           label="Mark processing"

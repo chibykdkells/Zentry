@@ -233,6 +233,38 @@ export function useCreateWithdrawalRequest() {
   });
 }
 
+export function useRetryWithdrawalPayout() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      withdrawalRequestId,
+    }: {
+      withdrawalRequestId: string;
+    }) => {
+      const response = await apiClient.post<{
+        message: string;
+        data: { id: string };
+      }>(`/wallet/admin/withdrawals/${withdrawalRequestId}/retry-payout`);
+
+      return response.data;
+    },
+    onSuccess: async (response) => {
+      toast.success(response.message ?? 'Payout re-initiated.');
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ADMIN_WITHDRAWALS_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: MY_WITHDRAWALS_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: ['wallet', 'admin', 'overview'] }),
+      ]);
+    },
+    onError: (error: unknown) => {
+      toast.error(
+        getApiErrorMessage(error, 'Could not retry this payout right now.'),
+      );
+    },
+  });
+}
+
 export function useReviewWithdrawalRequest() {
   const queryClient = useQueryClient();
 

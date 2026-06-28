@@ -23,7 +23,11 @@ import type { Request } from 'express';
 import { PaymentService } from '../../providers/payment/payment.service';
 import { EmailService } from '../../providers/email/email.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { formatNaira, generateTransactionRef, nairaToKobo } from '@zendocx/utils';
+import {
+  formatNaira,
+  generateTransactionRef,
+  nairaToKobo,
+} from '@zendocx/utils';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   GetAdminWalletsQueryDto,
@@ -511,7 +515,7 @@ export class WalletService {
         const amount = item._sum?.amount?.toString() ?? '0';
         const count =
           typeof item._count === 'object' && item._count
-            ? item._count._all ?? 0
+            ? (item._count._all ?? 0)
             : 0;
 
         switch (item.status) {
@@ -1243,9 +1247,13 @@ export class WalletService {
       throw new BadRequestException('Enter a valid withdrawal amount.');
     }
 
-    // 2.99% withdrawal charge — platform retains (2.99% - 1.5%) = 1.49% after FintavaPay fee
-    const feeKobo = BigInt(Math.ceil(Number(amount) * 0.0299));
-    const payoutKobo = amount - feeKobo;
+    // 2.99% withdrawal charge — platform retains (2.99% - 1.5%) = 1.49% after FintavaPay fee.
+    // Bank transfers are whole-naira (no kobo), so floor the payout to the nearest naira and
+    // let the fee absorb the sub-naira remainder — keeps amount = payoutKobo + feeKobo exact
+    // and guarantees the payout can actually be transferred.
+    const rawPayoutKobo = amount - BigInt(Math.ceil(Number(amount) * 0.0299));
+    const payoutKobo = rawPayoutKobo - (rawPayoutKobo % 100n);
+    const feeKobo = amount - payoutKobo;
 
     const result = await this.prisma.$transaction(async (tx) => {
       const wallet = await tx.wallet.findFirst({
@@ -1706,76 +1714,182 @@ export class WalletService {
       ...withdrawalSender,
     });
 
-    // Auto-initiate bank transfer when admin approves
+    // Auto-initiate bank transfer when admin approves.
     if (dto.status === WithdrawalStatus.APPROVED) {
-      const payoutRef = `ZDX-PAYOUT-${result.id.replace(/-/g, '').slice(0, 16).toUpperCase()}`;
-      try {
-        // Transfer payoutKobo (amount minus 2.99% fee). Fall back to amount if legacy record has no payoutKobo.
-        const transferAmount = result.payoutKobo > 0n ? result.payoutKobo : result.amount;
-        const transferResult = await this.paymentService.initiateTransfer({
-          amountKobo: transferAmount,
-          accountNumber: result.accountNumber,
-          bankCode: result.bankCode,
-          accountName: result.accountName,
-          reference: payoutRef,
-          narration: `ZenDocx withdrawal ${result.id}`,
-        });
-
-        // Advance to PROCESSING and store the gateway reference
-        await this.prisma.withdrawalRequest.update({
-          where: { id: result.id },
-          data: {
-            status: WithdrawalStatus.PROCESSING,
-            gatewayRef: transferResult.gatewayRef,
-          },
-        });
-
-        if (transferResult.status === 'SUCCESS') {
-          // Gateway settled immediately — mark COMPLETED
-          await this.prisma.$transaction(async (tx) => {
-            const wallet = await tx.wallet.findUnique({
-              where: { userId: result.user.id },
-              select: { id: true, totalWithdrawn: true },
-            });
-            if (wallet) {
-              await tx.wallet.update({
-                where: { id: wallet.id },
-                data: { totalWithdrawn: { increment: result.amount } },
-              });
-            }
-            await tx.withdrawalRequest.update({
-              where: { id: result.id },
-              data: {
-                status: WithdrawalStatus.COMPLETED,
-                processedAt: new Date(),
-              },
-            });
-            await tx.transaction.updateMany({
-              where: {
-                userId: result.user.id,
-                type: TransactionType.WITHDRAWAL,
-                status: TransactionStatus.PENDING,
-                metadata: { path: ['withdrawalRequestId'], equals: result.id },
-              },
-              data: {
-                status: TransactionStatus.SUCCESS,
-                gatewayRef: transferResult.gatewayRef,
-              },
-            });
-          });
-        }
-      } catch (err) {
-        // Payout initiation failed — keep status as APPROVED for manual retry
-        this.logger.error(
-          `Payout initiation failed for withdrawal ${result.id}: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      }
+      await this.initiateWithdrawalPayout({
+        id: result.id,
+        amount: result.amount,
+        payoutKobo: result.payoutKobo,
+        accountNumber: result.accountNumber,
+        bankCode: result.bankCode,
+        accountName: result.accountName,
+        userId: result.user.id,
+      });
     }
 
     return {
       message: this.getWithdrawalReviewMessage(dto.status),
       data: this.serializeWithdrawalRequest(result),
     };
+  }
+
+  // Sends the actual bank payout for an approved withdrawal. Floors the amount to
+  // whole naira (FintavaPay/bank transfers cannot carry kobo) and advances the
+  // request to PROCESSING — or COMPLETED if the gateway settles instantly. On
+  // failure it records the reason on the request (instead of failing silently) so
+  // an admin can see what happened and retry, and leaves the status at APPROVED.
+  private async initiateWithdrawalPayout(request: {
+    id: string;
+    amount: bigint;
+    payoutKobo: bigint;
+    accountNumber: string;
+    bankCode: string;
+    accountName: string;
+    userId: string;
+  }): Promise<{ ok: boolean; error?: string }> {
+    const payoutRef = `ZDX-PAYOUT-${request.id.replace(/-/g, '').slice(0, 16).toUpperCase()}`;
+    try {
+      // payoutKobo (amount minus fee), floored to whole naira since bank transfers
+      // cannot carry kobo. Fall back to amount for legacy rows without payoutKobo.
+      const rawTransfer =
+        request.payoutKobo > 0n ? request.payoutKobo : request.amount;
+      const transferAmount = rawTransfer - (rawTransfer % 100n);
+      if (transferAmount <= 0n) {
+        throw new Error('Payout rounds to zero naira');
+      }
+
+      const transferResult = await this.paymentService.initiateTransfer({
+        amountKobo: transferAmount,
+        accountNumber: request.accountNumber,
+        bankCode: request.bankCode,
+        accountName: request.accountName,
+        reference: payoutRef,
+        narration: `ZenDocx withdrawal ${request.id}`,
+      });
+
+      // Advance to PROCESSING, store the gateway reference, clear any prior error.
+      await this.prisma.withdrawalRequest.update({
+        where: { id: request.id },
+        data: {
+          status: WithdrawalStatus.PROCESSING,
+          gatewayRef: transferResult.gatewayRef,
+          processorNote: null,
+        },
+      });
+
+      if (transferResult.status === 'SUCCESS') {
+        // Gateway settled immediately — mark COMPLETED.
+        await this.prisma.$transaction(async (tx) => {
+          const wallet = await tx.wallet.findUnique({
+            where: { userId: request.userId },
+            select: { id: true },
+          });
+          if (wallet) {
+            await tx.wallet.update({
+              where: { id: wallet.id },
+              data: { totalWithdrawn: { increment: request.amount } },
+            });
+          }
+          await tx.withdrawalRequest.update({
+            where: { id: request.id },
+            data: {
+              status: WithdrawalStatus.COMPLETED,
+              processedAt: new Date(),
+            },
+          });
+          await tx.transaction.updateMany({
+            where: {
+              userId: request.userId,
+              type: TransactionType.WITHDRAWAL,
+              status: TransactionStatus.PENDING,
+              metadata: { path: ['withdrawalRequestId'], equals: request.id },
+            },
+            data: {
+              status: TransactionStatus.SUCCESS,
+              gatewayRef: transferResult.gatewayRef,
+            },
+          });
+        });
+      }
+
+      return { ok: true };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(
+        `Payout initiation failed for withdrawal ${request.id}: ${message}`,
+      );
+      // Surface the failure on the request instead of leaving it silently stuck.
+      await this.prisma.withdrawalRequest
+        .update({
+          where: { id: request.id },
+          data: { processorNote: `Automated payout failed: ${message}` },
+        })
+        .catch(() => undefined);
+      return { ok: false, error: message };
+    }
+  }
+
+  // Re-attempts the bank payout for a withdrawal that was approved but whose
+  // automated transfer failed (it stays APPROVED). Admin-triggered.
+  async retryWithdrawalPayout(
+    adminUserId: string,
+    withdrawalRequestId: string,
+    tenantId: string | null = null,
+  ) {
+    const request = await this.prisma.withdrawalRequest.findFirst({
+      where: {
+        id: withdrawalRequestId,
+        ...(tenantId ? { tenantId } : {}),
+      },
+      select: {
+        id: true,
+        amount: true,
+        payoutKobo: true,
+        accountNumber: true,
+        bankCode: true,
+        accountName: true,
+        status: true,
+        userId: true,
+      },
+    });
+
+    if (!request) {
+      throw new NotFoundException('Withdrawal request not found.');
+    }
+
+    if (request.status !== WithdrawalStatus.APPROVED) {
+      throw new BadRequestException(
+        'Only an approved withdrawal with a failed payout can be retried.',
+      );
+    }
+
+    const outcome = await this.initiateWithdrawalPayout({
+      id: request.id,
+      amount: request.amount,
+      payoutKobo: request.payoutKobo,
+      accountNumber: request.accountNumber,
+      bankCode: request.bankCode,
+      accountName: request.accountName,
+      userId: request.userId,
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId: adminUserId,
+        action: 'WITHDRAWAL_PAYOUT_RETRIED',
+        entity: 'WithdrawalRequest',
+        entityId: request.id,
+        newValues: { ok: outcome.ok, error: outcome.error ?? null },
+      },
+    });
+
+    if (!outcome.ok) {
+      throw new BadRequestException(
+        `Payout retry failed: ${outcome.error ?? 'unknown error'}`,
+      );
+    }
+
+    return { message: 'Payout re-initiated.', data: { id: request.id } };
   }
 
   async getAdminWallets(
@@ -2018,8 +2132,10 @@ export class WalletService {
       process.env.NODE_ENV === 'development' && checkoutMode === 'sandbox'
         ? {
             success: true,
-            amountKobo: this.getExpectedFundingPaymentKobo(transaction).toString(),
-            gatewayRef: transaction.gatewayRef ?? `sandbox-${transaction.reference}`,
+            amountKobo:
+              this.getExpectedFundingPaymentKobo(transaction).toString(),
+            gatewayRef:
+              transaction.gatewayRef ?? `sandbox-${transaction.reference}`,
             paidAt: null,
             error: null,
           }
@@ -2034,16 +2150,18 @@ export class WalletService {
                 error: null,
               }),
             )
-            .catch((error: unknown): FundingVerificationPreview => ({
-              success: false,
-              amountKobo: null,
-              gatewayRef: null,
-              paidAt: null,
-              error:
-                error instanceof Error
-                  ? error.message
-                  : 'Gateway verification failed.',
-            }));
+            .catch(
+              (error: unknown): FundingVerificationPreview => ({
+                success: false,
+                amountKobo: null,
+                gatewayRef: null,
+                paidAt: null,
+                error:
+                  error instanceof Error
+                    ? error.message
+                    : 'Gateway verification failed.',
+              }),
+            );
 
     if (verification.error) {
       reasons.push(
@@ -2091,11 +2209,13 @@ export class WalletService {
     };
   }
 
-  async applyAdminFundingReconciliation(reference: string, adminUserId: string) {
+  async applyAdminFundingReconciliation(
+    reference: string,
+    adminUserId: string,
+  ) {
     const normalizedReference = reference.trim();
-    const preview = await this.getAdminFundingReconciliationPreview(
-      normalizedReference,
-    );
+    const preview =
+      await this.getAdminFundingReconciliationPreview(normalizedReference);
 
     if (!preview.data.canApply) {
       throw new ConflictException(
@@ -2112,7 +2232,8 @@ export class WalletService {
         ? {
             success: true,
             amountKobo: this.getExpectedFundingPaymentKobo(transaction),
-            gatewayRef: transaction.gatewayRef ?? `sandbox-${transaction.reference}`,
+            gatewayRef:
+              transaction.gatewayRef ?? `sandbox-${transaction.reference}`,
             feeKobo: this.getStoredFundingFeeKobo(transaction),
           }
         : await this.paymentService.verifyPayment(normalizedReference);
@@ -2770,12 +2891,16 @@ export class WalletService {
       });
     }
 
-    let verification: Awaited<ReturnType<typeof this.paymentService.verifyPayment>>;
+    let verification: Awaited<
+      ReturnType<typeof this.paymentService.verifyPayment>
+    >;
     try {
       verification = await this.paymentService.verifyPayment(reference);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`verifyPayment threw for reference ${reference}: ${msg}`);
+      this.logger.warn(
+        `verifyPayment threw for reference ${reference}: ${msg}`,
+      );
       throw new BadRequestException(
         'Payment has not been confirmed yet. Please try again shortly.',
       );
