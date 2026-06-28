@@ -1,4 +1,4 @@
-import { IsEnum, IsInt, IsOptional, Max, Min, ValidateIf } from 'class-validator';
+import { IsEnum, IsInt, Max, Min, ValidateIf } from 'class-validator';
 
 export enum ExtensionReviewAction {
   APPROVE = 'APPROVE',
@@ -9,7 +9,9 @@ export class ReviewExtensionDto {
   @IsEnum(ExtensionReviewAction)
   action: ExtensionReviewAction;
 
-  @ValidateIf((o: ReviewExtensionDto) => o.action === ExtensionReviewAction.APPROVE)
+  @ValidateIf(
+    (o: ReviewExtensionDto) => o.action === ExtensionReviewAction.APPROVE,
+  )
   @IsInt()
   @Min(1)
   @Max(120)

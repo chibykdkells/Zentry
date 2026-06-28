@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+
 import { PaymentGateway, TransactionStatus, TransactionType, UserRole } from '@prisma/client';
 import { WalletService } from './wallet.service';
 

@@ -2,7 +2,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { IStorageProvider, UploadFileInput, UploadFileResult } from '../interfaces';
+import type {
+  IStorageProvider,
+  UploadFileInput,
+  UploadFileResult,
+} from '../interfaces';
 
 @Injectable()
 export class DiskStorageProvider implements IStorageProvider {
@@ -24,7 +28,7 @@ export class DiskStorageProvider implements IStorageProvider {
     );
   }
 
-  async uploadFile(input: UploadFileInput): Promise<UploadFileResult> {
+  uploadFile(input: UploadFileInput): Promise<UploadFileResult> {
     const safeFilename = input.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
     const folder = input.folder.replace(/^\/+|\/+$/g, '');
     const publicId = `${folder}/${Date.now()}-${safeFilename}`;
@@ -33,19 +37,20 @@ export class DiskStorageProvider implements IStorageProvider {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, input.data);
 
-    return {
+    return Promise.resolve({
       publicId,
       url: `${this.baseUrl}/api/v1/static/${publicId}`,
-    };
+    });
   }
 
-  async deleteFile(publicId: string): Promise<void> {
+  deleteFile(publicId: string): Promise<void> {
     const filePath = path.join(this.uploadsDir, publicId);
     try {
       fs.unlinkSync(filePath);
     } catch {
       // file may not exist — ignore
     }
+    return Promise.resolve();
   }
 
   getSignedUrl(publicId: string, _expiresInSeconds: number): string {
