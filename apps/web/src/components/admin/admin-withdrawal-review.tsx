@@ -56,20 +56,28 @@ export function AdminWithdrawalReview() {
       summary
         ? [
             {
-              label: 'Pending review',
-              value: `${formatNaira(summary.pendingAmount)} · ${summary.pendingCount}`,
+              label: 'Pending',
+              amount: summary.pendingAmount,
+              count: summary.pendingCount,
+              gradient: 'from-amber-400 to-orange-500',
             },
             {
               label: 'Approved',
-              value: `${formatNaira(summary.approvedAmount)} · ${summary.approvedCount}`,
+              amount: summary.approvedAmount,
+              count: summary.approvedCount,
+              gradient: 'from-sky-400 to-blue-500',
             },
             {
               label: 'Processing',
-              value: `${formatNaira(summary.processingAmount)} · ${summary.processingCount}`,
+              amount: summary.processingAmount,
+              count: summary.processingCount,
+              gradient: 'from-violet-400 to-purple-500',
             },
             {
               label: 'Completed',
-              value: `${formatNaira(summary.completedAmount)} · ${summary.completedCount}`,
+              amount: summary.completedAmount,
+              count: summary.completedCount,
+              gradient: 'from-emerald-400 to-teal-500',
             },
           ]
         : [],
@@ -77,11 +85,7 @@ export function AdminWithdrawalReview() {
   );
 
   return (
-    <AccountPanel
-      title="Withdrawal payout review"
-      description="Review user withdrawal requests, approve the ones ready for payout, and keep reserved wallet balances in sync with gateway outcomes."
-      contentClassName="space-y-4"
-    >
+    <AccountPanel contentClassName="space-y-5">
       <div className="grid gap-3 lg:grid-cols-[1fr_220px_auto]">
         <label className="space-y-2">
           <span className="block text-sm font-medium text-slate-700">
@@ -146,14 +150,21 @@ export function AdminWithdrawalReview() {
       </div>
 
       {summaryCards.length ? (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
           {summaryCards.map((item) => (
             <div
               key={item.label}
-              className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4"
+              className={`rounded-3xl bg-gradient-to-br ${item.gradient} p-5 text-white shadow-sm`}
             >
-              <p className="text-sm font-semibold text-slate-900">{item.value}</p>
-              <p className="mt-1 text-xs text-slate-500">{item.label}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/80">
+                {item.label}
+              </p>
+              <p className="mt-3 text-2xl font-bold leading-none">
+                {formatNaira(item.amount)}
+              </p>
+              <p className="mt-2 text-xs font-medium text-white/75">
+                {item.count} request{item.count === 1 ? '' : 's'}
+              </p>
             </div>
           ))}
         </div>
@@ -285,9 +296,9 @@ function WithdrawalReviewCard({
   };
 
   return (
-    <article className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
+    <article className="rounded-3xl border border-slate-100 bg-white p-5">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-        <div className="space-y-2">
+        <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-sm font-semibold text-slate-900">
               {request.user.firstName} {request.user.lastName}
@@ -296,21 +307,17 @@ function WithdrawalReviewCard({
               {request.status.replace(/_/g, ' ')}
             </span>
           </div>
-          <p className="text-sm text-slate-500">{request.user.email}</p>
-          <p className="text-sm text-slate-500">
-            {request.bankName} · {request.accountName} · {request.accountNumber}
+          <p className="text-xs text-slate-400">{request.user.email}</p>
+          <p className="text-sm font-medium text-slate-600">
+            {request.bankName} · {request.accountNumber}
           </p>
-          <p className="text-xs text-slate-400">
-            Requested {formatDate(request.createdAt)}
-            {request.processedAt ? ` · Processed ${formatDate(request.processedAt)}` : ''}
-          </p>
+          <p className="text-xs text-slate-400">{formatDate(request.createdAt)}</p>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           <Metric label="Requested" value={formatNaira(request.amount)} />
-          <Metric label="Fee (2.99%)" value={`− ${formatNaira(request.feeKobo)}`} />
-          <Metric label="Payout to user" value={formatNaira(request.payoutKobo)} />
-          <Metric label="Gateway ref" value={request.gatewayRef ?? 'Pending'} />
+          <Metric label="Payout" value={formatNaira(request.payoutKobo)} />
+          <Metric label="Ref" value={request.gatewayRef ?? '—'} />
         </div>
       </div>
 
