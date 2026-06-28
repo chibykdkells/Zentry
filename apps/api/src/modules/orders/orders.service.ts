@@ -54,6 +54,7 @@ import { DELIVERY_DEADLINE_MINUTES } from './delivery-deadline.constants';
 import { AdminDisputeAction, ReviewDisputeDto } from './dto/review-dispute.dto';
 import { ReviewDisputeFinancialFollowUpDto } from './dto/review-dispute-financial-follow-up.dto';
 import { UpdateAdminOrderNotesDto } from './dto/update-admin-order-notes.dto';
+import { ReassignJobDto } from './dto/reassign-job.dto';
 
 type RequiredFieldDefinition = {
   name: string;
@@ -1965,6 +1966,372 @@ export class OrdersService {
     return {
       message: 'All CBT job claim blocks cleared. The job can now be reclaimed by any eligible CBT.',
       data: { orderId },
+    };
+  }
+
+  // Approved CBT centers eligible to take over a given order. Mirrors the
+  // claim-time eligibility rules: a center with no category assignments can take
+  // any job, otherwise it must cover the order's service category. The currently
+  // assigned CBT is excluded — there is nothing to reassign to itself.
+  async getAssignableCbts(orderId: string, tenantId: string | null) {
+    const order = await this.prisma.order.findFirst({
+      where: { id: orderId, ...(tenantId ? { tenantId } : {}) },
+      select: {
+        id: true,
+        assignedCbtId: true,
+        service: { select: { category: { select: { slug: true } } } },
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    const categorySlug = order.service.category.slug;
+
+    const cbts = await this.prisma.user.findMany({
+      where: {
+        role: UserRole.CBT_CENTER,
+        ...(tenantId ? { tenantId } : { tenantId: null }),
+        ...(order.assignedCbtId ? { id: { not: order.assignedCbtId } } : {}),
+        cbtProfile: {
+          approvalStatus: CbtApprovalStatus.APPROVED,
+          OR: [
+            { serviceCategoryAssignments: { none: {} } },
+            {
+              serviceCategoryAssignments: {
+                some: { serviceCategory: { slug: categorySlug } },
+              },
+            },
+          ],
+        },
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        cbtProfile: { select: { centerName: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return {
+      message: 'Assignable CBT centers retrieved',
+      data: cbts.map((cbt) => ({
+        id: cbt.id,
+        firstName: cbt.firstName,
+        lastName: cbt.lastName,
+        email: cbt.email,
+        centerName: cbt.cbtProfile?.centerName ?? null,
+      })),
+    };
+  }
+
+  // Force an active job back into the pool — used when an assigned CBT is stuck
+  // (e.g. a 3rd-party outage) and we can't wait out the delivery deadline. Clears
+  // every block so any eligible CBT (including the stuck one) can re-claim, and
+  // cancels the pending deadline timer so it can't later re-fire on a stale order.
+  async returnJobToPool(
+    adminUserId: string,
+    orderId: string,
+    tenantId: string | null,
+  ) {
+    const order = await this.prisma.order.findFirst({
+      where: { id: orderId, ...(tenantId ? { tenantId } : {}) },
+      select: {
+        id: true,
+        orderNumber: true,
+        status: true,
+        fulfillmentType: true,
+        assignedCbtId: true,
+        tenantId: true,
+        service: { select: { id: true, name: true } },
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    if (order.fulfillmentType !== 'MANUAL') {
+      throw new BadRequestException(
+        'Only manual jobs can be returned to the CBT pool.',
+      );
+    }
+
+    if (
+      order.status !== OrderStatus.ASSIGNED &&
+      order.status !== OrderStatus.IN_PROGRESS &&
+      order.status !== OrderStatus.PENDING
+    ) {
+      throw new ConflictException(
+        'Only an active (pending, assigned, or in-progress) job can be returned to the pool.',
+      );
+    }
+
+    const previousCbtId = order.assignedCbtId;
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.order.update({
+        where: { id: orderId },
+        data: {
+          status: OrderStatus.PENDING,
+          assignedCbtId: null,
+          assignedAt: null,
+          deliveryDeadline: null,
+        },
+      });
+
+      await tx.cbtJobBlock.deleteMany({ where: { orderId } });
+
+      if (previousCbtId) {
+        await tx.notification.create({
+          data: {
+            userId: previousCbtId,
+            orderId,
+            type: NotificationType.JOB_UNASSIGNED,
+            title: 'Job returned to pool',
+            message: `An admin returned ${order.service.name} (${order.orderNumber}) to the job pool.`,
+            metadata: { orderNumber: order.orderNumber },
+          },
+        });
+      }
+
+      await tx.auditLog.create({
+        data: {
+          userId: adminUserId,
+          action: 'ORDER_RETURNED_TO_POOL',
+          entity: 'Order',
+          entityId: orderId,
+          oldValues: { status: order.status, assignedCbtId: previousCbtId },
+          newValues: { status: OrderStatus.PENDING, assignedCbtId: null },
+        },
+      });
+    });
+
+    await this.ordersDeadlineQueueService.cancelDeadline(orderId);
+
+    if (previousCbtId) {
+      this.notificationsService.pushNotificationToUser(previousCbtId, {
+        type: 'JOB_UNASSIGNED',
+        title: 'Job returned to pool',
+        message: `An admin returned ${order.service.name} to the job pool.`,
+        orderId,
+      });
+    }
+
+    // Put the job back on the live pool feed for every eligible CBT.
+    this.notificationsService.broadcastNewJob({
+      orderId,
+      serviceId: order.service.id,
+      serviceName: order.service.name,
+      tenantId: order.tenantId ?? null,
+    });
+
+    const refreshed = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: orderDetailSelect,
+    });
+
+    return {
+      message: 'Job returned to the pool. Any eligible CBT can now claim it.',
+      data: refreshed ? this.serializeOrderDetail(refreshed) : { orderId },
+    };
+  }
+
+  // Hand an order directly to a chosen approved CBT — for when ops already knows
+  // who should take over. Works at any time, including before the current
+  // delivery window expires, and reschedules the deadline timer to the new CBT.
+  async reassignJob(
+    adminUserId: string,
+    orderId: string,
+    dto: ReassignJobDto,
+    tenantId: string | null,
+  ) {
+    const targetCbtId = dto.cbtId;
+
+    const order = await this.prisma.order.findFirst({
+      where: { id: orderId, ...(tenantId ? { tenantId } : {}) },
+      select: {
+        id: true,
+        orderNumber: true,
+        status: true,
+        fulfillmentType: true,
+        assignedCbtId: true,
+        tenantId: true,
+        requesterId: true,
+        service: {
+          select: {
+            id: true,
+            name: true,
+            category: { select: { slug: true } },
+          },
+        },
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    if (order.fulfillmentType !== 'MANUAL') {
+      throw new BadRequestException(
+        'Only manual jobs can be assigned to a CBT center.',
+      );
+    }
+
+    // Terminal and financial states must not be re-opened — that would risk
+    // double-fulfilment or escrow already in flight.
+    const reassignableStatuses: OrderStatus[] = [
+      OrderStatus.PENDING,
+      OrderStatus.ASSIGNED,
+      OrderStatus.IN_PROGRESS,
+    ];
+    if (!reassignableStatuses.includes(order.status)) {
+      throw new ConflictException(
+        'This order can no longer be reassigned to a CBT center.',
+      );
+    }
+
+    if (order.assignedCbtId === targetCbtId) {
+      throw new ConflictException(
+        'This job is already assigned to that CBT center.',
+      );
+    }
+
+    // Validate the target is an approved CBT in this tenant and that the order's
+    // service category falls within the centers' assigned categories.
+    const targetCbt = await this.ensureApprovedCbtUser(targetCbtId, tenantId);
+    const supportedCategorySlugs =
+      this.getSupportedCbtServiceCategorySlugs(targetCbt);
+    if (
+      supportedCategorySlugs.length > 0 &&
+      !supportedCategorySlugs.includes(order.service.category.slug)
+    ) {
+      throw new ForbiddenException(
+        'This job is outside the service categories assigned to that CBT center.',
+      );
+    }
+
+    const centerName = targetCbt.cbtProfile?.centerName ?? 'the CBT center';
+    const previousCbtId = order.assignedCbtId;
+    const deliveryWindowMinutes = await this.getCbtDeliveryWindowMinutes();
+    const assignedAt = new Date();
+    const deliveryDeadline = new Date(
+      assignedAt.getTime() + deliveryWindowMinutes * 60 * 1000,
+    );
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.order.update({
+        where: { id: orderId },
+        data: {
+          assignedCbtId: targetCbtId,
+          assignedAt,
+          status: OrderStatus.ASSIGNED,
+          deliveryDeadline,
+        },
+      });
+
+      // The new owner must never be barred from the job we just handed them.
+      await tx.cbtJobBlock.deleteMany({
+        where: { orderId, cbtId: targetCbtId },
+      });
+
+      await tx.notification.create({
+        data: {
+          userId: targetCbtId,
+          orderId,
+          type: NotificationType.ORDER_ASSIGNED,
+          title: 'Job assigned to you',
+          message: `An admin assigned ${order.service.name} (${order.orderNumber}) to you. You have ${deliveryWindowMinutes} minutes to deliver.`,
+          metadata: {
+            orderNumber: order.orderNumber,
+            deliveryDeadline: deliveryDeadline.toISOString(),
+          },
+        },
+      });
+
+      if (previousCbtId && previousCbtId !== targetCbtId) {
+        await tx.notification.create({
+          data: {
+            userId: previousCbtId,
+            orderId,
+            type: NotificationType.JOB_UNASSIGNED,
+            title: 'Job reassigned',
+            message: `An admin reassigned ${order.service.name} (${order.orderNumber}) to another CBT center.`,
+            metadata: { orderNumber: order.orderNumber },
+          },
+        });
+      }
+
+      await tx.notification.create({
+        data: {
+          userId: order.requesterId,
+          orderId,
+          type: NotificationType.ORDER_ASSIGNED,
+          title: 'Your order has been assigned',
+          message: `${order.service.name} is now assigned to ${centerName}.`,
+          metadata: { orderNumber: order.orderNumber, assignedCbtId: targetCbtId },
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId: adminUserId,
+          action: 'ORDER_REASSIGNED',
+          entity: 'Order',
+          entityId: orderId,
+          oldValues: { status: order.status, assignedCbtId: previousCbtId },
+          newValues: {
+            status: OrderStatus.ASSIGNED,
+            assignedCbtId: targetCbtId,
+            assignedAt: assignedAt.toISOString(),
+            deliveryDeadline: deliveryDeadline.toISOString(),
+          },
+        },
+      });
+    });
+
+    // Re-arm the delivery deadline for the new owner; drop any timer the prior
+    // assignment left behind.
+    await this.ordersDeadlineQueueService.cancelDeadline(orderId);
+    await this.ordersDeadlineQueueService.scheduleDeadline(
+      orderId,
+      deliveryDeadline,
+    );
+
+    this.notificationsService.pushNotificationToUser(targetCbtId, {
+      type: 'ORDER_ASSIGNED',
+      title: 'Job assigned to you',
+      message: `An admin assigned ${order.service.name} to you.`,
+      orderId,
+    });
+    if (previousCbtId && previousCbtId !== targetCbtId) {
+      this.notificationsService.pushNotificationToUser(previousCbtId, {
+        type: 'JOB_UNASSIGNED',
+        title: 'Job reassigned',
+        message: `An admin reassigned ${order.service.name} to another CBT center.`,
+        orderId,
+      });
+    }
+    // Remove it from the live pool feed for everyone else.
+    this.notificationsService.broadcastClaimedJob({
+      orderId,
+      serviceId: order.service.id,
+      serviceName: order.service.name,
+      tenantId: order.tenantId ?? null,
+      assignedCbtId: targetCbtId,
+    });
+
+    const refreshed = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: orderDetailSelect,
+    });
+
+    return {
+      message: `Job assigned to ${centerName}.`,
+      data: refreshed ? this.serializeOrderDetail(refreshed) : { orderId },
     };
   }
 

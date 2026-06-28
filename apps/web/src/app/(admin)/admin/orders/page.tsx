@@ -28,6 +28,9 @@ import {
   useAdminOrderDetail,
   useAdminOrderReleasePreview,
   useAdminOrders,
+  useAssignableCbts,
+  useReassignJob,
+  useReturnJobToPool,
   useUpdateAdminOrderNotes,
   useUnblockCbtJobClaim,
   useUnblockAllCbtJobClaims,
@@ -82,6 +85,68 @@ export default function AdminOrdersPage() {
   } = useAdminOrderDetail(effectiveSelectedOrderId);
   const unblock = useUnblockCbtJobClaim();
   const unblockAll = useUnblockAllCbtJobClaims();
+  const returnToPool = useReturnJobToPool();
+  const reassign = useReassignJob();
+  const [isReassignOpen, setIsReassignOpen] = useState(false);
+  const [selectedReassignCbtId, setSelectedReassignCbtId] = useState('');
+
+  const detailIsManual = detail?.fulfillmentType === FulfillmentType.MANUAL;
+  const detailIsReassignable =
+    detailIsManual &&
+    detail != null &&
+    (detail.status === OrderStatus.PENDING ||
+      detail.status === OrderStatus.ASSIGNED ||
+      detail.status === OrderStatus.IN_PROGRESS);
+  const detailIsInPool = detail?.status === OrderStatus.PENDING;
+
+  const { cbts: assignableCbts, loading: assignableLoading } = useAssignableCbts(
+    detailIsReassignable ? (detail?.id ?? null) : null,
+    isReassignOpen,
+  );
+
+  const handleReturnToPool = async () => {
+    if (!detail) return;
+
+    const confirmMessage =
+      detail.status === OrderStatus.PENDING
+        ? 'This job is already in the pool. This will clear any remaining CBT blocks so every eligible CBT can claim it. Continue?'
+        : `This will pull ${detail.orderNumber} away from ${
+            detail.assignedCbt
+              ? `${detail.assignedCbt.firstName} ${detail.assignedCbt.lastName}`
+              : 'the assigned CBT'
+          }, cancel the delivery deadline, and return it to the pool for any eligible CBT. Continue?`;
+
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      await returnToPool.mutateAsync({ orderId: detail.id });
+      toast.success('Job returned to the pool. Any eligible CBT can now claim it.');
+      reloadDetail();
+      reload();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Could not return this job to the pool.'));
+    }
+  };
+
+  const handleReassign = async () => {
+    if (!detail || !selectedReassignCbtId) return;
+
+    try {
+      await reassign.mutateAsync({
+        orderId: detail.id,
+        cbtId: selectedReassignCbtId,
+      });
+      toast.success('Job reassigned to the selected CBT center.');
+      setIsReassignOpen(false);
+      setSelectedReassignCbtId('');
+      reloadDetail();
+      reload();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Could not reassign this job.'));
+    }
+  };
 
   const handleUnblock = async (cbtId: string) => {
     if (!detail) return;
@@ -158,7 +223,7 @@ export default function AdminOrdersPage() {
 
   const inspectionContent = (
     <>
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#0D1B3E]/55">
             Inspection workspace
@@ -170,11 +235,27 @@ export default function AdminOrdersPage() {
             Full request context for the selected queue item.
           </p>
         </div>
-        {detail ? (
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-            {detail.orderNumber}
-          </span>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-3">
+          {detail ? (
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+              {detail.orderNumber}
+            </span>
+          ) : null}
+          {detail?.blockedCbtClaimsCount > 0 ? (
+            <button
+              type="button"
+              onClick={() => void handleUnblockAll()}
+              disabled={unblockAll.isPending}
+              className="inline-flex items-center justify-center rounded-2xl border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {unblockAll.isPending ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                'Reset all blocked claims'
+              )}
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {detailLoading ? (
@@ -276,6 +357,98 @@ export default function AdminOrdersPage() {
               />
             </div>
           </div>
+
+          {detailIsReassignable ? (
+            <div className="rounded-3xl border border-amber-100 bg-amber-50/60 p-5">
+              <h3 className="text-sm font-semibold text-amber-900">
+                Job recovery
+              </h3>
+              <p className="mt-1 text-sm text-amber-700">
+                {detailIsInPool
+                  ? 'This job is in the pool. Hand it directly to a specific CBT center, or clear any lingering blocks.'
+                  : 'If the assigned CBT is stuck (e.g. a third-party outage), return the job to the pool for anyone to claim, or hand it directly to a specific CBT center.'}
+              </p>
+              <div className="mt-4 flex flex-wrap gap-3">
+                {!detailIsInPool ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleReturnToPool()}
+                    disabled={returnToPool.isPending}
+                    className="inline-flex items-center justify-center rounded-2xl border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {returnToPool.isPending ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      'Return to pool'
+                    )}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedReassignCbtId('');
+                    setIsReassignOpen((open) => !open);
+                  }}
+                  className="inline-flex items-center justify-center rounded-2xl border border-amber-300 bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-600"
+                >
+                  {isReassignOpen ? 'Cancel reassign' : 'Reassign to CBT'}
+                </button>
+              </div>
+
+              {isReassignOpen ? (
+                <div className="mt-4 rounded-2xl border border-amber-200 bg-white p-4">
+                  <label
+                    htmlFor="reassign-cbt"
+                    className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-700"
+                  >
+                    Assign to CBT center
+                  </label>
+                  {assignableLoading ? (
+                    <div className="mt-3 flex items-center gap-2 text-sm text-slate-500">
+                      <Loader2 size={16} className="animate-spin" />
+                      Loading eligible CBT centers…
+                    </div>
+                  ) : assignableCbts.length === 0 ? (
+                    <p className="mt-3 text-sm text-slate-500">
+                      No other approved CBT center covers this service category.
+                    </p>
+                  ) : (
+                    <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+                      <select
+                        id="reassign-cbt"
+                        value={selectedReassignCbtId}
+                        onChange={(event) =>
+                          setSelectedReassignCbtId(event.target.value)
+                        }
+                        className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 focus:border-amber-400 focus:outline-none"
+                      >
+                        <option value="">Select a CBT center…</option>
+                        {assignableCbts.map((cbt) => (
+                          <option key={cbt.id} value={cbt.id}>
+                            {cbt.centerName ?? `${cbt.firstName} ${cbt.lastName}`}
+                            {' — '}
+                            {cbt.email}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => void handleReassign()}
+                        disabled={!selectedReassignCbtId || reassign.isPending}
+                        className="inline-flex items-center justify-center rounded-2xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {reassign.isPending ? (
+                          <Loader2 size={16} className="animate-spin" />
+                        ) : (
+                          'Assign'
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
           {detail.blockedCbtClaimsCount > 0 ? (
             <div className="rounded-3xl border border-rose-100 bg-rose-50/70 p-5">

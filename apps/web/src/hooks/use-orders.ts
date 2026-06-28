@@ -462,3 +462,80 @@ export function useUnblockAllCbtJobClaims() {
     },
   });
 }
+
+export interface AssignableCbt {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  centerName: string | null;
+}
+
+export function useAssignableCbts(orderId: string | null, enabled = true) {
+  const query = useQuery({
+    queryKey: ['orders', 'admin', 'assignable-cbts', orderId],
+    enabled: Boolean(orderId) && enabled,
+    queryFn: async () => {
+      const response = await apiClient.get<{
+        message: string;
+        data: AssignableCbt[];
+      }>(`/orders/admin/${orderId}/assignable-cbts`);
+      return response.data.data;
+    },
+  });
+
+  return {
+    cbts: query.data ?? [],
+    loading: query.isLoading,
+    error: query.error ? getApiErrorMessage(query.error) : null,
+  };
+}
+
+export function useReturnJobToPool() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ orderId }: { orderId: string }) => {
+      const response = await apiClient.patch<{
+        message: string;
+        data: OrderDetail | { orderId: string };
+      }>(`/orders/admin/${orderId}/return-to-pool`);
+      return response.data;
+    },
+    onSuccess: async (_response, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['orders'] });
+      await queryClient.invalidateQueries({
+        queryKey: ['orders', 'admin', 'detail', variables.orderId],
+      });
+    },
+  });
+}
+
+export function useReassignJob() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      orderId,
+      cbtId,
+    }: {
+      orderId: string;
+      cbtId: string;
+    }) => {
+      const response = await apiClient.patch<{
+        message: string;
+        data: OrderDetail | { orderId: string };
+      }>(`/orders/admin/${orderId}/reassign`, { cbtId });
+      return response.data;
+    },
+    onSuccess: async (_response, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['orders'] });
+      await queryClient.invalidateQueries({
+        queryKey: ['orders', 'admin', 'detail', variables.orderId],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ['orders', 'admin', 'assignable-cbts', variables.orderId],
+      });
+    },
+  });
+}

@@ -8419,3 +8419,63 @@ Fix: changed `min-h-screen flex flex-col` → `flex flex-col min-h-screen md:h-s
 - `app.zendocx.net` CNAME record in Cloudflare still pending
 - Manual browser verification: silent refresh on 401 and PWA install flow
 - Load testing (500 concurrent users) deferred
+
+---
+
+## Session 2026-06-28 — Admin job recovery: return-to-pool & direct reassign
+
+**Phase:** Phase 10
+**AI Assistant:** Claude Opus 4.8 (Claude Code)
+
+### What Was Done
+
+Added two admin/tenant-admin recovery actions on the order (job) detail view so a
+stuck CBT job (e.g. a third-party outage) no longer has to wait out the delivery
+deadline:
+
+1. **Return to pool** — force an active `ASSIGNED`/`IN_PROGRESS` (or `PENDING`) manual
+   job back to the pool: clears `assignedCbtId`/`assignedAt`/`deliveryDeadline`, deletes
+   all `CbtJobBlock`s for the order, cancels the Bull delivery-deadline timer, notifies the
+   previously-assigned CBT, and re-broadcasts the job to the live CBT pool feed.
+2. **Reassign to a specific CBT** — hand the job directly to a chosen approved CBT center.
+   Works any time (including before the deadline expires). Validates the target via
+   `ensureApprovedCbtUser` + service-category match (mirrors `claimCbtJob`), sets a fresh
+   `deliveryDeadline`, reschedules the deadline timer, clears that CBT's block, notifies
+   old + new CBT and the requester, and removes the job from the pool feed.
+
+Both write `AuditLog` entries (`ORDER_RETURNED_TO_POOL`, `ORDER_REASSIGNED`) and never
+touch escrow. A new `getAssignableCbts` endpoint backs the reassign picker (approved
+CBT centers whose categories cover the order, current assignee excluded).
+
+Reused existing `NotificationType` values (`JOB_UNASSIGNED`, `ORDER_ASSIGNED`) — no schema
+migration required.
+
+### Files Created / Modified
+
+- `apps/api/src/modules/orders/dto/reassign-job.dto.ts` — NEW (`ReassignJobDto { cbtId }`)
+- `apps/api/src/modules/orders/orders.service.ts` — `getAssignableCbts`, `returnJobToPool`, `reassignJob`
+- `apps/api/src/modules/orders/orders.controller.ts` — `GET admin/:orderId/assignable-cbts`, `PATCH admin/:orderId/return-to-pool`, `PATCH admin/:orderId/reassign`
+- `apps/web/src/hooks/use-orders.ts` — `useAssignableCbts`, `useReturnJobToPool`, `useReassignJob`, `AssignableCbt`
+- `apps/web/src/app/(admin)/admin/orders/page.tsx` — "Job recovery" actions card in inspection panel
+- `apps/web/src/app/(tenant-admin)/tenant/orders/page.tsx` — "Job recovery" actions card in detail modal
+
+### Decisions Made
+
+- Returning a job to the pool deletes **all** blocks for that order (the stuck CBT included),
+  matching the existing "missed deadline no longer blocks" model.
+- Reassignment is restricted to `CBT_CENTER` accounts (not individual staff) for picker simplicity.
+- No new `NotificationType` value — reused existing ones to avoid a Prisma enum migration.
+
+### Phase Checklist Updates
+
+- [x] Phase 10: Admin/tenant-admin manual job recovery (return-to-pool + direct reassign)
+
+### Blockers / Notes for Next Session
+
+- Sandbox dep install is incomplete (`@prisma/engines` missing, Prisma client not generated,
+  `pnpm` not on PATH) — a full `typecheck`/`build` could not be run this session. Run
+  `pnpm install && pnpm --filter @zendocx/api db:generate` then `pnpm --filter @zendocx/api typecheck`
+  and `pnpm --filter web typecheck` to verify before deploy.
+- Add unit specs for `returnJobToPool` / `reassignJob` in `orders.service.spec.ts`
+  (claim-block clearing, deadline reschedule, audit log, escrow untouched).
+- Untracked debug files `check-jobs.sql` / `verify-jobs.js` remain in repo root (left as-is).

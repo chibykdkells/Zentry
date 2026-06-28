@@ -33,6 +33,7 @@ import { GetMyDisputesQueryDto } from './dto/get-my-disputes.dto';
 import { ReviewDisputeDto } from './dto/review-dispute.dto';
 import { ReviewDisputeFinancialFollowUpDto } from './dto/review-dispute-financial-follow-up.dto';
 import { UpdateAdminOrderNotesDto } from './dto/update-admin-order-notes.dto';
+import { ReassignJobDto } from './dto/reassign-job.dto';
 import { RequestExtensionDto } from './dto/request-extension.dto';
 import { ReviewExtensionDto } from './dto/review-extension.dto';
 import { OrdersService, UploadedDocumentFile } from './orders.service';
@@ -197,6 +198,43 @@ export class OrdersController {
       user.sub,
       orderId,
       cbtId,
+      user.tenantId,
+    );
+  }
+
+  @Roles(UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN)
+  @Get('admin/:orderId/assignable-cbts')
+  getAssignableCbts(
+    @CurrentUser() user: JwtUser,
+    @Param('orderId') orderId: string,
+  ) {
+    return this.ordersService.getAssignableCbts(orderId, user.tenantId);
+  }
+
+  @Roles(UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN)
+  @Patch('admin/:orderId/return-to-pool')
+  returnJobToPool(
+    @CurrentUser() user: JwtUser,
+    @Param('orderId') orderId: string,
+  ) {
+    return this.ordersService.returnJobToPool(
+      user.sub,
+      orderId,
+      user.tenantId,
+    );
+  }
+
+  @Roles(UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN)
+  @Patch('admin/:orderId/reassign')
+  reassignJob(
+    @CurrentUser() user: JwtUser,
+    @Param('orderId') orderId: string,
+    @Body() dto: ReassignJobDto,
+  ) {
+    return this.ordersService.reassignJob(
+      user.sub,
+      orderId,
+      dto,
       user.tenantId,
     );
   }

@@ -169,10 +169,14 @@ describe('OrdersService', () => {
     user: {
       findFirst: jest.Mock;
       findUnique: jest.Mock;
+      findMany: jest.Mock;
     };
     service: {
       findFirst: jest.Mock;
       findMany: jest.Mock;
+    };
+    systemConfig: {
+      findUnique: jest.Mock;
     };
     order: {
       count: jest.Mock;
@@ -229,10 +233,14 @@ describe('OrdersService', () => {
       user: {
         findFirst: jest.fn(),
         findUnique: jest.fn(),
+        findMany: jest.fn(),
       },
       service: {
         findFirst: jest.fn(),
         findMany: jest.fn(),
+      },
+      systemConfig: {
+        findUnique: jest.fn().mockResolvedValue(null),
       },
       order: {
         count: jest.fn(),
@@ -1427,5 +1435,186 @@ describe('OrdersService', () => {
       ordersReleaseQueueService.scheduleReleaseForOrder,
     ).toHaveBeenCalledWith('order-1');
     expect(result.message).toBe('Dispute resolved in favor of the CBT center.');
+  });
+
+  describe('admin job recovery', () => {
+    it('returns a stuck job to the pool, clears all blocks, and cancels the deadline timer', async () => {
+      prisma.order.findFirst.mockResolvedValue({
+        id: 'order-1',
+        orderNumber: 'ORD-1001',
+        status: OrderStatus.ASSIGNED,
+        fulfillmentType: FulfillmentType.MANUAL,
+        assignedCbtId: 'cbt-1',
+        tenantId: 'tenant-1',
+        service: { id: 'service-1', name: 'Identity Validation' },
+      });
+
+      const tx = {
+        order: { update: jest.fn().mockResolvedValue(undefined) },
+        cbtJobBlock: { deleteMany: jest.fn().mockResolvedValue({ count: 1 }) },
+        notification: { create: jest.fn().mockResolvedValue(undefined) },
+        auditLog: { create: jest.fn().mockResolvedValue(undefined) },
+      };
+      prisma.$transaction.mockImplementation(
+        async (callback: (client: typeof tx) => Promise<unknown>) =>
+          callback(tx),
+      );
+      prisma.order.findUnique.mockResolvedValue(buildOrderDetailRecord());
+
+      await service.returnJobToPool('admin-1', 'order-1', 'tenant-1');
+
+      expect(tx.order.update).toHaveBeenCalledWith({
+        where: { id: 'order-1' },
+        data: {
+          status: OrderStatus.PENDING,
+          assignedCbtId: null,
+          assignedAt: null,
+          deliveryDeadline: null,
+        },
+      });
+      expect(tx.cbtJobBlock.deleteMany).toHaveBeenCalledWith({
+        where: { orderId: 'order-1' },
+      });
+      expect(tx.auditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ action: 'ORDER_RETURNED_TO_POOL' }),
+        }),
+      );
+      expect(ordersDeadlineQueueService.cancelDeadline).toHaveBeenCalledWith(
+        'order-1',
+      );
+      expect(notificationsService.broadcastNewJob).toHaveBeenCalledWith({
+        orderId: 'order-1',
+        serviceId: 'service-1',
+        serviceName: 'Identity Validation',
+        tenantId: 'tenant-1',
+      });
+    });
+
+    it('reassigns a job to a chosen CBT and reschedules the delivery deadline', async () => {
+      prisma.order.findFirst.mockResolvedValue({
+        id: 'order-1',
+        orderNumber: 'ORD-1001',
+        status: OrderStatus.ASSIGNED,
+        fulfillmentType: FulfillmentType.MANUAL,
+        assignedCbtId: 'cbt-old',
+        tenantId: 'tenant-1',
+        requesterId: 'user-1',
+        service: {
+          id: 'service-1',
+          name: 'Identity Validation',
+          category: { slug: 'identity-services' },
+        },
+      });
+      prisma.user.findFirst.mockResolvedValue(
+        buildApprovedCbtUser(['identity-services']),
+      );
+
+      const tx = {
+        order: { update: jest.fn().mockResolvedValue(undefined) },
+        cbtJobBlock: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+        notification: { create: jest.fn().mockResolvedValue(undefined) },
+        auditLog: { create: jest.fn().mockResolvedValue(undefined) },
+      };
+      prisma.$transaction.mockImplementation(
+        async (callback: (client: typeof tx) => Promise<unknown>) =>
+          callback(tx),
+      );
+      prisma.order.findUnique.mockResolvedValue(buildOrderDetailRecord());
+
+      await service.reassignJob(
+        'admin-1',
+        'order-1',
+        { cbtId: 'cbt-1' },
+        'tenant-1',
+      );
+
+      expect(tx.order.update).toHaveBeenCalledWith({
+        where: { id: 'order-1' },
+        data: expect.objectContaining({
+          assignedCbtId: 'cbt-1',
+          status: OrderStatus.ASSIGNED,
+          deliveryDeadline: expect.any(Date),
+        }),
+      });
+      // The new owner must never be left blocked from the job we just handed them.
+      expect(tx.cbtJobBlock.deleteMany).toHaveBeenCalledWith({
+        where: { orderId: 'order-1', cbtId: 'cbt-1' },
+      });
+      expect(ordersDeadlineQueueService.cancelDeadline).toHaveBeenCalledWith(
+        'order-1',
+      );
+      expect(ordersDeadlineQueueService.scheduleDeadline).toHaveBeenCalledWith(
+        'order-1',
+        expect.any(Date),
+      );
+      expect(notificationsService.broadcastClaimedJob).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderId: 'order-1',
+          assignedCbtId: 'cbt-1',
+        }),
+      );
+    });
+
+    it('rejects reassignment when the order falls outside the target CBT categories', async () => {
+      prisma.order.findFirst.mockResolvedValue({
+        id: 'order-1',
+        orderNumber: 'ORD-1001',
+        status: OrderStatus.ASSIGNED,
+        fulfillmentType: FulfillmentType.MANUAL,
+        assignedCbtId: 'cbt-old',
+        tenantId: 'tenant-1',
+        requesterId: 'user-1',
+        service: {
+          id: 'service-1',
+          name: 'Identity Validation',
+          category: { slug: 'identity-services' },
+        },
+      });
+      prisma.user.findFirst.mockResolvedValue(
+        buildApprovedCbtUser(['jamb-services']),
+      );
+
+      await expect(
+        service.reassignJob('admin-1', 'order-1', { cbtId: 'cbt-1' }, 'tenant-1'),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('lists approved CBT centers eligible for a job and excludes the current assignee', async () => {
+      prisma.order.findFirst.mockResolvedValue({
+        id: 'order-1',
+        assignedCbtId: 'cbt-1',
+        service: { category: { slug: 'identity-services' } },
+      });
+      prisma.user.findMany.mockResolvedValue([
+        {
+          id: 'cbt-2',
+          firstName: 'Second',
+          lastName: 'Center',
+          email: 'second@example.com',
+          cbtProfile: { centerName: 'Second CBT' },
+        },
+      ]);
+
+      const result = await service.getAssignableCbts('order-1', 'tenant-1');
+
+      expect(prisma.user.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            role: UserRole.CBT_CENTER,
+            id: { not: 'cbt-1' },
+          }),
+        }),
+      );
+      expect(result.data).toEqual([
+        {
+          id: 'cbt-2',
+          firstName: 'Second',
+          lastName: 'Center',
+          email: 'second@example.com',
+          centerName: 'Second CBT',
+        },
+      ]);
+    });
   });
 });
