@@ -32,7 +32,10 @@ import { OrdersDeadlineQueueService } from './orders-deadline-queue.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { RequestExtensionDto } from './dto/request-extension.dto';
-import { ReviewExtensionDto } from './dto/review-extension.dto';
+import {
+  ExtensionReviewAction,
+  ReviewExtensionDto,
+} from './dto/review-extension.dto';
 import { CompleteCbtJobDto } from './dto/complete-cbt-job.dto';
 import { CreateDisputeDto } from './dto/create-dispute.dto';
 import { GetAdminDisputesQueryDto } from './dto/get-admin-disputes.dto';
@@ -3236,7 +3239,7 @@ export class OrdersService {
 
     const now = new Date();
 
-    if (dto.action === 'APPROVE') {
+    if (dto.action === ExtensionReviewAction.APPROVE) {
       const additionalMs = (dto.additionalMinutes ?? 5) * 60 * 1000;
       const currentDeadline = order.deliveryDeadline ?? now;
       const newDeadline = new Date(
