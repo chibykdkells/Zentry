@@ -241,7 +241,7 @@ export default function AdminOrdersPage() {
               {detail.orderNumber}
             </span>
           ) : null}
-          {detail?.blockedCbtClaimsCount > 0 ? (
+          {(detail?.blockedCbtClaimsCount ?? 0) > 0 ? (
             <button
               type="button"
               onClick={() => void handleUnblockAll()}

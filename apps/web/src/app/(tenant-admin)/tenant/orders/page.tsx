@@ -298,7 +298,7 @@ function OrderDetailPanel({ orderId, onClose }: { orderId: string; onClose: () =
               )}>
                 {String(order.status).replace(/_/g, ' ')}
               </span>
-              {(order as unknown as { blockedCbtClaimsCount?: number }).blockedCbtClaimsCount > 0 ? (
+              {((order as unknown as { blockedCbtClaimsCount?: number }).blockedCbtClaimsCount ?? 0) > 0 ? (
                 <button
                   type="button"
                   onClick={() => void handleUnblockAll()}
@@ -460,7 +460,7 @@ function OrderDetailPanel({ orderId, onClose }: { orderId: string; onClose: () =
             </div>
           ) : null}
 
-          {(order as unknown as { blockedCbtClaimsCount?: number }).blockedCbtClaimsCount > 0 ? (
+          {((order as unknown as { blockedCbtClaimsCount?: number }).blockedCbtClaimsCount ?? 0) > 0 ? (
             <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4 space-y-3">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-2">
@@ -483,7 +483,7 @@ function OrderDetailPanel({ orderId, onClose }: { orderId: string; onClose: () =
               <p className="text-sm text-rose-700">
                 These CBTs are currently blocked from reclaiming this job. Resetting a block allows them to try again once the order is available.
               </p>
-              {(order as unknown as { blockedCbtClaims?: Array<{ cbtId: string; reason: string; createdAt: string }> }).blockedCbtClaims.map((blocked) => (
+              {(order as unknown as { blockedCbtClaims?: Array<{ cbtId: string; reason: string; createdAt: string }> }).blockedCbtClaims?.map((blocked) => (
                 <div key={blocked.cbtId} className="rounded-2xl border border-rose-200 bg-white px-4 py-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
