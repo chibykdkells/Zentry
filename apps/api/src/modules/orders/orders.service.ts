@@ -641,7 +641,11 @@ export class OrdersService {
   ) {}
 
   private readonly maxUploadSizeBytes = 5 * 1024 * 1024;
-  private readonly resultFileAccessTtlSeconds = 15 * 60;
+  // Result-file access links are HMAC-signed, order-scoped, and minted fresh on
+  // every order-detail fetch. The window must outlast a normal browsing session
+  // (and any cached detail response), or users hit "link has expired" before
+  // they click. 15 min was far too short; 7 days is the tunable balance.
+  private readonly resultFileAccessTtlSeconds = 7 * 24 * 60 * 60;
   private readonly allowedDocumentMimeTypes = new Set([
     'application/pdf',
     'image/jpeg',
