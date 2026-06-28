@@ -484,12 +484,15 @@ function OrderDetailPanel({ orderId, onClose }: { orderId: string; onClose: () =
               <p className="text-sm text-rose-700">
                 These CBTs are currently blocked from reclaiming this job. Resetting a block allows them to try again once the order is available.
               </p>
-              {(order as unknown as { blockedCbtClaims?: Array<{ cbtId: string; reason: string; createdAt: string }> }).blockedCbtClaims?.map((blocked) => (
+              {(order as unknown as { blockedCbtClaims?: Array<{ cbtId: string; cbtName: string | null; reason: string; createdAt: string }> }).blockedCbtClaims?.map((blocked) => (
                 <div key={blocked.cbtId} className="rounded-2xl border border-rose-200 bg-white px-4 py-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <p className="text-sm font-semibold text-slate-900">CBT {blocked.cbtId}</p>
+                      <p className="text-sm font-semibold text-slate-900">{blocked.cbtName ?? `CBT ${blocked.cbtId}`}</p>
                       <p className="mt-1 text-sm text-slate-500">Reason: {blocked.reason}</p>
+                      {blocked.cbtName ? (
+                        <p className="mt-0.5 font-mono text-[10px] text-slate-300">{blocked.cbtId}</p>
+                      ) : null}
                       <p className="mt-1 text-xs uppercase tracking-[0.14em] text-slate-400">{formatDate(blocked.createdAt)}</p>
                     </div>
                     <button

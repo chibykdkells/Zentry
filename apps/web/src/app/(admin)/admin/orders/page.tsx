@@ -489,11 +489,16 @@ export default function AdminOrdersPage() {
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <p className="text-sm font-semibold text-slate-900">
-                          CBT {blocked.cbtId}
+                          {blocked.cbtName ?? `CBT ${blocked.cbtId}`}
                         </p>
                         <p className="mt-1 text-sm text-slate-500">
                           Reason: {blocked.reason}
                         </p>
+                        {blocked.cbtName ? (
+                          <p className="mt-0.5 font-mono text-[10px] text-slate-300">
+                            {blocked.cbtId}
+                          </p>
+                        ) : null}
                         <p className="mt-1 text-xs uppercase tracking-[0.14em] text-slate-400">
                           {formatDate(blocked.createdAt)}
                         </p>

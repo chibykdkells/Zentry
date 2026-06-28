@@ -78,7 +78,12 @@ export interface OrderDetail extends OrderListItem {
   providerResponse: Record<string, unknown> | null;
   cbtNotes: string | null;
   adminNotes: string | null;
-  blockedCbtClaims: Array<{ cbtId: string; reason: string; createdAt: string }>;
+  blockedCbtClaims: Array<{
+    cbtId: string;
+    cbtName: string | null;
+    reason: string;
+    createdAt: string;
+  }>;
   blockedCbtClaimsCount: number;
   timeExtensionRequests: Array<{ id: string; status: string; createdAt: string }> | null;
   state: {

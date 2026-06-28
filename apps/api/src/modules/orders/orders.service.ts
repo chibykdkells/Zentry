@@ -1854,9 +1854,13 @@ export class OrdersService {
       throw new NotFoundException('Order not found');
     }
 
+    const blockedClaimNames = await this.resolveBlockedClaimCbtNames(
+      order.jobBlocks.map((block) => block.cbtId),
+    );
+
     return {
       message: 'Admin order detail retrieved',
-      data: this.serializeOrderDetail(order),
+      data: this.serializeOrderDetail(order, blockedClaimNames),
     };
   }
 
@@ -6268,7 +6272,39 @@ export class OrdersService {
     };
   }
 
-  private serializeOrderDetail(order: OrderDetailRecord) {
+  // Resolves CBT user ids to a human-friendly label (center name, falling back to
+  // the person's name) so blocked-claim rows can show who instead of a raw UUID.
+  private async resolveBlockedClaimCbtNames(
+    cbtIds: string[],
+  ): Promise<Map<string, string>> {
+    const uniqueIds = [...new Set(cbtIds)];
+    if (uniqueIds.length === 0) {
+      return new Map();
+    }
+
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: uniqueIds } },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        cbtProfile: { select: { centerName: true } },
+      },
+    });
+
+    return new Map(
+      users.map((user) => [
+        user.id,
+        user.cbtProfile?.centerName?.trim() ||
+          `${user.firstName} ${user.lastName}`.trim(),
+      ]),
+    );
+  }
+
+  private serializeOrderDetail(
+    order: OrderDetailRecord,
+    blockedClaimNames?: Map<string, string>,
+  ) {
     const serviceRequiredDocuments = this.toObjectArray(
       order.service.requiredDocuments,
     ) as RequiredDocumentDefinition[];
@@ -6281,6 +6317,7 @@ export class OrdersService {
       : [];
     const blockedCbtClaims = order.jobBlocks.map((block) => ({
       cbtId: block.cbtId,
+      cbtName: blockedClaimNames?.get(block.cbtId) ?? null,
       reason: block.reason,
       createdAt: block.createdAt,
     }));
