@@ -72,7 +72,33 @@ type ActiveTab = 'orders' | 'disputes';
 
 // ─── Metric card ───────────────────────────────────────────────────────────────
 
-function MetricCard({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
+function MetricCard({
+  label,
+  value,
+  highlight,
+  gradient,
+}: {
+  label: string;
+  value: number;
+  highlight?: boolean;
+  gradient?: string;
+}) {
+  if (gradient) {
+    return (
+      <div
+        className={cn(
+          'rounded-3xl bg-gradient-to-br p-5 text-white shadow-sm',
+          gradient,
+        )}
+      >
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/80">
+          {label}
+        </p>
+        <p className="mt-3 text-2xl font-bold leading-none">{value}</p>
+      </div>
+    );
+  }
+
   return (
     <div className={cn(
       'rounded-2xl border px-4 py-3',
@@ -737,12 +763,12 @@ export default function TenantOrdersPage() {
       {/* Metrics row */}
       {metrics ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          <MetricCard label="All" value={metrics.all} />
-          <MetricCard label="Active" value={metrics.active} />
-          <MetricCard label="Completed" value={metrics.completed} />
-          <MetricCard label="Issues" value={metrics.issues} highlight={metrics.issues > 0} />
-          <MetricCard label="Awaiting release" value={metrics.awaitingRelease} />
-          <MetricCard label="Ready for release" value={metrics.readyForRelease} />
+          <MetricCard label="All" value={metrics.all} gradient="from-indigo-400 to-indigo-600" />
+          <MetricCard label="Active" value={metrics.active} gradient="from-sky-400 to-blue-500" />
+          <MetricCard label="Completed" value={metrics.completed} gradient="from-emerald-400 to-teal-500" />
+          <MetricCard label="Issues" value={metrics.issues} gradient="from-rose-400 to-red-500" />
+          <MetricCard label="Awaiting release" value={metrics.awaitingRelease} gradient="from-amber-400 to-orange-500" />
+          <MetricCard label="Ready for release" value={metrics.readyForRelease} gradient="from-violet-400 to-purple-500" />
         </div>
       ) : null}
 
@@ -914,11 +940,11 @@ export default function TenantOrdersPage() {
           {/* Dispute metrics */}
           {dMetrics ? (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-              <MetricCard label="Total" value={dMetrics.total} />
-              <MetricCard label="Open" value={dMetrics.open} highlight={dMetrics.open > 0} />
-              <MetricCard label="Under review" value={dMetrics.underReview} />
-              <MetricCard label="Redo requested" value={dMetrics.redoRequested} />
-              <MetricCard label="Resolved" value={dMetrics.resolved} />
+              <MetricCard label="Total" value={dMetrics.total} gradient="from-indigo-400 to-indigo-600" />
+              <MetricCard label="Open" value={dMetrics.open} gradient="from-rose-400 to-red-500" />
+              <MetricCard label="Under review" value={dMetrics.underReview} gradient="from-amber-400 to-orange-500" />
+              <MetricCard label="Redo requested" value={dMetrics.redoRequested} gradient="from-violet-400 to-purple-500" />
+              <MetricCard label="Resolved" value={dMetrics.resolved} gradient="from-emerald-400 to-teal-500" />
             </div>
           ) : null}
 
