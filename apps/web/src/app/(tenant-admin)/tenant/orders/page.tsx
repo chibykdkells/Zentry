@@ -151,8 +151,9 @@ function OrderDetailPanel({ orderId, onClose }: { orderId: string; onClose: () =
   const [isReassignOpen, setIsReassignOpen] = useState(false);
   const [selectedReassignCbtId, setSelectedReassignCbtId] = useState('');
 
-  const orderFulfillmentType = (order as unknown as { fulfillmentType?: string })
-    .fulfillmentType;
+  const orderFulfillmentType = order
+    ? (order as unknown as { fulfillmentType?: string }).fulfillmentType
+    : undefined;
   const orderIsReassignable =
     orderFulfillmentType === 'MANUAL' &&
     order != null &&
