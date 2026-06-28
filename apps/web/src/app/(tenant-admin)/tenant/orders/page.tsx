@@ -299,7 +299,7 @@ function OrderDetailPanel({ orderId, onClose }: { orderId: string; onClose: () =
               )}>
                 {String(order.status).replace(/_/g, ' ')}
               </span>
-              {((order as unknown as { blockedCbtClaimsCount?: number }).blockedCbtClaimsCount ?? 0) > 0 ? (
+              {orderIsReassignable && ((order as unknown as { blockedCbtClaimsCount?: number }).blockedCbtClaimsCount ?? 0) > 0 ? (
                 <button
                   type="button"
                   onClick={() => void handleUnblockAll()}
@@ -461,7 +461,7 @@ function OrderDetailPanel({ orderId, onClose }: { orderId: string; onClose: () =
             </div>
           ) : null}
 
-          {((order as unknown as { blockedCbtClaimsCount?: number }).blockedCbtClaimsCount ?? 0) > 0 ? (
+          {orderIsReassignable && ((order as unknown as { blockedCbtClaimsCount?: number }).blockedCbtClaimsCount ?? 0) > 0 ? (
             <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4 space-y-3">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-2">

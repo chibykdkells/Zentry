@@ -241,7 +241,7 @@ export default function AdminOrdersPage() {
               {detail.orderNumber}
             </span>
           ) : null}
-          {(detail?.blockedCbtClaimsCount ?? 0) > 0 ? (
+          {detailIsReassignable && (detail?.blockedCbtClaimsCount ?? 0) > 0 ? (
             <button
               type="button"
               onClick={() => void handleUnblockAll()}
@@ -450,7 +450,7 @@ export default function AdminOrdersPage() {
             </div>
           ) : null}
 
-          {detail.blockedCbtClaimsCount > 0 ? (
+          {detailIsReassignable && detail.blockedCbtClaimsCount > 0 ? (
             <div className="rounded-3xl border border-rose-100 bg-rose-50/70 p-5">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
