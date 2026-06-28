@@ -487,7 +487,9 @@ export function useAssignableCbts(orderId: string | null, enabled = true) {
   return {
     cbts: query.data ?? [],
     loading: query.isLoading,
-    error: query.error ? getApiErrorMessage(query.error) : null,
+    error: query.error
+      ? getApiErrorMessage(query.error, 'Could not load assignable CBT centers.')
+      : null,
   };
 }
 
