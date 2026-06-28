@@ -53,7 +53,9 @@ export default function OrdersPage() {
   useEffect(() => {
     const id = searchParams.get('order');
     if (id) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional URL query -> selection sync on navigation
       setSelectedOrderId(id);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- mobile sheet visibility mirrors the URL-driven selection
       if (usesMobileSheet) setIsMobileDetailOpen(true);
     }
   }, [searchParams, usesMobileSheet]);

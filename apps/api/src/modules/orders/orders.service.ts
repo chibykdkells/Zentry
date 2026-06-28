@@ -1722,9 +1722,8 @@ export class OrdersService {
   }
 
   async getAdminOrderPricingRemediationPreview(tenantId: string | null) {
-    const candidates = await this.getOrderPricingRemediationCandidates(
-      tenantId,
-    );
+    const candidates =
+      await this.getOrderPricingRemediationCandidates(tenantId);
 
     return {
       message: 'Admin order pricing remediation preview retrieved',
@@ -1751,15 +1750,16 @@ export class OrdersService {
     },
     tenantId: string | null,
   ) {
-    const candidates = await this.getOrderPricingRemediationCandidates(
-      tenantId,
-    );
+    const candidates =
+      await this.getOrderPricingRemediationCandidates(tenantId);
     const eligibleCandidates = candidates.filter(
       (candidate) => candidate.action !== 'MANUAL_REVIEW',
     );
 
     const normalizedOrderIds = Array.from(
-      new Set((input.orderIds ?? []).map((orderId) => orderId.trim()).filter(Boolean)),
+      new Set(
+        (input.orderIds ?? []).map((orderId) => orderId.trim()).filter(Boolean),
+      ),
     );
     const selectedCandidates = input.applyAllEligible
       ? eligibleCandidates
@@ -1787,11 +1787,10 @@ export class OrdersService {
     }> = [];
 
     for (const candidate of selectedCandidates) {
-      const adjustmentReference =
-        await this.applyPricingRemediationCandidate(
-          adminUserId,
-          candidate,
-        );
+      const adjustmentReference = await this.applyPricingRemediationCandidate(
+        adminUserId,
+        candidate,
+      );
 
       applied.push({
         orderId: candidate.orderId,
@@ -1930,7 +1929,8 @@ export class OrdersService {
     });
 
     return {
-      message: 'CBT job claim block cleared. The CBT can attempt to claim the returned job again.',
+      message:
+        'CBT job claim block cleared. The CBT can attempt to claim the returned job again.',
       data: { orderId, cbtId },
     };
   }
@@ -1964,7 +1964,8 @@ export class OrdersService {
     });
 
     return {
-      message: 'All CBT job claim blocks cleared. The job can now be reclaimed by any eligible CBT.',
+      message:
+        'All CBT job claim blocks cleared. The job can now be reclaimed by any eligible CBT.',
       data: { orderId },
     };
   }
@@ -2272,7 +2273,10 @@ export class OrdersService {
           type: NotificationType.ORDER_ASSIGNED,
           title: 'Your order has been assigned',
           message: `${order.service.name} is now assigned to ${centerName}.`,
-          metadata: { orderNumber: order.orderNumber, assignedCbtId: targetCbtId },
+          metadata: {
+            orderNumber: order.orderNumber,
+            assignedCbtId: targetCbtId,
+          },
         },
       });
 
@@ -3174,7 +3178,8 @@ export class OrdersService {
     }
 
     return {
-      message: 'Extension request submitted. The tenant admin has been notified.',
+      message:
+        'Extension request submitted. The tenant admin has been notified.',
       data: {
         id: extensionRequest.id,
         status: extensionRequest.status,
@@ -3189,32 +3194,35 @@ export class OrdersService {
     dto: ReviewExtensionDto,
     tenantId: string | null,
   ) {
-    const extensionRequest = await this.prisma.cbtTimeExtensionRequest.findFirst({
-      where: {
-        id: extensionRequestId,
-        status: 'PENDING',
-        order: tenantId ? { tenantId } : {},
-      },
-      select: {
-        id: true,
-        cbtId: true,
-        orderId: true,
-        reason: true,
-        order: {
-          select: {
-            id: true,
-            orderNumber: true,
-            status: true,
-            deliveryDeadline: true,
-            assignedCbtId: true,
-            service: { select: { name: true } },
+    const extensionRequest =
+      await this.prisma.cbtTimeExtensionRequest.findFirst({
+        where: {
+          id: extensionRequestId,
+          status: 'PENDING',
+          order: tenantId ? { tenantId } : {},
+        },
+        select: {
+          id: true,
+          cbtId: true,
+          orderId: true,
+          reason: true,
+          order: {
+            select: {
+              id: true,
+              orderNumber: true,
+              status: true,
+              deliveryDeadline: true,
+              assignedCbtId: true,
+              service: { select: { name: true } },
+            },
           },
         },
-      },
-    });
+      });
 
     if (!extensionRequest) {
-      throw new NotFoundException('Extension request not found or already reviewed.');
+      throw new NotFoundException(
+        'Extension request not found or already reviewed.',
+      );
     }
 
     const order = extensionRequest.order;
@@ -3231,7 +3239,9 @@ export class OrdersService {
     if (dto.action === 'APPROVE') {
       const additionalMs = (dto.additionalMinutes ?? 5) * 60 * 1000;
       const currentDeadline = order.deliveryDeadline ?? now;
-      const newDeadline = new Date(Math.max(currentDeadline.getTime(), now.getTime()) + additionalMs);
+      const newDeadline = new Date(
+        Math.max(currentDeadline.getTime(), now.getTime()) + additionalMs,
+      );
 
       await this.prisma.$transaction(async (tx) => {
         await tx.cbtTimeExtensionRequest.update({
@@ -3265,7 +3275,10 @@ export class OrdersService {
       });
 
       await this.ordersDeadlineQueueService.cancelDeadline(order.id);
-      await this.ordersDeadlineQueueService.scheduleDeadline(order.id, newDeadline);
+      await this.ordersDeadlineQueueService.scheduleDeadline(
+        order.id,
+        newDeadline,
+      );
 
       this.notificationsService.pushNotificationToUser(extensionRequest.cbtId, {
         type: 'CBT_EXTENSION_REVIEWED',
@@ -3298,8 +3311,14 @@ export class OrdersService {
       });
 
       await tx.cbtJobBlock.upsert({
-        where: { orderId_cbtId: { orderId: order.id, cbtId: extensionRequest.cbtId } },
-        create: { orderId: order.id, cbtId: extensionRequest.cbtId, reason: 'extension_rejected' },
+        where: {
+          orderId_cbtId: { orderId: order.id, cbtId: extensionRequest.cbtId },
+        },
+        create: {
+          orderId: order.id,
+          cbtId: extensionRequest.cbtId,
+          reason: 'extension_rejected',
+        },
         update: {},
       });
 
@@ -3735,9 +3754,7 @@ export class OrdersService {
     });
 
     if (isBlocked) {
-      throw new ForbiddenException(
-        'You are not eligible to claim this job.',
-      );
+      throw new ForbiddenException('You are not eligible to claim this job.');
     }
 
     // CBT job blocks are retained for audit, but missed assignments no longer
@@ -3815,7 +3832,10 @@ export class OrdersService {
         },
       });
 
-      if (!existingOrder || (existingOrder.tenantId ?? null) !== (tenantId ?? null)) {
+      if (
+        !existingOrder ||
+        (existingOrder.tenantId ?? null) !== (tenantId ?? null)
+      ) {
         throw new NotFoundException('Job not found');
       }
 
@@ -3825,7 +3845,10 @@ export class OrdersService {
         );
       }
 
-      if (existingOrder.assignedCbtId && existingOrder.assignedCbtId !== userId) {
+      if (
+        existingOrder.assignedCbtId &&
+        existingOrder.assignedCbtId !== userId
+      ) {
         throw new ConflictException(
           'This job has already been claimed by another CBT center.',
         );
@@ -3843,57 +3866,61 @@ export class OrdersService {
     });
 
     if (!claimedOrder) {
-      throw new NotFoundException('Job not found after claim — possible data race');
+      throw new NotFoundException(
+        'Job not found after claim — possible data race',
+      );
     }
 
-    await this.prisma.$transaction([
-      this.prisma.notification.create({
-        data: {
-          userId: claimedOrder.requester.id,
-          orderId: claimedOrder.id,
-          type: NotificationType.ORDER_ASSIGNED,
-          title: 'Your order has been assigned',
-          message: `${claimedOrder.service.name} is now assigned to ${cbtUser.cbtProfile!.centerName}.`,
-          metadata: {
-            orderNumber: claimedOrder.orderNumber,
-            assignedCbtId: userId,
-            centerName: cbtUser.cbtProfile!.centerName,
+    await this.prisma
+      .$transaction([
+        this.prisma.notification.create({
+          data: {
+            userId: claimedOrder.requester.id,
+            orderId: claimedOrder.id,
+            type: NotificationType.ORDER_ASSIGNED,
+            title: 'Your order has been assigned',
+            message: `${claimedOrder.service.name} is now assigned to ${cbtUser.cbtProfile!.centerName}.`,
+            metadata: {
+              orderNumber: claimedOrder.orderNumber,
+              assignedCbtId: userId,
+              centerName: cbtUser.cbtProfile!.centerName,
+            },
           },
-        },
-      }),
-      this.prisma.notification.create({
-        data: {
-          userId,
-          orderId: claimedOrder.id,
-          type: NotificationType.ORDER_ASSIGNED,
-          title: 'Job claimed successfully',
-          message: `You have claimed ${claimedOrder.orderNumber} for ${claimedOrder.service.name}.`,
-          metadata: {
-            orderNumber: claimedOrder.orderNumber,
-            requesterEmail: claimedOrder.requester.email,
+        }),
+        this.prisma.notification.create({
+          data: {
+            userId,
+            orderId: claimedOrder.id,
+            type: NotificationType.ORDER_ASSIGNED,
+            title: 'Job claimed successfully',
+            message: `You have claimed ${claimedOrder.orderNumber} for ${claimedOrder.service.name}.`,
+            metadata: {
+              orderNumber: claimedOrder.orderNumber,
+              requesterEmail: claimedOrder.requester.email,
+            },
           },
-        },
-      }),
-      this.prisma.auditLog.create({
-        data: {
-          userId,
-          action: 'ORDER_CLAIMED',
-          entity: 'Order',
-          entityId: claimedOrder.id,
-          newValues: {
-            orderNumber: claimedOrder.orderNumber,
-            status: OrderStatus.ASSIGNED,
-            assignedCbtId: userId,
-            assignedAt: claimedAt.toISOString(),
+        }),
+        this.prisma.auditLog.create({
+          data: {
+            userId,
+            action: 'ORDER_CLAIMED',
+            entity: 'Order',
+            entityId: claimedOrder.id,
+            newValues: {
+              orderNumber: claimedOrder.orderNumber,
+              status: OrderStatus.ASSIGNED,
+              assignedCbtId: userId,
+              assignedAt: claimedAt.toISOString(),
+            },
           },
-        },
-      }),
-    ]).catch((error: unknown) => {
-      this.logger.error(
-        `Non-critical side-effects failed after claiming order ${orderId}`,
-        error,
-      );
-    });
+        }),
+      ])
+      .catch((error: unknown) => {
+        this.logger.error(
+          `Non-critical side-effects failed after claiming order ${orderId}`,
+          error,
+        );
+      });
 
     try {
       await this.ordersDeadlineQueueService.scheduleDeadline(
@@ -3908,12 +3935,15 @@ export class OrdersService {
     }
 
     // Real-time: notify requester their order was assigned
-    this.notificationsService.pushNotificationToUser(claimedOrder.requester.id, {
-      type: 'ORDER_ASSIGNED',
-      title: 'Your order has been assigned',
-      message: `${claimedOrder.service.name} is now assigned to ${cbtUser.cbtProfile!.centerName}.`,
-      orderId: claimedOrder.id,
-    });
+    this.notificationsService.pushNotificationToUser(
+      claimedOrder.requester.id,
+      {
+        type: 'ORDER_ASSIGNED',
+        title: 'Your order has been assigned',
+        message: `${claimedOrder.service.name} is now assigned to ${cbtUser.cbtProfile!.centerName}.`,
+        orderId: claimedOrder.id,
+      },
+    );
     this.notificationsService.broadcastClaimedJob({
       orderId: claimedOrder.id,
       serviceId: claimedOrder.service.id,
@@ -5579,7 +5609,9 @@ export class OrdersService {
   }
 
   private buildPricingRemediationCandidate(
-    order: Prisma.OrderGetPayload<{ select: typeof pricingRemediationOrderSelect }>,
+    order: Prisma.OrderGetPayload<{
+      select: typeof pricingRemediationOrderSelect;
+    }>,
     override: {
       id: string;
       tenantId: string | null;
@@ -5710,8 +5742,7 @@ export class OrdersService {
         userId: order.requester.id,
         email: order.requester.email,
         walletId: requesterWallet?.id ?? null,
-        availableBalance:
-          requesterWallet?.availableBalance.toString() ?? '0',
+        availableBalance: requesterWallet?.availableBalance.toString() ?? '0',
         escrowBalance: requesterWallet?.escrowBalance.toString() ?? '0',
       },
     };
@@ -5727,8 +5758,7 @@ export class OrdersService {
       );
     }
 
-    const shouldRescheduleRelease =
-      candidate.status === OrderStatus.COMPLETED;
+    const shouldRescheduleRelease = candidate.status === OrderStatus.COMPLETED;
 
     if (shouldRescheduleRelease) {
       await this.ordersReleaseQueueService
@@ -5737,8 +5767,7 @@ export class OrdersService {
     }
 
     const delta = BigInt(candidate.delta.totalAmount);
-    const adjustmentReference =
-      delta !== 0n ? generateTransactionRef() : null;
+    const adjustmentReference = delta !== 0n ? generateTransactionRef() : null;
 
     await this.prisma.$transaction(async (tx) => {
       const liveOrder = await tx.order.findUnique({

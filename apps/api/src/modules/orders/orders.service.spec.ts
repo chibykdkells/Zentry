@@ -1576,7 +1576,12 @@ describe('OrdersService', () => {
       );
 
       await expect(
-        service.reassignJob('admin-1', 'order-1', { cbtId: 'cbt-1' }, 'tenant-1'),
+        service.reassignJob(
+          'admin-1',
+          'order-1',
+          { cbtId: 'cbt-1' },
+          'tenant-1',
+        ),
       ).rejects.toBeInstanceOf(ForbiddenException);
     });
 

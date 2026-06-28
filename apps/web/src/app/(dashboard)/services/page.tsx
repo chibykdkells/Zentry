@@ -24,6 +24,7 @@ export default function ServicesPage() {
   useEffect(() => {
     const slug = new URLSearchParams(window.location.search).get('categorySlug');
     if (slug) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time URL query -> expanded category sync on mount
       setExpandedSlugs([slug]);
       window.history.replaceState({}, '', window.location.pathname);
     }

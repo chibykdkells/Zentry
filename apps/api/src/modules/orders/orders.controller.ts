@@ -87,7 +87,10 @@ export class OrdersController {
     // Proxy the file bytes directly so the browser never sees Cloudinary's
     // X-Frame-Options headers, which would block the result from loading
     // inside an <iframe> on the frontend domain.
-    type StreamResponse = { headers: Record<string, string>; data: NodeJS.ReadableStream };
+    type StreamResponse = {
+      headers: Record<string, string>;
+      data: NodeJS.ReadableStream;
+    };
     let upstream: StreamResponse;
     try {
       upstream = (await axios.get(access.data.url, {
@@ -98,7 +101,8 @@ export class OrdersController {
       throw new InternalServerErrorException('Could not retrieve result file.');
     }
 
-    const contentType = upstream.headers['content-type'] ?? 'application/octet-stream';
+    const contentType =
+      upstream.headers['content-type'] ?? 'application/octet-stream';
 
     res.setHeader('Content-Type', contentType);
 
@@ -217,11 +221,7 @@ export class OrdersController {
     @CurrentUser() user: JwtUser,
     @Param('orderId') orderId: string,
   ) {
-    return this.ordersService.returnJobToPool(
-      user.sub,
-      orderId,
-      user.tenantId,
-    );
+    return this.ordersService.returnJobToPool(user.sub, orderId, user.tenantId);
   }
 
   @Roles(UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN)
@@ -335,7 +335,12 @@ export class OrdersController {
     @Param('orderId') orderId: string,
     @Body() dto: RequestExtensionDto,
   ) {
-    return this.ordersService.requestTimeExtension(user.sub, orderId, dto, user.tenantId);
+    return this.ordersService.requestTimeExtension(
+      user.sub,
+      orderId,
+      dto,
+      user.tenantId,
+    );
   }
 
   @Roles(UserRole.TENANT_ADMIN)
@@ -351,7 +356,12 @@ export class OrdersController {
     @Param('extensionId') extensionId: string,
     @Body() dto: ReviewExtensionDto,
   ) {
-    return this.ordersService.reviewTimeExtension(user.sub, extensionId, dto, user.tenantId);
+    return this.ordersService.reviewTimeExtension(
+      user.sub,
+      extensionId,
+      dto,
+      user.tenantId,
+    );
   }
 
   @Roles(UserRole.CBT_CENTER, UserRole.CBT_STAFF)
