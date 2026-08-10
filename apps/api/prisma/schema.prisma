@@ -721,3 +721,19 @@ model CbtJobBlock {
   @@index([cbtId])
   @@map("cbt_job_blocks")
 }
+
+/// Durable key/value store with expiry — replaces Upstash Redis.
+///
+/// RedisService keeps its name and its five-method surface; only what backs it
+/// changed, so no call site moved. Reads filter on expiresAt themselves rather
+/// than trusting the sweeper, so an expired key is never served late.
+model KvStore {
+  key       String    @id
+  value     String
+  expiresAt DateTime? @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([expiresAt])
+  @@map("kv_store")
+}

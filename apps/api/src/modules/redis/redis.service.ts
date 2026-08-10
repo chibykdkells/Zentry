@@ -1,37 +1,62 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import Redis from 'ioredis';
+import { PrismaService } from '../prisma/prisma.service';
 
+/**
+ * Key/value store with expiry, backed by Postgres.
+ *
+ * It used to be Upstash Redis. That was a pay-as-you-go instance shared with
+ * FEP Assist costing $10.04/month, for a workload of five methods — get, set,
+ * getJson, setJson, del — all TTL'd caches and short-lived auth state. Postgres
+ * is already provisioned, already the system of record, and serves this at no
+ * extra cost.
+ *
+ * The class keeps its name and its exact public surface so no call site moved:
+ * swapping what backs a store should not be an opportunity to also change a
+ * cache TTL or a token lifetime by accident. The name is now a slight misnomer
+ * — kept deliberately, because renaming it would have touched every consumer
+ * and made the diff impossible to review as "backing store only".
+ */
 @Injectable()
 export class RedisService implements OnModuleDestroy {
   private readonly logger = new Logger(RedisService.name);
-  private readonly client: Redis;
 
-  constructor(private readonly configService: ConfigService) {
-    this.client = new Redis(
-      this.configService.get<string>('REDIS_URL', 'redis://localhost:6379'),
-      {
-        maxRetriesPerRequest: 1,
-        enableReadyCheck: true,
-      },
-    );
+  /** How often expired rows are swept. Reads never depend on this running. */
+  private static readonly SWEEP_INTERVAL_MS = 10 * 60 * 1000;
 
-    this.client.on('error', (error: Error) => {
-      this.logger.error(`Redis error: ${error.message}`);
-    });
+  private readonly timer: NodeJS.Timeout;
+
+  constructor(private readonly prisma: PrismaService) {
+    // unref so housekeeping can never be the reason the process stays alive.
+    this.timer = setInterval(() => {
+      void this.sweep();
+    }, RedisService.SWEEP_INTERVAL_MS);
+    this.timer.unref?.();
   }
 
+  /** Returns null for a missing key and for one whose expiry has passed. */
   async get(key: string): Promise<string | null> {
-    return this.client.get(key);
+    const row = await this.prisma.kvStore.findFirst({
+      where: {
+        key,
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+      },
+      select: { value: true },
+    });
+
+    return row?.value ?? null;
   }
 
   async set(key: string, value: string, ttlSeconds?: number): Promise<void> {
-    if (ttlSeconds && ttlSeconds > 0) {
-      await this.client.set(key, value, 'EX', ttlSeconds);
-      return;
-    }
+    const expiresAt =
+      ttlSeconds && ttlSeconds > 0
+        ? new Date(Date.now() + ttlSeconds * 1000)
+        : null;
 
-    await this.client.set(key, value);
+    await this.prisma.kvStore.upsert({
+      where:  { key },
+      update: { value, expiresAt },
+      create: { key, value, expiresAt },
+    });
   }
 
   async getJson<T>(key: string): Promise<T | null> {
@@ -53,10 +78,25 @@ export class RedisService implements OnModuleDestroy {
   }
 
   async del(key: string): Promise<void> {
-    await this.client.del(key);
+    // deleteMany, not delete: deleting a key that is not there is a no-op in
+    // Redis, but `delete` throws P2025 on a missing row.
+    await this.prisma.kvStore.deleteMany({ where: { key } });
+  }
+
+  /** Housekeeping only — correctness comes from the filter in `get`. */
+  private async sweep(): Promise<void> {
+    try {
+      await this.prisma.kvStore.deleteMany({
+        where: { expiresAt: { not: null, lte: new Date() } },
+      });
+    } catch (error) {
+      // Never throw from a timer: an unhandled rejection would take the
+      // process down over housekeeping.
+      this.logger.error(`kv sweep failed: ${(error as Error).message}`);
+    }
   }
 
   async onModuleDestroy(): Promise<void> {
-    await this.client.quit();
+    clearInterval(this.timer);
   }
 }
