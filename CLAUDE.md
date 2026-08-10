@@ -10,6 +10,43 @@
 
 ---
 
+---
+
+## STOP — DO NOT DESTROY THE FLY POSTGRES CLUSTER NAMED `zentry-pg-prod`
+
+Zentry/ZenDocx **has migrated to Neon**. Its Fly-hosted database is no longer
+in use. That does **not** make the Fly cluster disposable.
+
+| | |
+|---|---|
+| Cluster ID | `kyzl60x1vgyopj9g` |
+| Cluster name | `zentry-pg-prod restored 2026-08-03 19:04:41.931425Z` |
+| Actually holds | `fep_assist` — **another live production product** |
+| Dashboard shows | `<no attached apps>` |
+
+The cluster name is a leftover label from a 3 August restore. **FEP Assist**
+(a separate product, separate repo) was placed inside that restored cluster and
+runs on it today, connecting by connection string rather than a Fly attachment
+— which is why the dashboard wrongly reports it as unused.
+
+Destroying it deletes FEP Assist's tenants, wallets, transactions and audit
+log. On 2026-08-10 this was recommended in good faith by a session that had
+correctly verified Zentry's move to Neon and reasoned from the cluster's name.
+The reasoning was sound; the name lied.
+
+**Safe:** dropping the now-dead `zentry` database *inside* the cluster.
+**Not safe:** `fly mpg destroy kyzl60x1vgyopj9g`, or destroying "zentry-pg-prod"
+from the Fly dashboard.
+
+Verify before acting on any shared Fly resource — this account has one MPG
+cluster serving two products:
+
+```
+fly mpg databases list kyzl60x1vgyopj9g
+```
+
+---
+
 ## What Is ZenDocx?
 
 ZenDocx is a **multi-role, wallet-based government services escrow marketplace**
