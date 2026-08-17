@@ -12,31 +12,43 @@
 
 ---
 
-## STOP — DO NOT DESTROY THE FLY POSTGRES CLUSTER NAMED `zentry-pg-prod`
+## Fly Postgres cluster `zentry-pg-prod` — DO NOT DESTROY
 
-Zentry/ZenDocx **has migrated to Neon**. Its Fly-hosted database is no longer
-in use. That does **not** make the Fly cluster disposable.
+Zentry **has migrated to Neon** (completed 2026-08-17). The Fly MPG cluster
+still exists and must not be destroyed — it also holds `fep_assist`, a second
+live production product.
 
 | | |
 |---|---|
 | Cluster ID | `kyzl60x1vgyopj9g` |
 | Cluster name | `zentry-pg-prod restored 2026-08-03 19:04:41.931425Z` |
-| Actually holds | `fep_assist` — **another live production product** |
-| Dashboard shows | `<no attached apps>` |
+| Holds | `zentry` — retained as backup post-migration |
+| Also holds | `fep_assist` — **live production product** |
 
-The cluster name is a leftover label from a 3 August restore. **FEP Assist**
-(a separate product, separate repo) was placed inside that restored cluster and
-runs on it today, connecting by connection string rather than a Fly attachment
-— which is why the dashboard wrongly reports it as unused.
+**NOT safe:** `fly mpg destroy kyzl60x1vgyopj9g`, or destroying "zentry-pg-prod"
+from the Fly dashboard. This deletes FEP Assist's data.
 
-Destroying it deletes FEP Assist's tenants, wallets, transactions and audit
-log. On 2026-08-10 this was recommended in good faith by a session that had
-correctly verified Zentry's move to Neon and reasoned from the cluster's name.
-The reasoning was sound; the name lied.
+**Safe (after Neon is confirmed stable):** `DROP DATABASE zentry` inside the
+cluster — removes only the Zentry backup, leaves `fep_assist` untouched.
 
-**Safe:** dropping the now-dead `zentry` database *inside* the cluster.
-**Not safe:** `fly mpg destroy kyzl60x1vgyopj9g`, or destroying "zentry-pg-prod"
-from the Fly dashboard.
+### Neon migration — verified 2026-08-17
+
+Zentry's database was migrated from Fly MPG to Neon via `pg_dump` / `pg_restore`.
+All data confirmed on Neon after migration:
+
+| Table | Neon (live) |
+|---|---|
+| `User` | 95 |
+| `Wallet` | 95 |
+| `Transaction` | 182 |
+| `AuditLog` | 1103 |
+| `Order` | 22 |
+
+`DATABASE_URL` on `zentry-api-prod` now points to Neon (`neon.tech`). All 25
+migrations applied. API health check passing.
+
+**Lesson learned:** `pg_stat_user_tables.n_live_tup` is unreliable on a fresh
+cluster — always verify with exact `COUNT(*)` before declaring a migration done.
 
 Verify before acting on any shared Fly resource — this account has one MPG
 cluster serving two products:
