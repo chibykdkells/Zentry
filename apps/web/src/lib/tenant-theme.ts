@@ -1,9 +1,9 @@
 import type { TenantConfig } from '@/stores/tenant.store';
 import { extractTenantSlugFromPlatformHostname } from '@/lib/platform-domain';
 
-export const TENANT_THEME_STORAGE_KEY = 'zendocx-tenant-config';
-export const TENANT_SLUG_STORAGE_KEY = 'zendocx-tenant-slug';
-export const TENANT_SLUG_COOKIE = 'zendocx-tenant-slug';
+export const TENANT_THEME_STORAGE_KEY = 'ecafe-tenant-config';
+export const TENANT_SLUG_STORAGE_KEY = 'ecafe-tenant-slug';
+export const TENANT_SLUG_COOKIE = 'ecafe-tenant-slug';
 
 export const tenantFontMap: Record<string, string> = {
   modern: '"Plus Jakarta Sans", "Avenir Next", "Segoe UI", sans-serif',
@@ -72,7 +72,7 @@ export function getTenantThemeBootstrapScript() {
       try {
         const root = document.documentElement;
 
-        const authRaw = window.localStorage.getItem('zendocx-auth');
+        const authRaw = window.localStorage.getItem('ecafe-auth');
         let userTenantId = undefined; // undefined = no auth; null = platform user; string = tenant user
         if (authRaw) {
           try {

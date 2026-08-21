@@ -85,18 +85,31 @@ export function proxy(request: NextRequest) {
   const isDashDomain = hostname === 'dash.ecafe.app';
   const ECAFE_TENANT_SLUG = 'a';
 
-  // dash.ecafe.app — send unauthenticated users straight to the tenant login.
+  // dash.ecafe.app — send unauthenticated visitors at root straight to login.
+  // Only redirect from "/" to avoid an infinite loop when /login itself runs
+  // through the middleware (redirect → /login → redirect → /login → …).
   if (isDashDomain) {
-    const refreshToken_ = request.cookies.get('refresh_token')?.value;
-    const role_ = getRoleFromJwt(refreshToken_);
-    const res = role_
-      ? NextResponse.next()
-      : NextResponse.redirect(new URL(`/login?tenant=${ECAFE_TENANT_SLUG}`, request.url));
+    const res = NextResponse.next();
     res.cookies.set('ecafe-tenant-slug', ECAFE_TENANT_SLUG, {
       path: '/',
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 30,
     });
+    if (pathname === '/' || pathname === '') {
+      const refreshToken_ = request.cookies.get('refresh_token')?.value;
+      const role_ = getRoleFromJwt(refreshToken_);
+      if (!role_) {
+        const redirect = NextResponse.redirect(
+          new URL(`/login?tenant=${ECAFE_TENANT_SLUG}`, request.url),
+        );
+        redirect.cookies.set('ecafe-tenant-slug', ECAFE_TENANT_SLUG, {
+          path: '/',
+          sameSite: 'lax',
+          maxAge: 60 * 60 * 24 * 30,
+        });
+        return redirect;
+      }
+    }
     return res;
   }
 
