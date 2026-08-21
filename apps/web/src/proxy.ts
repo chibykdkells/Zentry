@@ -50,10 +50,25 @@ export function proxy(request: NextRequest) {
 
   // ecafe.app (apex) and dash.ecafe.app both resolve to the Ecafe tenant (slug: "a").
   // Apex serves the tenant landing page / portal home.
-  // Dash serves login and the authenticated dashboard.
+  // Dash redirects unauthenticated users straight to login.
   const isApexDomain = hostname === 'ecafe.app' || hostname === 'www.ecafe.app';
   const isDashDomain = hostname === 'dash.ecafe.app';
   const ECAFE_TENANT_SLUG = 'a';
+
+  // dash.ecafe.app — send unauthenticated users straight to the tenant login.
+  if (isDashDomain) {
+    const refreshToken_ = request.cookies.get('refresh_token')?.value;
+    const role_ = getRoleFromJwt(refreshToken_);
+    const res = role_
+      ? NextResponse.next()
+      : NextResponse.redirect(new URL(`/login?tenant=${ECAFE_TENANT_SLUG}`, request.url));
+    res.cookies.set('ecafe-tenant-slug', ECAFE_TENANT_SLUG, {
+      path: '/',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 30,
+    });
+    return res;
+  }
 
   const explicitTenantSlug = request.nextUrl.searchParams.get('tenant') ?? '';
   // Apex and dash always resolve to the Ecafe tenant without a URL slug.
@@ -73,10 +88,20 @@ export function proxy(request: NextRequest) {
       .map((item) => item.trim().toLowerCase())
       .filter(Boolean) ?? [];
 
+  // For ecafe.app apex, inject the tenant slug as a request header so
+  // page.tsx can read it server-side in the same request (cookies() only
+  // reads from the incoming request, not the outgoing response).
+  const injectTenantHeader = (response: NextResponse) => {
+    const headers = new Headers(request.headers);
+    headers.set('x-tenant-slug', tenantSlug);
+    return NextResponse.next({ request: { headers } });
+  };
+  void injectTenantHeader; // used selectively below
+
   const persistTenantCookie = (response: NextResponse) => {
-    // Always stamp the ecafe slug on apex and dash requests so subsequent
+    // Always stamp the ecafe slug on apex requests so subsequent
     // navigations retain tenant context without a query param.
-    if (isApexDomain || isDashDomain) {
+    if (isApexDomain) {
       response.cookies.set('ecafe-tenant-slug', ECAFE_TENANT_SLUG, {
         path: '/',
         sameSite: 'lax',
@@ -130,6 +155,20 @@ export function proxy(request: NextRequest) {
           new URL(`/login?tenant=${encodeURIComponent(entryTenantSlug)}`, request.url),
         ),
       );
+    }
+
+    // For the apex domain, inject the tenant slug as a request header so
+    // page.tsx can read it server-side without relying on the response cookie.
+    if (isApexDomain) {
+      const reqHeaders = new Headers(request.headers);
+      reqHeaders.set('x-tenant-slug', ECAFE_TENANT_SLUG);
+      const res = NextResponse.next({ request: { headers: reqHeaders } });
+      res.cookies.set('ecafe-tenant-slug', ECAFE_TENANT_SLUG, {
+        path: '/',
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 30,
+      });
+      return res;
     }
 
     return persistTenantCookie(NextResponse.next());

@@ -28,22 +28,22 @@ async function resolveTenantFromRequest(
   const host = headerStore.get('host') ?? '';
   const hostname = host.split(':')[0].trim().toLowerCase();
 
-  // The cookie set by the middleware carries the resolved tenant slug for
-  // apex (ecafe.app) and dash (dash.ecafe.app) requests.
+  // The middleware injects x-tenant-slug for apex/dash domains in the same
+  // request so we don't have to wait for the response cookie to round-trip.
+  const headerTenantSlug = headerStore.get('x-tenant-slug') ?? null;
+
   const cookieStore = await cookies();
   const cookieTenantSlug = cookieStore.get('ecafe-tenant-slug')?.value ?? null;
 
   const hostTenantSlug = resolveTenantSlugFromHost(host);
   const customDomainTenantSlug =
-    explicitTenantSlug || hostTenantSlug || cookieTenantSlug
+    explicitTenantSlug || hostTenantSlug || headerTenantSlug || cookieTenantSlug
       ? null
       : await resolveTenantSlugFromCustomDomain(hostname);
 
-  // Prefer explicit > host subdomain > middleware cookie > custom domain lookup.
-  // The cookie covers ecafe.app apex and dash.ecafe.app where the host alone
-  // does not yield a subdomain slug.
+  // Prefer explicit param > host subdomain > middleware header > cookie > custom domain.
   const tenantSlug =
-    explicitTenantSlug ?? hostTenantSlug ?? cookieTenantSlug ?? customDomainTenantSlug;
+    explicitTenantSlug ?? hostTenantSlug ?? headerTenantSlug ?? cookieTenantSlug ?? customDomainTenantSlug;
 
   // Ignore reserved slugs (platform, admin, etc.) that sneak in via cookie.
   const resolvedSlug = tenantSlug && !RESERVED_SUBDOMAINS.has(tenantSlug) ? tenantSlug : null;
