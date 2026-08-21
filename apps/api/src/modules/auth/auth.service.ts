@@ -25,7 +25,7 @@ import { EmailService } from '../../providers/email/email.service';
 
 @Injectable()
 export class AuthService {
-  private static readonly REFRESH_TOKEN_KEY_PREFIX = 'zendocx:auth:refresh';
+  private static readonly REFRESH_TOKEN_KEY_PREFIX = 'ecafe:auth:refresh';
 
   constructor(
     private readonly prisma: PrismaService,
@@ -193,9 +193,9 @@ export class AuthService {
     await this.emailService
       .sendEmail({
         to: email,
-        subject: 'Verify your ZenDocx email address',
+        subject: 'Verify your Ecafe email address',
         html: this.buildOtpEmailHtml(otp, expiryMinutes),
-        text: `Your ZenDocx verification code is: ${otp}\n\nThis code expires in ${expiryMinutes} minutes. Do not share it with anyone.`,
+        text: `Your Ecafe verification code is: ${otp}\n\nThis code expires in ${expiryMinutes} minutes. Do not share it with anyone.`,
         ...sender,
       })
       .catch(() => undefined);
@@ -432,7 +432,7 @@ export class AuthService {
       await this.emailService
         .sendEmail({
           to: email,
-          subject: 'Reset your ZenDocx password',
+          subject: 'Reset your Ecafe password',
           html: this.buildPasswordResetEmailHtml(
             user.firstName,
             token,
@@ -832,13 +832,13 @@ export class AuthService {
     <tr><td align="center">
       <table width="100%" style="max-width:520px;background:#ffffff;border-radius:24px;border:1px solid rgba(15,23,42,0.07);box-shadow:0 4px 24px rgba(15,23,42,0.06)">
         <tr><td style="background:#0D1B3E;border-radius:24px 24px 0 0;padding:32px 40px;text-align:center">
-          <span style="color:#F5A623;font-size:28px;font-weight:900;letter-spacing:-0.5px">ZenDocx</span>
+          <span style="color:#F5A623;font-size:28px;font-weight:900;letter-spacing:-0.5px">Ecafe</span>
         </td></tr>
         <tr><td style="padding:40px">
           <h1 style="margin:0 0 8px;font-size:22px;font-weight:800;color:#0f172a;letter-spacing:-0.3px">Verify your email address</h1>
           <p style="margin:0 0 32px;font-size:15px;color:#64748b;line-height:1.6">Use the code below to complete your registration. It expires in <strong>${expiryMinutes} minutes</strong>.</p>
           <div style="background:#f1f5f9;border-radius:16px;padding:24px;text-align:center;letter-spacing:12px;font-size:36px;font-weight:900;color:#0D1B3E;margin-bottom:32px">${otp}</div>
-          <p style="margin:0;font-size:13px;color:#94a3b8;line-height:1.6">If you didn't create a ZenDocx account, you can safely ignore this email. Never share this code with anyone.</p>
+          <p style="margin:0;font-size:13px;color:#94a3b8;line-height:1.6">If you didn't create an Ecafe account, you can safely ignore this email. Never share this code with anyone.</p>
         </td></tr>
         <tr><td style="padding:20px 40px 32px;border-top:1px solid #f1f5f9;text-align:center">
           <p style="margin:0;font-size:12px;color:#cbd5e1">Fast. Trusted. Government Services, Simplified.</p>
@@ -863,11 +863,11 @@ export class AuthService {
     <tr><td align="center">
       <table width="100%" style="max-width:520px;background:#ffffff;border-radius:24px;border:1px solid rgba(15,23,42,0.07);box-shadow:0 4px 24px rgba(15,23,42,0.06)">
         <tr><td style="background:#0D1B3E;border-radius:24px 24px 0 0;padding:32px 40px;text-align:center">
-          <span style="color:#F5A623;font-size:28px;font-weight:900;letter-spacing:-0.5px">ZenDocx</span>
+          <span style="color:#F5A623;font-size:28px;font-weight:900;letter-spacing:-0.5px">Ecafe</span>
         </td></tr>
         <tr><td style="padding:40px">
           <h1 style="margin:0 0 8px;font-size:22px;font-weight:800;color:#0f172a;letter-spacing:-0.3px">Reset your password</h1>
-          <p style="margin:0 0 24px;font-size:15px;color:#64748b;line-height:1.6">Hi ${firstName}, we received a request to reset the password for your ZenDocx account. Copy the token below and paste it into the reset form.</p>
+          <p style="margin:0 0 24px;font-size:15px;color:#64748b;line-height:1.6">Hi ${firstName}, we received a request to reset the password for your Ecafe account. Copy the token below and paste it into the reset form.</p>
           <p style="margin:0 0 8px;font-size:13px;font-weight:700;color:#0f172a;text-transform:uppercase;letter-spacing:0.05em">Your reset token</p>
           <div style="background:#f8fafc;border:1.5px dashed #cbd5e1;border-radius:12px;padding:18px 20px;margin-bottom:24px;text-align:center">
             <code style="font-size:15px;font-weight:700;color:#0D1B3E;letter-spacing:0.03em;word-break:break-all">${token}</code>

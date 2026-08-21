@@ -72,7 +72,7 @@ export class AnalyticsController {
     const csv = await this.analyticsService.exportOrdersCsv(
       user.tenantId ?? null,
     );
-    const filename = `zendocx-orders-${new Date().toISOString().slice(0, 10)}.csv`;
+    const filename = `ecafe-orders-${new Date().toISOString().slice(0, 10)}.csv`;
     res.set({
       'Content-Type': 'text/csv',
       'Content-Disposition': `attachment; filename="${filename}"`,
@@ -85,7 +85,7 @@ export class AnalyticsController {
     const csv = await this.analyticsService.exportTransactionsCsv(
       user.tenantId ?? null,
     );
-    const filename = `zendocx-transactions-${new Date().toISOString().slice(0, 10)}.csv`;
+    const filename = `ecafe-transactions-${new Date().toISOString().slice(0, 10)}.csv`;
     res.set({
       'Content-Type': 'text/csv',
       'Content-Disposition': `attachment; filename="${filename}"`,

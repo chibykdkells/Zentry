@@ -768,7 +768,7 @@ export class OrdersService {
 
     return this.sendSmsSafely({
       to: input.phone,
-      message: `ZenDocx: ${input.serviceName} request received. Order ${input.orderNumber}. ${statusLine}`,
+      message: `Ecafe: ${input.serviceName} request received. Order ${input.orderNumber}. ${statusLine}`,
     });
   }
 
@@ -826,7 +826,7 @@ export class OrdersService {
 
     return this.sendSmsSafely({
       to: input.phone,
-      message: `ZenDocx: ${input.serviceName} is ready. Order ${input.orderNumber}. ${bodyLine}`,
+      message: `Ecafe: ${input.serviceName} is ready. Order ${input.orderNumber}. ${bodyLine}`,
     });
   }
 
@@ -868,14 +868,14 @@ export class OrdersService {
   }) {
     return this.sendSmsSafely({
       to: input.phone,
-      message: `ZenDocx: ${input.serviceName} (${input.orderNumber}) dispute update. ${input.message}`,
+      message: `Ecafe: ${input.serviceName} (${input.orderNumber}) dispute update. ${input.message}`,
     });
   }
 
   private getResultFileSignatureSecret() {
     return this.configService.get<string>(
       'JWT_ACCESS_SECRET',
-      'zendocx-result-file-secret',
+      'ecafe-result-file-secret',
     );
   }
 

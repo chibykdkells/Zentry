@@ -124,7 +124,7 @@ export class TenantService {
     const platformDomain = this.config
       .get<string>('PLATFORM_DOMAIN')
       ?.trim()
-      .toLowerCase() || 'zendocx.net';
+      .toLowerCase() || 'ecafe.app';
 
     if (
       normalized === platformDomain ||
@@ -179,7 +179,7 @@ export class TenantService {
     }
 
     return {
-      value: 'zendocx-domain-verification-secret',
+      value: 'ecafe-domain-verification-secret',
       source: 'DEFAULT_FALLBACK',
       dedicatedSecretConfigured: false,
     };
@@ -211,8 +211,8 @@ export class TenantService {
       customDomain,
       customDomainVerified: tenant.customDomainVerified,
       recordType: 'TXT',
-      recordHost: `_zendocx-verify.${customDomain}`,
-      recordValue: `zendocx-site-verification=${recordValue}`,
+      recordHost: `_ecafe-verify.${customDomain}`,
+      recordValue: `ecafe-site-verification=${recordValue}`,
       verificationStatus: tenant.customDomainVerified
         ? 'VERIFIED'
         : secretConfig.source === 'DEFAULT_FALLBACK'
@@ -487,7 +487,7 @@ export class TenantService {
         homepageHeading: `Access ${dto.name} from one business portal`,
         homepageSubheading:
           'Start with the public business homepage, review available services, then sign in or create your account when you are ready.',
-        homepageAbout: `${dto.name} uses ZenDocx to manage service requests, customer onboarding, and manual document workflows from one tenant-owned workspace.`,
+        homepageAbout: `${dto.name} uses Ecafe to manage service requests, customer onboarding, and manual document workflows from one tenant-owned workspace.`,
         homepageManualSteps:
           this.getDefaultHomepageManualSteps() as unknown as Prisma.InputJsonValue,
         tenantMarginRate: dto.tenantMarginRate ?? 0,
@@ -902,7 +902,7 @@ export class TenantService {
 
     if (tenant) {
       const frontendUrl =
-        this.config.get<string>('FRONTEND_URL') ?? 'https://app.zendocx.net';
+        this.config.get<string>('FRONTEND_URL') ?? 'https://dash.ecafe.app';
       const loginUrl = `${frontendUrl}/login`;
 
       await this.emailService
@@ -919,7 +919,7 @@ export class TenantService {
           text: [
             `Hi ${user.firstName},`,
             '',
-            `Your admin account for ${tenant.name} on ZenDocx has been created.`,
+            `Your admin account for ${tenant.name} on Ecafe has been created.`,
             '',
             `Email: ${user.email}`,
             `Temporary password: ${tempPassword}`,
@@ -2008,7 +2008,7 @@ export class TenantService {
         'Review the available services, understand the process, and sign in when you are ready to continue.',
       homepageAbout:
         tenant.homepageAbout ??
-        `${tenant.name} uses ZenDocx to manage customer requests, document processing, and service operations from one tenant-owned workspace.`,
+        `${tenant.name} uses Ecafe to manage customer requests, document processing, and service operations from one tenant-owned workspace.`,
       homepageManualSteps: this.sanitizeHomepageManualSteps(
         tenant.homepageManualSteps,
       ),
@@ -2287,10 +2287,10 @@ export class TenantService {
     <tr><td align="center">
       <table width="100%" style="max-width:520px;background:#ffffff;border-radius:24px;border:1px solid rgba(15,23,42,0.07);box-shadow:0 4px 24px rgba(15,23,42,0.06)">
         <tr><td style="background:#0D1B3E;border-radius:24px 24px 0 0;padding:32px 40px;text-align:center">
-          <span style="color:#F5A623;font-size:28px;font-weight:900;letter-spacing:-0.5px">ZenDocx</span>
+          <span style="color:#F5A623;font-size:28px;font-weight:900;letter-spacing:-0.5px">Ecafe</span>
         </td></tr>
         <tr><td style="padding:40px">
-          <h1 style="margin:0 0 8px;font-size:22px;font-weight:800;color:#0f172a;letter-spacing:-0.3px">Welcome to ZenDocx, ${input.firstName}!</h1>
+          <h1 style="margin:0 0 8px;font-size:22px;font-weight:800;color:#0f172a;letter-spacing:-0.3px">Welcome to Ecafe, ${input.firstName}!</h1>
           <p style="margin:0 0 24px;font-size:15px;color:#64748b;line-height:1.6">Your business workspace <strong>${input.tenantName}</strong> has been created. Use the credentials below to sign in and set up your portal.</p>
           <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:16px;padding:20px 24px;margin-bottom:28px">
             <p style="margin:0 0 8px;font-size:13px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Your login details</p>

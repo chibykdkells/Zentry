@@ -43,16 +43,17 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // ecafe.app (apex) and dash.ecafe.app both resolve to the "ecafe" tenant.
+  // ecafe.app (apex) and dash.ecafe.app both resolve to the Ecafe tenant (slug: "a").
   // Apex serves the tenant landing page / portal home.
   // Dash serves login and the authenticated dashboard.
   const isApexDomain = hostname === 'ecafe.app' || hostname === 'www.ecafe.app';
   const isDashDomain = hostname === 'dash.ecafe.app';
+  const ECAFE_TENANT_SLUG = 'a';
 
   const explicitTenantSlug = request.nextUrl.searchParams.get('tenant') ?? '';
-  // Apex and dash always resolve to the ecafe tenant without a URL slug.
+  // Apex and dash always resolve to the Ecafe tenant without a URL slug.
   const hostTenantSlug =
-    isApexDomain || isDashDomain ? 'ecafe' : resolveTenantSlugFromHost(host);
+    isApexDomain || isDashDomain ? ECAFE_TENANT_SLUG : resolveTenantSlugFromHost(host);
   const storedTenantSlug = request.cookies.get('ecafe-tenant-slug')?.value || '';
   const entryTenantSlug = explicitTenantSlug || hostTenantSlug || '';
   const tenantSlug = explicitTenantSlug || storedTenantSlug || hostTenantSlug || '';
@@ -71,7 +72,7 @@ export function proxy(request: NextRequest) {
     // Always stamp the ecafe slug on apex and dash requests so subsequent
     // navigations retain tenant context without a query param.
     if (isApexDomain || isDashDomain) {
-      response.cookies.set('ecafe-tenant-slug', 'ecafe', {
+      response.cookies.set('ecafe-tenant-slug', ECAFE_TENANT_SLUG, {
         path: '/',
         sameSite: 'lax',
         maxAge: 60 * 60 * 24 * 30,
