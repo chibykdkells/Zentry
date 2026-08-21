@@ -15,9 +15,9 @@ export class ResendEmailProvider implements IEmailProvider {
     const apiKey = config.get<string>('RESEND_API_KEY', '');
     this.defaultFromEmail = config.get<string>(
       'RESEND_FROM_EMAIL',
-      'noreply@zendocx.net',
+      'noreply@ecafe.app',
     );
-    this.defaultFromName = config.get<string>('RESEND_FROM_NAME', 'ZenDocx');
+    this.defaultFromName = config.get<string>('RESEND_FROM_NAME', 'Ecafe');
 
     if (apiKey) {
       this.client = new Resend(apiKey);
