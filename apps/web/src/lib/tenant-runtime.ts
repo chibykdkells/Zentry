@@ -4,10 +4,10 @@ import {
   isCustomTenantHostname,
 } from '@/lib/platform-domain';
 
-const TENANT_SLUG_COOKIE = 'zendocx-tenant-slug';
-const TENANT_SLUG_STORAGE_KEY = 'zendocx-tenant-slug';
-const RETURNING_TENANTS_COOKIE = 'zendocx-returning-tenants';
-const RETURNING_TENANTS_STORAGE_KEY = 'zendocx-returning-tenants';
+const TENANT_SLUG_COOKIE = 'ecafe-tenant-slug';
+const TENANT_SLUG_STORAGE_KEY = 'ecafe-tenant-slug';
+const RETURNING_TENANTS_COOKIE = 'ecafe-returning-tenants';
+const RETURNING_TENANTS_STORAGE_KEY = 'ecafe-returning-tenants';
 
 export function isPrivateDevelopmentHost(hostname: string): boolean {
   return isPrivateDevelopmentHostname(hostname);
@@ -15,7 +15,7 @@ export function isPrivateDevelopmentHost(hostname: string): boolean {
 
 /**
  * Returns true when the browser is running on a tenant custom domain
- * (e.g. ecafe.app) rather than a *.zendocx.net subdomain or localhost.
+ * (e.g. ecafe.app) rather than a *.ecafe.app subdomain or localhost.
  */
 export function isCustomTenantDomain(hostname: string): boolean {
   return isCustomTenantHostname(hostname);
@@ -230,7 +230,7 @@ export function appendTenantContextToPath(
   }
 
   try {
-    const url = new URL(href, 'http://zendocx.local');
+    const url = new URL(href, 'http://ecafe.local');
     if (!url.searchParams.has('tenant') && !url.searchParams.has('slug')) {
       url.searchParams.set('tenant', normalizedSlug);
     }

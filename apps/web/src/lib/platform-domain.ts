@@ -1,4 +1,4 @@
-const DEFAULT_PLATFORM_DOMAIN = 'zendocx.net';
+const DEFAULT_PLATFORM_DOMAIN = 'ecafe.app';
 
 function normalizePlatformDomain(value: string | undefined): string {
   const raw = value?.trim();

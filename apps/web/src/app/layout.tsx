@@ -6,14 +6,14 @@ import { getTenantThemeBootstrapScript } from '@/lib/tenant-theme';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'ZenDocx — Digital service portals for modern businesses',
+  title: 'Ecafe — Government services, simplified',
   description:
     'White-label service portals for paperwork, registrations, payments, and customer support workflows.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'ZenDocx',
+    title: 'Ecafe',
   },
   icons: {
     icon: [

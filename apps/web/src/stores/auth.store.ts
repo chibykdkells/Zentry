@@ -52,7 +52,7 @@ export const useAuthStore = create<AuthStore>()(
         })),
     }),
     {
-      name: 'zendocx-auth',
+      name: 'ecafe-auth',
       // Persist user metadata only. Access tokens stay in memory.
       partialize: (state) => ({ user: state.user, isAuthenticated: state.isAuthenticated }),
       onRehydrateStorage: () => (state) => {

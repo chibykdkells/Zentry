@@ -117,7 +117,7 @@ export function InstallPrompt() {
   const isDismissed =
     dismissedOverrides[dismissKey] ??
     (hydrated ? getDismissedState(tenantSlug) : false);
-  const appName = tenant?.name?.trim() || 'ZenDocx';
+  const appName = tenant?.name?.trim() || 'Ecafe';
   const appInitial = appName.charAt(0).toUpperCase() || 'Z';
   const tenantLogoUrl = tenant?.logoUrl?.trim() || null;
   const installDescription = deferredPrompt

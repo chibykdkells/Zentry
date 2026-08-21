@@ -29,7 +29,7 @@ export function TopBar({ title, className }: TopBarProps) {
   const homeHref = effectiveRole
     ? appendTenantContextToPath(getDefaultRouteForRole(effectiveRole), tenantSlug)
     : appendTenantContextToPath('/home', tenantSlug);
-  const brandName = resolvedTenant?.name ?? 'ZenDocx';
+  const brandName = resolvedTenant?.name ?? 'Ecafe';
   const brandInitial = brandName.charAt(0).toUpperCase();
 
   const initials = user

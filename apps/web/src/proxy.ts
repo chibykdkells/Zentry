@@ -12,8 +12,8 @@ import {
   isCustomTenantHostname,
 } from '@/lib/platform-domain';
 
-const RESERVED_SUBDOMAINS = new Set(['www', 'api', 'platform', 'admin', 'app']);
-const RETURNING_TENANTS_COOKIE = 'zendocx-returning-tenants';
+const RESERVED_SUBDOMAINS = new Set(['www', 'api', 'platform', 'admin', 'app', 'dash']);
+const RETURNING_TENANTS_COOKIE = 'ecafe-returning-tenants';
 
 function resolveTenantSlugFromHost(host: string): string {
   const hostname = host.split(':')[0].trim().toLowerCase();
@@ -22,7 +22,7 @@ function resolveTenantSlugFromHost(host: string): string {
 
 /**
  * Returns true when the incoming request is from a verified tenant custom
- * domain (e.g. ecafe.app) rather than a *.zendocx.net subdomain or localhost.
+ * domain (e.g. ecafe.app) rather than a *.ecafe.app subdomain or localhost.
  * The API resolves the tenant from the Host header, so the proxy only needs
  * to know that a tenant context exists — not the slug itself.
  */
@@ -34,10 +34,38 @@ function isCustomTenantDomain(host: string): boolean {
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   const host = request.headers.get('host') ?? '';
+  const hostname = host.split(':')[0].trim().toLowerCase();
+
+  // platform.ecafe.app → platform admin (same as /admin routes)
+  // Rewrite to serve admin pages without changing the visible URL.
+  if (hostname === 'platform.ecafe.app') {
+    if (pathname === '/' || pathname === '') {
+      return NextResponse.redirect(new URL('/admin/dashboard', request.url));
+    }
+    if (!pathname.startsWith('/admin') && !pathname.startsWith('/platform')) {
+      return NextResponse.rewrite(new URL(`/admin${pathname}`, request.url));
+    }
+    return NextResponse.next();
+  }
+
+  // dash.ecafe.app → ecafe tenant app (login, dashboard, etc.)
+  // Treat as the ecafe tenant context — no slug in URL needed.
+  if (hostname === 'dash.ecafe.app') {
+    const response = NextResponse.next();
+    if (!request.cookies.get('ecafe-tenant-slug')?.value) {
+      response.cookies.set('ecafe-tenant-slug', 'ecafe', {
+        path: '/',
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 30,
+      });
+    }
+    return response;
+  }
+
   const explicitTenantSlug = request.nextUrl.searchParams.get('tenant') ?? '';
   const hostTenantSlug = resolveTenantSlugFromHost(host);
   const storedTenantSlug =
-    request.cookies.get('zendocx-tenant-slug')?.value || '';
+    request.cookies.get('ecafe-tenant-slug')?.value || '';
   const entryTenantSlug = explicitTenantSlug || hostTenantSlug || '';
   const tenantSlug =
     explicitTenantSlug ||
@@ -62,7 +90,7 @@ export function proxy(request: NextRequest) {
       return response;
     }
 
-    response.cookies.set('zendocx-tenant-slug', explicitTenantSlug, {
+    response.cookies.set('ecafe-tenant-slug', explicitTenantSlug, {
       path: '/',
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 30,
@@ -88,7 +116,7 @@ export function proxy(request: NextRequest) {
     const isCustomDomain = isCustomTenantDomain(host);
 
     if (!entryTenantSlug && !isCustomDomain) {
-      // Root platform domain (zendocx.net / www.zendocx.net) — SaaS landing page
+      // Root platform domain (ecafe.app / www.ecafe.app) — SaaS landing page
       return NextResponse.next();
     }
 

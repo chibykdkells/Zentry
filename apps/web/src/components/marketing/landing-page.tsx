@@ -108,7 +108,7 @@ function PortalScreen() {
       </div>
 
       <div className="py-2.5 text-center border-t border-gray-100 shrink-0">
-        <span className="text-gray-400" style={{ fontSize: 7 }}>Powered by ZenDocx</span>
+        <span className="text-gray-400" style={{ fontSize: 7 }}>Powered by Ecafe</span>
       </div>
     </div>
   );
@@ -296,7 +296,7 @@ export function LandingPage() {
             <div className="w-8 h-8 rounded-lg bg-[#0D1B3E] flex items-center justify-center">
               <span className="text-[#F5A623] font-bold text-sm">Z</span>
             </div>
-            <span className="font-bold text-[#0D1B3E] text-lg tracking-tight">ZenDocx</span>
+            <span className="font-bold text-[#0D1B3E] text-lg tracking-tight">Ecafe</span>
           </div>
 
           {/* Desktop nav */}
@@ -306,7 +306,7 @@ export function LandingPage() {
             <a href="#pricing" className="text-sm text-gray-600 hover:text-[#0D1B3E] transition-colors">Pricing</a>
             <a href="/platform/login" className="text-sm text-gray-600 hover:text-[#0D1B3E] transition-colors">Platform Login</a>
             <a
-              href="mailto:hello@zendocx.net?subject=Demo Request"
+              href="mailto:hello@ecafe.app?subject=Demo Request"
               className="px-4 py-2 bg-[#F5A623] text-[#0D1B3E] text-sm font-semibold rounded-lg hover:bg-[#e8961a] transition-colors"
             >
               Request a Demo
@@ -332,7 +332,7 @@ export function LandingPage() {
             <a href="#pricing" className="text-sm text-gray-600" onClick={() => setMenuOpen(false)}>Pricing</a>
             <a href="/platform/login" className="text-sm text-gray-600">Platform Login</a>
             <a
-              href="mailto:hello@zendocx.net?subject=Demo Request"
+              href="mailto:hello@ecafe.app?subject=Demo Request"
               className="px-4 py-2 bg-[#F5A623] text-[#0D1B3E] text-sm font-semibold rounded-lg text-center"
             >
               Request a Demo
@@ -356,11 +356,11 @@ export function LandingPage() {
                 Launch Your Document Services Business in Days
               </h1>
               <p className="text-lg text-gray-300 mb-10 leading-relaxed">
-                ZenDocx gives your business a complete, ready-to-use escrow marketplace for JAMB, NIMC, NECO, and VTU services — with wallet management, CBT job fulfilment, disputes, and admin analytics all built in.
+                Ecafe gives your business a complete, ready-to-use escrow marketplace for JAMB, NIMC, NECO, and VTU services — with wallet management, CBT job fulfilment, disputes, and admin analytics all built in.
               </p>
               <div className="flex flex-col sm:flex-row gap-4">
                 <a
-                  href="mailto:hello@zendocx.net?subject=Demo Request"
+                  href="mailto:hello@ecafe.app?subject=Demo Request"
                   className="px-8 py-4 bg-[#F5A623] text-[#0D1B3E] font-bold rounded-xl text-center hover:bg-[#e8961a] transition-colors"
                 >
                   Request a Demo
@@ -432,7 +432,7 @@ export function LandingPage() {
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-14">
             <h2 className="text-3xl sm:text-4xl font-bold text-[#0D1B3E] mb-4">How it works</h2>
-            <p className="text-gray-500 max-w-xl mx-auto">You focus on growing your business. ZenDocx handles the technology.</p>
+            <p className="text-gray-500 max-w-xl mx-auto">You focus on growing your business. Ecafe handles the technology.</p>
           </div>
           <div className="grid sm:grid-cols-3 gap-8">
             {[
@@ -537,7 +537,7 @@ export function LandingPage() {
                 ))}
               </ul>
               <a
-                href="mailto:hello@zendocx.net?subject=Starter Plan Enquiry"
+                href="mailto:hello@ecafe.app?subject=Starter Plan Enquiry"
                 className="block w-full py-3 border-2 border-[#0D1B3E] text-[#0D1B3E] font-semibold rounded-xl text-center hover:bg-[#0D1B3E] hover:text-white transition-colors"
               >
                 Get in touch
@@ -557,7 +557,7 @@ export function LandingPage() {
                 ))}
               </ul>
               <a
-                href="mailto:hello@zendocx.net?subject=Growth Plan Enquiry"
+                href="mailto:hello@ecafe.app?subject=Growth Plan Enquiry"
                 className="block w-full py-3 bg-[#F5A623] text-[#0D1B3E] font-bold rounded-xl text-center hover:bg-[#e8961a] transition-colors"
               >
                 Get in touch
@@ -571,9 +571,9 @@ export function LandingPage() {
       <section className="py-20 px-4 sm:px-6 bg-[#0D1B3E]">
         <div className="max-w-3xl mx-auto text-center">
           <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">Ready to launch your platform?</h2>
-          <p className="text-gray-300 mb-10">Join businesses already using ZenDocx to power their document services operations.</p>
+          <p className="text-gray-300 mb-10">Join businesses already using Ecafe to power their document services operations.</p>
           <a
-            href="mailto:hello@zendocx.net?subject=Demo Request"
+            href="mailto:hello@ecafe.app?subject=Demo Request"
             className="inline-block px-10 py-4 bg-[#F5A623] text-[#0D1B3E] font-bold rounded-xl hover:bg-[#e8961a] transition-colors"
           >
             Request a Demo Today
@@ -588,11 +588,11 @@ export function LandingPage() {
             <div className="w-6 h-6 rounded bg-[#0D1B3E] flex items-center justify-center">
               <span className="text-[#F5A623] font-bold text-xs">Z</span>
             </div>
-            <span className="font-bold text-[#0D1B3E] text-sm">ZenDocx</span>
+            <span className="font-bold text-[#0D1B3E] text-sm">Ecafe</span>
           </div>
-          <p className="text-xs text-gray-400">© {new Date().getFullYear()} ZenDocx. Fast. Trusted. Document Services, Simplified.</p>
+          <p className="text-xs text-gray-400">© {new Date().getFullYear()} Ecafe. Fast. Trusted. Document Services, Simplified.</p>
           <div className="flex items-center gap-6">
-            <a href="mailto:hello@zendocx.net" className="text-xs text-gray-400 hover:text-[#0D1B3E]">hello@zendocx.net</a>
+            <a href="mailto:hello@ecafe.app" className="text-xs text-gray-400 hover:text-[#0D1B3E]">hello@ecafe.app</a>
             <a href="/platform/login" className="text-xs text-gray-400 hover:text-[#0D1B3E]">Platform Login</a>
           </div>
         </div>

@@ -35,12 +35,12 @@ function getSidebarTitle(role: UserRole | undefined, tenantName: string | null |
   switch (role) {
     case UserRole.CBT_CENTER:
     case UserRole.CBT_STAFF:
-      return 'ZenDocx CBT';
+      return 'Ecafe CBT';
     case UserRole.SUPER_ADMIN:
-      return 'ZenDocx Admin';
+      return 'Ecafe Admin';
     case UserRole.INDIVIDUAL:
     default:
-      return 'ZenDocx';
+      return 'Ecafe';
   }
 }
 

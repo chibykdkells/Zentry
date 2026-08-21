@@ -49,7 +49,7 @@ async function bootstrap() {
     .map((origin) => origin.trim())
     .filter(Boolean);
 
-  const platformDomain = config.get<string>('PLATFORM_DOMAIN', 'zendocx.net');
+  const platformDomain = config.get<string>('PLATFORM_DOMAIN', 'ecafe.app');
 
   // Cache of tenant custom-domain origins (e.g. "https://ecafe.app").
   // Lazily refreshed on CORS checks after the TTL expires so machines can
@@ -131,7 +131,7 @@ async function bootstrap() {
         return;
       }
 
-      // Allow all tenant subdomains: acme.zendocx.net, etc.
+      // Allow all tenant subdomains: acme.ecafe.app, etc.
       try {
         const { hostname, protocol } = new URL(origin);
         if (protocol === 'https:' && hostname.endsWith(`.${platformDomain}`)) {
@@ -186,7 +186,7 @@ async function bootstrap() {
   app.setGlobalPrefix('api/v1', { exclude: ['/health'] });
 
   await app.listen(port, '0.0.0.0');
-  console.log(`🚀 ZenDocx API running on http://0.0.0.0:${port}/api/v1`);
+  console.log(`🚀 Ecafe API running on http://0.0.0.0:${port}/api/v1`);
 }
 
 void bootstrap();

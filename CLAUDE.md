@@ -12,24 +12,20 @@
 
 ---
 
-## Fly Postgres cluster `zentry-pg-prod` — DO NOT DESTROY
+## Database: Neon. The old Fly cluster is gone.
 
-Zentry **has migrated to Neon** (completed 2026-08-17). The Fly MPG cluster
-still exists and must not be destroyed — it also holds `fep_assist`, a second
-live production product.
+Zentry migrated to Neon on **2026-08-17**. The Fly MPG cluster
+`kyzl60x1vgyopj9g` that previously held the `zentry` database was **destroyed on
+2026-08-21**, once FEP Assist had also migrated off it and both products were
+confirmed healthy on Neon.
 
-| | |
-|---|---|
-| Cluster ID | `kyzl60x1vgyopj9g` |
-| Cluster name | `zentry-pg-prod restored 2026-08-03 19:04:41.931425Z` |
-| Holds | `zentry` — retained as backup post-migration |
-| Also holds | `fep_assist` — **live production product** |
+There is no longer any Fly Postgres cluster on this account. Fly still runs the
+API (`zentry-api-prod`); the database is Neon only.
 
-**NOT safe:** `fly mpg destroy kyzl60x1vgyopj9g`, or destroying "zentry-pg-prod"
-from the Fly dashboard. This deletes FEP Assist's data.
-
-**Safe (after Neon is confirmed stable):** `DROP DATABASE zentry` inside the
-cluster — removes only the Zentry backup, leaves `fep_assist` untouched.
+Earlier revisions of this section carried a DO-NOT-DESTROY warning about that
+cluster, and at one point stated that dropping the `zentry` database inside it
+was safe. Both are now moot, and the second was wrong at the time it was written
+— that database still held all 95 users, 95 wallets and 182 transactions.
 
 ### Neon migration — verified 2026-08-17
 

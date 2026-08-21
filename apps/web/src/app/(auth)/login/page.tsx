@@ -41,7 +41,7 @@ export async function generateMetadata({
 
   if (!initialTenant) {
     return {
-      title: 'Sign in — ZenDocx',
+      title: 'Sign in — Ecafe',
     };
   }
 

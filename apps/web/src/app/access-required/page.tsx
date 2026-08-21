@@ -24,7 +24,7 @@ export default async function AccessRequiredPage({
   const copy = reasonCopy[reason] ?? {
     title: 'A valid access link is required',
     description:
-      'ZenDocx is not meant to be entered through a generic public link. Use the exact tenant portal URL or the platform admin link that was shared with you.',
+      'Ecafe is not meant to be entered through a generic public link. Use the exact tenant portal URL or the platform admin link that was shared with you.',
   };
 
   return (
@@ -53,7 +53,7 @@ export default async function AccessRequiredPage({
                   Your business or tenant portal URL, shared directly by the organization you belong to
                 </li>
                 <li>
-                  The dedicated platform admin link, shared internally with ZenDocx platform owners
+                  The dedicated platform admin link, shared internally with Ecafe platform owners
                 </li>
               </ul>
             </div>

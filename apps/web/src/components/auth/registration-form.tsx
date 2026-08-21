@@ -166,7 +166,7 @@ export function RegistrationForm({
           <FeedbackBanner
             tone="info"
             title="Business portal required"
-            message="ZenDocx is platform software for tenant businesses. Users and CBT centers must register through their organization's tenant portal, not the main Zendocx.net website."
+            message="Ecafe is platform software for tenant businesses. Users and CBT centers must register through their organization's tenant portal, not the main ecafe.app website."
           />
         ) : null}
 

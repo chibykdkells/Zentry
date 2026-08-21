@@ -39,7 +39,7 @@ export function AuthShell({
   const hydrated = useHydrated();
 
   const resolvedTenant = hydrated ? (tenant ?? initialTenant) : initialTenant;
-  const brandName = resolvedTenant?.name ?? 'ZenDocx';
+  const brandName = resolvedTenant?.name ?? 'Ecafe';
   const brandInitial = brandName.charAt(0).toUpperCase();
   const isPlatformVariant = variant === 'platform';
   const tenantSlug = resolvedTenant?.slug ?? null;

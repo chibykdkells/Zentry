@@ -97,17 +97,17 @@ const domainStatusCopy: Record<
   DNS_RECORD_NOT_FOUND: {
     tone: 'warning',
     title: 'TXT record not found yet',
-    message: 'ZenDocx could not see the expected TXT record yet. This usually means the DNS record is missing or still propagating.',
+    message: 'Ecafe could not see the expected TXT record yet. This usually means the DNS record is missing or still propagating.',
   },
   DNS_RECORD_MISMATCH: {
     tone: 'error',
     title: 'TXT record found, but value is wrong',
-    message: 'A TXT record exists at the verification host, but the value does not match the token ZenDocx expects.',
+    message: 'A TXT record exists at the verification host, but the value does not match the token Ecafe expects.',
   },
   DNS_LOOKUP_ERROR: {
     tone: 'error',
     title: 'DNS lookup failed',
-    message: 'ZenDocx could not complete the lookup right now. This may be a temporary DNS or resolver issue.',
+    message: 'Ecafe could not complete the lookup right now. This may be a temporary DNS or resolver issue.',
   },
   SERVICE_NOT_CONFIGURED: {
     tone: 'warning',
@@ -578,7 +578,7 @@ export default function TenantSettingsPage() {
               <div>
                 <p className="text-sm font-semibold text-slate-900">Custom domain verification</p>
                 <p className="mt-1 text-sm text-slate-500">
-                  Prove ownership with a DNS TXT record before this domain can go live on ZenDocx.
+                  Prove ownership with a DNS TXT record before this domain can go live on Ecafe.
                 </p>
               </div>
               {overview.tenant.customDomainVerified ? (

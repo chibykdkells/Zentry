@@ -18,7 +18,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <TopBar />
       <div className="flex flex-1 min-h-0">
         <Sidebar
-          brandLabel={hydrated ? (tenant?.name ?? 'ZenDocx') : 'ZenDocx'}
+          brandLabel={hydrated ? (tenant?.name ?? 'Ecafe')  : 'Ecafe'}
           sectionLabel="Menu"
           items={individualPrimaryNav}
           secondaryItems={individualSecondaryNav}

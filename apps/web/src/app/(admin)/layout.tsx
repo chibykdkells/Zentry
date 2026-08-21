@@ -13,7 +13,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <TopBar title="Admin Dashboard" />
       <div className="flex flex-1 min-h-0">
         <Sidebar
-          brandLabel="ZenDocx Admin"
+          brandLabel="Ecafe Admin"
           sectionLabel="Oversight"
           items={adminPrimaryNav}
           secondaryItems={adminSecondaryNav}

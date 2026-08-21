@@ -65,7 +65,7 @@ function getInitialTenant(): TenantConfig | null {
   try {
     // If the persisted auth shows a platform user (no tenantId), don't load
     // a stale tenant from a previous session.
-    const authRaw = window.localStorage.getItem('zendocx-auth');
+    const authRaw = window.localStorage.getItem('ecafe-auth');
     if (authRaw) {
       const parsed = JSON.parse(authRaw) as {
         state?: { user?: { tenantId?: string | null } };

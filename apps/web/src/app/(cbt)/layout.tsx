@@ -18,8 +18,8 @@ export default function CbtLayout({ children }: { children: React.ReactNode }) {
   const brandLabel = hydrated
     ? tenant
       ? `${tenant.name} CBT`
-      : 'ZenDocx CBT'
-    : 'ZenDocx CBT';
+      : 'Ecafe CBT'
+    : 'Ecafe CBT';
 
   const primaryNav = user?.role === UserRole.CBT_STAFF ? cbtStaffPrimaryNav : cbtPrimaryNav;
 

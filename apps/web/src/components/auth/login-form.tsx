@@ -294,7 +294,7 @@ export function LoginForm({
       title={platformMode ? 'Platform sign in' : 'Sign in'}
       description={
         platformMode
-          ? 'Access the ZenDocx control layer to manage tenants and platform operations.'
+          ? 'Access the Ecafe control layer to manage tenants and platform operations.'
           : 'Enter your credentials to continue to your workspace.'
       }
       footer={footer}
