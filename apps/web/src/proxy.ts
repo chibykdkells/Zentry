@@ -1,5 +1,35 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+
+export const config = {
+  matcher: [
+    '/',
+    '/login',
+    '/admin',
+    '/platform',
+    '/platform/login',
+    '/register/:path*',
+    '/verify-email',
+    '/forgot-password',
+    '/reset-password',
+    '/home',
+    '/services',
+    '/orders',
+    '/profile',
+    '/wallet',
+    '/notifications',
+    '/security',
+    '/disputes',
+    '/support',
+    '/dashboard',
+    '/job-pool',
+    '/my-jobs',
+    '/earnings',
+    '/withdraw',
+    '/tenant/:path*',
+    '/admin/:path*',
+  ],
+};
 import {
   canAccessPath,
   getDefaultRouteForRole,
