@@ -20,12 +20,6 @@ function resolveTenantSlugFromHost(host: string): string {
   return extractTenantSlugFromPlatformHostname(hostname, RESERVED_SUBDOMAINS) ?? '';
 }
 
-/**
- * Returns true when the incoming request is from a verified tenant custom
- * domain (e.g. ecafe.app) rather than a *.ecafe.app subdomain or localhost.
- * The API resolves the tenant from the Host header, so the proxy only needs
- * to know that a tenant context exists — not the slug itself.
- */
 function isCustomTenantDomain(host: string): boolean {
   const hostname = host.split(':')[0].trim().toLowerCase();
   return isCustomTenantHostname(hostname);
@@ -36,45 +30,32 @@ export function proxy(request: NextRequest) {
   const host = request.headers.get('host') ?? '';
   const hostname = host.split(':')[0].trim().toLowerCase();
 
-  // platform.ecafe.app → platform admin (same as /admin routes)
-  // Rewrite to serve admin pages without changing the visible URL.
+  // platform.ecafe.app → platform admin login / dashboard.
+  // Unauthenticated users land on /platform/login; the RouteGuard handles
+  // the redirect after a successful sign-in.
   if (hostname === 'platform.ecafe.app') {
     if (pathname === '/' || pathname === '') {
-      return NextResponse.redirect(new URL('/admin/dashboard', request.url));
+      return NextResponse.redirect(new URL('/platform/login', request.url));
     }
     if (!pathname.startsWith('/admin') && !pathname.startsWith('/platform')) {
-      return NextResponse.rewrite(new URL(`/admin${pathname}`, request.url));
+      return NextResponse.rewrite(new URL(`/platform${pathname}`, request.url));
     }
     return NextResponse.next();
   }
 
-  // dash.ecafe.app → ecafe tenant app (login, dashboard, etc.)
-  // Treat as the ecafe tenant context — no slug in URL needed.
-  if (hostname === 'dash.ecafe.app') {
-    const response = NextResponse.next();
-    if (!request.cookies.get('ecafe-tenant-slug')?.value) {
-      response.cookies.set('ecafe-tenant-slug', 'ecafe', {
-        path: '/',
-        sameSite: 'lax',
-        maxAge: 60 * 60 * 24 * 30,
-      });
-    }
-    return response;
-  }
+  // ecafe.app (apex) and dash.ecafe.app both resolve to the "ecafe" tenant.
+  // Apex serves the tenant landing page / portal home.
+  // Dash serves login and the authenticated dashboard.
+  const isApexDomain = hostname === 'ecafe.app' || hostname === 'www.ecafe.app';
+  const isDashDomain = hostname === 'dash.ecafe.app';
 
   const explicitTenantSlug = request.nextUrl.searchParams.get('tenant') ?? '';
-  const hostTenantSlug = resolveTenantSlugFromHost(host);
-  const storedTenantSlug =
-    request.cookies.get('ecafe-tenant-slug')?.value || '';
+  // Apex and dash always resolve to the ecafe tenant without a URL slug.
+  const hostTenantSlug =
+    isApexDomain || isDashDomain ? 'ecafe' : resolveTenantSlugFromHost(host);
+  const storedTenantSlug = request.cookies.get('ecafe-tenant-slug')?.value || '';
   const entryTenantSlug = explicitTenantSlug || hostTenantSlug || '';
-  const tenantSlug =
-    explicitTenantSlug ||
-    storedTenantSlug ||
-    hostTenantSlug ||
-    '';
-  // On a verified custom domain (e.g. ecafe.app), the tenant is resolved by
-  // the API from the Host header. The proxy doesn't need the slug — it just
-  // needs to know a tenant context is present so it doesn't block routes.
+  const tenantSlug = explicitTenantSlug || storedTenantSlug || hostTenantSlug || '';
   const hasTenantContext = Boolean(tenantSlug) || isCustomTenantDomain(host);
   const isCustomDomainRequest = isCustomTenantDomain(host);
   const refreshToken = request.cookies.get('refresh_token')?.value;
@@ -85,17 +66,26 @@ export function proxy(request: NextRequest) {
       ?.value.split(',')
       .map((item) => item.trim().toLowerCase())
       .filter(Boolean) ?? [];
+
   const persistTenantCookie = (response: NextResponse) => {
+    // Always stamp the ecafe slug on apex and dash requests so subsequent
+    // navigations retain tenant context without a query param.
+    if (isApexDomain || isDashDomain) {
+      response.cookies.set('ecafe-tenant-slug', 'ecafe', {
+        path: '/',
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 30,
+      });
+      return response;
+    }
     if (!explicitTenantSlug) {
       return response;
     }
-
     response.cookies.set('ecafe-tenant-slug', explicitTenantSlug, {
       path: '/',
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 30,
     });
-
     return response;
   };
 
@@ -103,12 +93,10 @@ export function proxy(request: NextRequest) {
     if (!tenantSlug || href.startsWith('/admin') || href.startsWith('/platform')) {
       return href;
     }
-
     const url = new URL(href, request.url);
     if (!url.searchParams.has('tenant') && !url.searchParams.has('slug')) {
       url.searchParams.set('tenant', tenantSlug);
     }
-
     return `${url.pathname}${url.search}${url.hash}`;
   };
 
@@ -116,20 +104,16 @@ export function proxy(request: NextRequest) {
     const isCustomDomain = isCustomTenantDomain(host);
 
     if (!entryTenantSlug && !isCustomDomain) {
-      // Root platform domain (ecafe.app / www.ecafe.app) — SaaS landing page
+      // No tenant context and not a custom domain — serve the marketing page.
       return NextResponse.next();
     }
 
-    // ?preview=1 lets authenticated admins view the public portal home as a visitor
     const isPortalPreview = request.nextUrl.searchParams.get('preview') === '1';
 
     if (role && !isPortalPreview) {
       return persistTenantCookie(
         NextResponse.redirect(
-          new URL(
-            appendTenantToPath(getDefaultRouteForRole(role)),
-            request.url,
-          ),
+          new URL(appendTenantToPath(getDefaultRouteForRole(role)), request.url),
         ),
       );
     }
@@ -137,10 +121,7 @@ export function proxy(request: NextRequest) {
     if (entryTenantSlug && returningTenants.includes(entryTenantSlug.toLowerCase())) {
       return persistTenantCookie(
         NextResponse.redirect(
-          new URL(
-            `/login?tenant=${encodeURIComponent(entryTenantSlug)}`,
-            request.url,
-          ),
+          new URL(`/login?tenant=${encodeURIComponent(entryTenantSlug)}`, request.url),
         ),
       );
     }
@@ -181,9 +162,6 @@ export function proxy(request: NextRequest) {
     const redirectTarget = `${pathname}${search}`;
 
     if (pathname.startsWith('/admin')) {
-      // The refresh cookie is issued by the API host and is not always visible
-      // to this web middleware on the platform host. Let the admin RouteGuard
-      // and AuthBootstrap verify/restore the platform session client-side.
       return persistTenantCookie(NextResponse.next());
     }
 
@@ -212,9 +190,6 @@ export function proxy(request: NextRequest) {
     );
   }
 
-  // Auth routes intentionally remain client-controlled.
-  // A refresh cookie can be structurally valid but already revoked server-side,
-  // so redirecting from middleware causes loops between /login and protected pages.
   if (isAuthRoute(pathname)) {
     return persistTenantCookie(NextResponse.next());
   }
