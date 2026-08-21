@@ -192,7 +192,9 @@ export function proxy(request: NextRequest) {
       );
     }
 
-    if (entryTenantSlug && returningTenants.includes(entryTenantSlug.toLowerCase())) {
+    // Apex domain always shows the tenant portal landing page — the "returning
+    // user" quick-login shortcut is the job of dash.ecafe.app, not ecafe.app.
+    if (!isApexDomain && entryTenantSlug && returningTenants.includes(entryTenantSlug.toLowerCase())) {
       return persistTenantCookie(
         NextResponse.redirect(
           new URL(`/login?tenant=${encodeURIComponent(entryTenantSlug)}`, request.url),

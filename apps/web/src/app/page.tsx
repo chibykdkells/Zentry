@@ -85,6 +85,9 @@ export default async function Home({
   const { tenantSlug, initialTenant } =
     await resolveTenantFromRequest(resolvedSearchParams);
   const cookieStore = await cookies();
+  const headerStore = await headers();
+  const host = (headerStore.get('host') ?? '').split(':')[0].trim().toLowerCase();
+  const isApexDomain = host === 'ecafe.app' || host === 'www.ecafe.app';
 
   if (!tenantSlug) {
     return <LandingPage />;
@@ -95,7 +98,9 @@ export default async function Home({
     .map((item) => item.trim().toLowerCase())
     .filter(Boolean);
 
-  if (returningTenants.includes(tenantSlug.toLowerCase())) {
+  // Apex domain always shows the portal landing page. dash.ecafe.app is the
+  // "quick return to login" entry point for returning users.
+  if (!isApexDomain && returningTenants.includes(tenantSlug.toLowerCase())) {
     redirect(`/login?tenant=${encodeURIComponent(tenantSlug)}`);
   }
 
