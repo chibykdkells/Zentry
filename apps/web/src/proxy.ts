@@ -37,6 +37,11 @@ export function proxy(request: NextRequest) {
     if (pathname === '/' || pathname === '') {
       return NextResponse.redirect(new URL('/platform/login', request.url));
     }
+    // Auth utility pages are shared routes — serve them directly.
+    const PLATFORM_PASSTHROUGH = ['/forgot-password', '/reset-password', '/verify-email'];
+    if (PLATFORM_PASSTHROUGH.some((p) => pathname.startsWith(p))) {
+      return NextResponse.next();
+    }
     if (!pathname.startsWith('/admin') && !pathname.startsWith('/platform')) {
       return NextResponse.rewrite(new URL(`/platform${pathname}`, request.url));
     }
