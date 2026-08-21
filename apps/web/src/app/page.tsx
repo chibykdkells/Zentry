@@ -12,7 +12,10 @@ import {
   resolveTenantSlugFromHost,
 } from '@/lib/tenant-server';
 
-const RETURNING_TENANTS_COOKIE = 'zendocx-returning-tenants';
+const RETURNING_TENANTS_COOKIE = 'ecafe-returning-tenants';
+
+// Subdomains that are reserved for platform use and never map to a tenant slug.
+const RESERVED_SUBDOMAINS = new Set(['www', 'api', 'platform', 'admin', 'app', 'dash']);
 
 async function resolveTenantFromRequest(
   resolvedSearchParams: Record<string, string | string[] | undefined>,
@@ -22,16 +25,31 @@ async function resolveTenantFromRequest(
     ? rawTenantSlug[0] ?? null
     : rawTenantSlug ?? null;
   const headerStore = await headers();
-  const hostname = (headerStore.get('host') ?? '').split(':')[0].trim().toLowerCase();
-  const hostTenantSlug = resolveTenantSlugFromHost(headerStore.get('host') ?? '');
+  const host = headerStore.get('host') ?? '';
+  const hostname = host.split(':')[0].trim().toLowerCase();
+
+  // The cookie set by the middleware carries the resolved tenant slug for
+  // apex (ecafe.app) and dash (dash.ecafe.app) requests.
+  const cookieStore = await cookies();
+  const cookieTenantSlug = cookieStore.get('ecafe-tenant-slug')?.value ?? null;
+
+  const hostTenantSlug = resolveTenantSlugFromHost(host);
   const customDomainTenantSlug =
-    explicitTenantSlug || hostTenantSlug
+    explicitTenantSlug || hostTenantSlug || cookieTenantSlug
       ? null
       : await resolveTenantSlugFromCustomDomain(hostname);
-  const tenantSlug = explicitTenantSlug ?? hostTenantSlug ?? customDomainTenantSlug;
-  const initialTenant = await fetchTenantPublicConfig(tenantSlug);
 
-  return { tenantSlug, initialTenant };
+  // Prefer explicit > host subdomain > middleware cookie > custom domain lookup.
+  // The cookie covers ecafe.app apex and dash.ecafe.app where the host alone
+  // does not yield a subdomain slug.
+  const tenantSlug =
+    explicitTenantSlug ?? hostTenantSlug ?? cookieTenantSlug ?? customDomainTenantSlug;
+
+  // Ignore reserved slugs (platform, admin, etc.) that sneak in via cookie.
+  const resolvedSlug = tenantSlug && !RESERVED_SUBDOMAINS.has(tenantSlug) ? tenantSlug : null;
+  const initialTenant = await fetchTenantPublicConfig(resolvedSlug);
+
+  return { tenantSlug: resolvedSlug, initialTenant };
 }
 
 export async function generateMetadata({
