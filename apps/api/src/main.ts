@@ -52,10 +52,16 @@ async function bootstrap() {
   const platformDomain = config.get<string>('PLATFORM_DOMAIN', 'zendocx.net');
 
   // Cache of tenant custom-domain origins (e.g. "https://ecafe.app").
-  // Refreshed every 5 minutes so newly registered domains are picked up
-  // without a restart.
+  // Lazily refreshed on CORS checks after the TTL expires so machines can
+  // scale to zero when idle rather than being kept alive by a polling interval.
+  const CUSTOM_DOMAIN_TTL_MS = 5 * 60 * 1000;
   let customDomainOrigins = new Set<string>();
+  let customDomainLastRefreshed = 0;
+  let customDomainRefreshing = false;
+
   const refreshCustomDomainOrigins = async () => {
+    if (customDomainRefreshing) return;
+    customDomainRefreshing = true;
     try {
       const tenants = await prisma.tenant.findMany({
         where: { customDomain: { not: null }, isActive: true },
@@ -67,12 +73,14 @@ async function bootstrap() {
           .filter((d): d is string => Boolean(d))
           .flatMap((d) => [`https://${d}`, `http://${d}`]),
       );
+      customDomainLastRefreshed = Date.now();
     } catch {
       // Non-fatal — keep using the previous cache
+    } finally {
+      customDomainRefreshing = false;
     }
   };
   await refreshCustomDomainOrigins();
-  setInterval(() => { void refreshCustomDomainOrigins(); }, 5 * 60 * 1000);
 
   const isPrivateDevHostname = (hostname: string) => {
     return (
@@ -135,6 +143,10 @@ async function bootstrap() {
       }
 
       // Allow custom tenant domains (e.g. ecafe.app) resolved from the DB.
+      // Trigger a background refresh if the cache is stale.
+      if (Date.now() - customDomainLastRefreshed > CUSTOM_DOMAIN_TTL_MS) {
+        void refreshCustomDomainOrigins();
+      }
       if (customDomainOrigins.has(origin.toLowerCase())) {
         callback(null, true);
         return;

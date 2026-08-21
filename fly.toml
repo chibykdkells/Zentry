@@ -20,8 +20,8 @@ primary_region = "lhr"
   internal_port = 4000
   force_https = true
   auto_start_machines = true
-  auto_stop_machines = "off"
-  min_machines_running = 1
+  auto_stop_machines = "suspend"
+  min_machines_running = 0
 
   [[http_service.checks]]
     grace_period = "30s"
