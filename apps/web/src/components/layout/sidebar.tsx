@@ -82,7 +82,7 @@ export function Sidebar({
         ) : (
           <>
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-accent">
-              <span className="text-sm font-black text-white">Z</span>
+              <span className="text-sm font-black text-white">E</span>
             </div>
             <div>
               <span className="block text-xl font-black tracking-tight text-white">

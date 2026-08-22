@@ -104,5 +104,11 @@ export default async function Home({
     redirect(`/login?tenant=${encodeURIComponent(tenantSlug)}`);
   }
 
-  return <TenantPortalHome tenantSlug={tenantSlug} initialTenant={initialTenant} />;
+  // On the apex domain, sign-in links must go to dash.ecafe.app so users
+  // reach the correct subdomain for their authenticated session.
+  const loginUrl = isApexDomain
+    ? `https://dash.ecafe.app/login?tenant=${encodeURIComponent(tenantSlug)}`
+    : undefined;
+
+  return <TenantPortalHome tenantSlug={tenantSlug} initialTenant={initialTenant} loginUrl={loginUrl} />;
 }

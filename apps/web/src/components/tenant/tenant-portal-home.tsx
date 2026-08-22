@@ -18,6 +18,9 @@ import {
 interface TenantPortalHomeProps {
   tenantSlug: string;
   initialTenant?: TenantPublicConfig | null;
+  /** Override login URL — used when the component renders on the apex domain
+   *  so "Sign in" buttons link to dash.ecafe.app instead of /login on the same host. */
+  loginUrl?: string;
 }
 
 const PASTEL_PALETTES = [
@@ -31,7 +34,7 @@ const PASTEL_PALETTES = [
   { bg: 'bg-pink-50', border: 'border-pink-100', dot: 'bg-pink-400', text: 'text-pink-700' },
 ];
 
-export function TenantPortalHome({ tenantSlug, initialTenant = null }: TenantPortalHomeProps) {
+export function TenantPortalHome({ tenantSlug, initialTenant = null, loginUrl }: TenantPortalHomeProps) {
   const tenant = useTenantStore((state) => state.tenant);
   const { services, loading } = useServiceCatalog({ tenantSlug });
 
@@ -57,7 +60,7 @@ export function TenantPortalHome({ tenantSlug, initialTenant = null }: TenantPor
       ];
 
   const visibleServices = services.slice(0, 8);
-  const loginHref = appendTenantContextToPath('/login', tenantSlug);
+  const loginHref = loginUrl ?? appendTenantContextToPath('/login', tenantSlug);
   const registerHref = appendTenantContextToPath('/register', tenantSlug);
 
   const brandInitial = brandName.charAt(0).toUpperCase();
