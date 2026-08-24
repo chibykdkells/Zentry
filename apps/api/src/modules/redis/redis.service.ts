@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -17,21 +17,29 @@ import { PrismaService } from '../prisma/prisma.service';
  * and made the diff impossible to review as "backing store only".
  */
 @Injectable()
-export class RedisService implements OnModuleDestroy {
+export class RedisService {
   private readonly logger = new Logger(RedisService.name);
 
-  /** How often expired rows are swept. Reads never depend on this running. */
-  private static readonly SWEEP_INTERVAL_MS = 10 * 60 * 1000;
+  /**
+   * Shortest gap between sweeps of expired rows.
+   *
+   * The sweep rides on `set` rather than on a timer. A timer queries Postgres
+   * on a fixed cadence whether or not the app is doing anything, and that is
+   * enough on its own to stop a Neon compute ever scaling to zero — an idle
+   * API then bills as a busy one. Piggybacking on a write costs nothing: the
+   * connection is already awake, and a process that has written no rows has
+   * created nothing that needs sweeping.
+   *
+   * Reads never depend on this running — `get` filters on expiry itself, so a
+   * late sweep leaves dead rows in the table and nothing else.
+   */
+  private static readonly SWEEP_MIN_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
-  private readonly timer: NodeJS.Timeout;
+  /** Seeded at construction so a restart is not itself a reason to sweep. */
+  private lastSweptAt = Date.now();
+  private sweeping = false;
 
-  constructor(private readonly prisma: PrismaService) {
-    // unref so housekeeping can never be the reason the process stays alive.
-    this.timer = setInterval(() => {
-      void this.sweep();
-    }, RedisService.SWEEP_INTERVAL_MS);
-    this.timer.unref?.();
-  }
+  constructor(private readonly prisma: PrismaService) {}
 
   /** Returns null for a missing key and for one whose expiry has passed. */
   async get(key: string): Promise<string | null> {
@@ -53,10 +61,12 @@ export class RedisService implements OnModuleDestroy {
         : null;
 
     await this.prisma.kvStore.upsert({
-      where:  { key },
+      where: { key },
       update: { value, expiresAt },
       create: { key, value, expiresAt },
     });
+
+    this.maybeSweep();
   }
 
   async getJson<T>(key: string): Promise<T | null> {
@@ -83,6 +93,20 @@ export class RedisService implements OnModuleDestroy {
     await this.prisma.kvStore.deleteMany({ where: { key } });
   }
 
+  /** Sweeps at most once per {@link SWEEP_MIN_INTERVAL_MS}, off the hot path. */
+  private maybeSweep(): void {
+    if (this.sweeping) return;
+    if (Date.now() - this.lastSweptAt < RedisService.SWEEP_MIN_INTERVAL_MS) {
+      return;
+    }
+
+    this.sweeping = true;
+    this.lastSweptAt = Date.now();
+    void this.sweep().finally(() => {
+      this.sweeping = false;
+    });
+  }
+
   /** Housekeeping only — correctness comes from the filter in `get`. */
   private async sweep(): Promise<void> {
     try {
@@ -94,9 +118,5 @@ export class RedisService implements OnModuleDestroy {
       // process down over housekeeping.
       this.logger.error(`kv sweep failed: ${(error as Error).message}`);
     }
-  }
-
-  async onModuleDestroy(): Promise<void> {
-    clearInterval(this.timer);
   }
 }

@@ -8479,3 +8479,51 @@ migration required.
 - Add unit specs for `returnJobToPool` / `reassignJob` in `orders.service.spec.ts`
   (claim-block clearing, deadline reschedule, audit log, escrow untouched).
 - Untracked debug files `check-jobs.sql` / `verify-jobs.js` remain in repo root (left as-is).
+
+---
+
+## 2026-08-24 — Stop the API keeping the Neon compute awake
+
+### Context
+
+A Neon billing breakdown showed `zentry_db` at 40.88 CU-hours against FEP Assist's
+26.55, for an app serving roughly one HTTP request per hour. Neon bills compute by
+awake time, so anything querying Postgres on a fixed cadence is billed as if the app
+were busy.
+
+The custom-domain CORS poll in `apps/api/src/main.ts` was flagged as the cause, but it
+was already fixed in `c567fec` (lazy TTL cache) and has been live since release v104 on
+2026-08-21. Two periodic queries were still running.
+
+### What Changed
+
+- `apps/api/src/modules/redis/redis.service.ts` — dropped the 10-minute `setInterval`
+  sweep of expired `KvStore` rows. `unref()` did not help: the process is a listening
+  HTTP server, so it stays alive regardless and the timer kept firing. The sweep now
+  rides on `set` (`maybeSweep`), at most once per 6 hours. An idle process touches the
+  database not at all, and an idle process has written nothing that needs sweeping.
+  Reads were never dependent on the sweep — `get` filters on `expiresAt` itself.
+- `apps/api/src/modules/orders/orders-upload-janitor.service.ts` — `@Cron` moved from
+  `EVERY_HOUR` to `EVERY_6_HOURS`. Each run was independently waking the compute, and a
+  Neon compute stays up for minutes after any query.
+
+### Verification
+
+- `npx tsc --noEmit` clean; ESLint clean on both files.
+- `npx jest`: 11 failures in `orders.service.spec.ts` / `tenant.service.spec.ts`, identical
+  before and after the change (pre-existing — mocks missing `order.jobBlocks`).
+- Confirmed `/health` does not query the database, so the 15-second Fly health check is
+  not a factor. One machine is running (`still-brook-4188`), not two.
+
+### Decisions Made
+
+- Housekeeping that exists only to tidy rows must never be the reason a serverless
+  compute is awake. Piggyback it on a write path instead of a timer.
+
+### Blockers / Notes for Next Session
+
+- **Not deployed.** The API deploys manually: `fly deploy -a zentry-api-prod`. The saving
+  does not land until this ships.
+- Recheck the Neon CU-hours a few days after deploy to confirm the drop.
+- Pre-existing spec failures in `orders.service.spec.ts` / `tenant.service.spec.ts` still
+  need fixing (unrelated to this change).

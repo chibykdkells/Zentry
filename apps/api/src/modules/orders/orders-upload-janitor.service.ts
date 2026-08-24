@@ -14,7 +14,11 @@ export class OrdersUploadJanitorService {
     private readonly storageService: StorageService,
   ) {}
 
-  @Cron(CronExpression.EVERY_HOUR)
+  // Every six hours, not every hour: each run is the only thing that wakes
+  // the database when the app is otherwise idle, and a Neon compute stays up
+  // for minutes after any query. Expired staged uploads are orphans — nothing
+  // reads them — so clearing them a few hours later costs nothing.
+  @Cron(CronExpression.EVERY_6_HOURS)
   async cleanupStaleUploads() {
     const now = new Date();
     const staleUploads = await this.prisma.uploadedOrderFile.findMany({
