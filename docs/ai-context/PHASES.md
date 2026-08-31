@@ -733,6 +733,8 @@ optimized. Production deployed.
 - [x] Platform-admin funding reconciliation tool — /admin/finance can preview a stuck funding reference against the active gateway and safely credit it through the normal ledger flow
 - [x] Production funding reconciliation pass completed for confirmed-success Paystack references — `ZDX-TXN-MORIQWAW-DXFJNW`, `ZDX-TXN-MOR0I1QN-B7USF6`, and `ZDX-TXN-MOPT62DM-4I651X` were previewed as safe and credited through the admin reconciliation flow on 2026-05-05
 - [x] Paystack webhook production truth pass — official docs confirmed signatures are signed with the Paystack secret key; live Fly `PAYSTACK_WEBHOOK_SECRET` was mismatched from `PAYSTACK_SECRET_KEY`; 5 still-pending wallet fundings were confirmed as `abandoned` directly from Paystack verify responses; live `PAYSTACK_WEBHOOK_SECRET` was updated to match the secret key on 2026-05-05
+- [x] Admin Finance page redesigned — 4-card StatCard band + Overview/Payouts/Wallets/Activity tabs (matching the admin services tab pattern); prose "What to watch first" panel replaced with a data-driven "Needs attention" list, flat 15-row money summary regrouped into three labelled columns
+- [ ] Visual check of the redesigned /admin/finance tabs while signed in as super admin (compiles and builds clean, but was never viewed rendered)
 - [ ] Confirm password reset email delivery in production (run fly logs --app zentry-api-prod)
 - [ ] Sentry Vercel env vars still needed: NEXT_PUBLIC_SENTRY_DSN, SENTRY_ORG=zendocx, SENTRY_PROJECT=zendocx-web
 - [ ] app.zendocx.net CNAME record in Cloudflare (add app → cname.vercel-dns.com)

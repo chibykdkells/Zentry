@@ -8527,3 +8527,70 @@ was already fixed in `c567fec` (lazy TTL cache) and has been live since release 
 - Recheck the Neon CU-hours a few days after deploy to confirm the drop.
 - Pre-existing spec failures in `orders.service.spec.ts` / `tenant.service.spec.ts` still
   need fixing (unrelated to this change).
+
+---
+
+## 2026-08-24 — Admin Finance page redesign
+
+### Context
+
+`/admin/finance` stacked eleven equal-weight panels in one scroll. Everything was
+the same size, the same grey and the same emphasis, so nothing read as important.
+Three specific problems drove the rewrite:
+
+- "What to watch first" took a third of the first screen and contained no data —
+  three paragraphs explaining what "money ready now" means, sitting next to the
+  panel that already showed it.
+- "Money summary" was fifteen identical grey pills in a flat list, mixing customer
+  balances, platform earnings and payout state with no grouping.
+- The four stat cards led with "Gateway fees captured" and "Payout queue", and two
+  of them used the same chart icon.
+
+### What Changed
+
+`apps/web/src/app/(admin)/admin/finance/page.tsx` — rewritten.
+
+- Headline band now uses the shared `StatCard` (which already existed in
+  `components/shared/` and this page was not using, hand-rolling grey cards
+  instead): money ready now, money on hold, Zendocx earnings, payouts to review.
+- Four tabs — Overview, Payouts, Wallets, Activity — using the same segmented
+  control as the admin services page, so Finance is no longer the odd page out.
+- Overview replaces the explainer panel with a `MoneySplit` proportion bar
+  (ready / on hold / paid out, with percentages) and a "Needs attention" list that
+  shows counts instead of describing them; each row jumps to the tab that clears it.
+- The fifteen-row summary is regrouped into three labelled columns — customer
+  money, Zendocx earnings, payouts.
+- CBT payout readiness moved from six grey rows to four colour-coded queue metrics.
+- Money values use `tabular-nums`; nested `bg-slate-50/70`-inside-white dropped for
+  white cards on hairline borders; one distinct icon per concept.
+
+No functionality was removed. Withdrawal review, funding reconciliation, CBT
+balances, recent releases, wallet search and the transaction feed with all seven
+filters are all still present, redistributed across the tabs.
+
+Also added `.claude/launch.json` so the web dev server can be started from this
+machine (`pnpm` is not on PATH, so it invokes Next through Node directly).
+
+### Verification
+
+- `npx tsc --noEmit` clean for `apps/web`.
+- ESLint clean on the rewritten file.
+- `next build apps/web` — compiled successfully, `/admin/finance` in the route list.
+- Dev server serves `GET /admin/finance` 200.
+- **Not visually verified.** Viewing the page rendered needs a signed-in super
+  admin session, which this session could not create. The tabs have never been
+  looked at in a browser.
+
+### Decisions Made
+
+- Finance follows the existing admin tab pattern rather than inventing a new
+  layout — consistency with `/admin/services` was worth more than a bespoke design.
+- Explanatory prose about what a number means belongs next to the number, or
+  nowhere. A panel of definitions is not a dashboard.
+
+### Blockers / Notes for Next Session
+
+- Open the four tabs while signed in as super admin before this ships — see the
+  unchecked item in PHASES.md.
+- `.claude/launch.json` is committed; it is a local dev convenience, drop it if
+  the team would rather not carry it.
