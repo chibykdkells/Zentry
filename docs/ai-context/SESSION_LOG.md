@@ -8594,3 +8594,89 @@ machine (`pnpm` is not on PATH, so it invokes Next through Node directly).
   unchecked item in PHASES.md.
 - `.claude/launch.json` is committed; it is a local dev convenience, drop it if
   the team would rather not carry it.
+
+---
+
+## 2026-08-24 — Why the finance numbers were lying, and three fixes
+
+### Context
+
+The redesigned finance page surfaced two numbers the platform owner could not
+explain: 41 pending funding attempts, and ₦10,400 held in escrow. Neither was a
+broken payment pipeline.
+
+**Pending fundings.** `initiateFunding` writes a `PENDING` transaction row before
+the user reaches the gateway. If the gateway call fails the row is flipped to
+`FAILED`, but an abandoned checkout leaves it `PENDING` forever — nothing aged
+those rows out. The admin count had no date bound, so it was a lifetime tally of
+people who changed their mind, presented as a queue of stuck payments. It could
+only grow, on a perfectly healthy platform.
+
+Production logs also showed two references failing verification with a gateway
+404 (`ZDX-TXN-MTFSXBRV-NAEXCN`, `ZDX-TXN-MTFST5V7-HQ30LD`) — the gateway has no
+record of them at all, so they predate the current provider rather than being
+merely abandoned.
+
+**Held funds.** Escrow is locked when an order is *created*, but every CBT payout
+bucket in `getAdminCbtEarningsOverview` filters on `status: COMPLETED`. An order
+sitting unclaimed in the pool, or claimed and abandoned, holds customer money
+that belongs to no bucket and appears on no screen — visible only inside the
+platform-wide escrow total with nothing to explain it.
+
+### What Changed
+
+**1. Abandoned funding sweep**
+- `wallet.service.ts` — new `sweepAbandonedFundings()`. Takes `PENDING`
+  `WALLET_FUNDING` rows older than 24 hours (checkout itself expires after 30
+  minutes), verifies each with the gateway, and either credits it — a real
+  payment whose webhook never landed is *not* written off — or marks it `FAILED`
+  with an audit entry. A row is only failed when the gateway actually answers;
+  an unreachable gateway leaves it `PENDING` for the next run, so a network blip
+  cannot destroy funding records.
+- `wallet-funding-janitor.service.ts` — NEW. `@Cron(EVERY_6_HOURS)` driving the
+  sweep. Six-hourly, not more often, for the same Neon reason as the other cron:
+  when the app is idle this is the only thing waking the compute.
+
+**2. Bounded the pending-funding metric**
+- `getAdminWalletOverview` now counts pending fundings from the last 48 hours
+  (`PENDING_FUNDING_ATTENTION_HOURS`). The card means "payments worth looking at"
+  rather than "lifetime abandonment".
+
+**3. Surfaced escrow on undelivered orders**
+- `getAdminWalletOverview` returns `openEscrowAmount`, `openEscrowCount` and the
+  eight oldest `openEscrowOrders`, covering orders with escrow locked whose
+  status is PENDING/ASSIGNED/IN_PROGRESS/DISPUTED/RESOLVED.
+- Finance page gains an "Orders holding money undelivered" panel on Overview and
+  a matching row in Needs attention.
+
+Also deduplicated the funding-transaction select into `FUNDING_TRANSACTION_SELECT`
+so the runtime select and `FundingTransactionRecord` cannot drift apart.
+
+### Verification
+
+- `tsc --noEmit` clean for both apps; ESLint clean on every touched file.
+- Four new specs in `wallet.service.spec.ts` covering the cutoff, the 404
+  write-off with audit, the unreachable-gateway skip, and that a confirmed
+  payment is never written off. Suite 12/12.
+- Full API suite: 11 failures, unchanged from baseline (pre-existing, in
+  `orders.service.spec.ts` / `tenant.service.spec.ts`).
+- `next build apps/web` compiled successfully.
+
+### Decisions Made
+
+- A funding row is only failed when the gateway positively answers. Treating a
+  timeout as abandonment would let a network blip write off real money.
+- The pending-funding metric is bounded rather than left to the sweep alone, so
+  the card stays honest even if a sweep is late.
+
+### Blockers / Notes for Next Session
+
+- **Not deployed.** The first sweep in production will write off roughly 39
+  abandoned rows (up to 50 per run). That is a real write to financial records —
+  audited, and each row keeps its amount and reference, but it should be a
+  deliberate deploy, not a side effect.
+- Worth running the two diagnostic queries first to see what is actually there:
+  order status breakdown where `escrowReleasedAt IS NULL`, and the age
+  distribution of pending fundings.
+- The two 404 references predate the current provider; confirm before the sweep
+  writes them off.

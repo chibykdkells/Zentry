@@ -32,6 +32,18 @@ export interface AdminWalletOverview {
   completedWithdrawalCount: number;
   rejectedWithdrawalAmount: string;
   rejectedWithdrawalCount: number;
+  /** Escrow on orders that are not COMPLETED, so no CBT payout bucket covers it. */
+  openEscrowAmount: string;
+  openEscrowCount: number;
+  openEscrowOrders: Array<{
+    id: string;
+    orderNumber: string;
+    status: string;
+    amount: string;
+    createdAt: string;
+    serviceName: string;
+    cbtName: string | null;
+  }>;
   heldFundsByTenant: Array<{
     id: string;
     name: string;

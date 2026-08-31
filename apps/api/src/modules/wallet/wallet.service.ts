@@ -20,6 +20,7 @@ import {
   WithdrawalStatus,
 } from '@prisma/client';
 import type { Request } from 'express';
+import type { VerifyPaymentResult } from '../../providers/interfaces';
 import { PaymentService } from '../../providers/payment/payment.service';
 import { EmailService } from '../../providers/email/email.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -171,37 +172,70 @@ type AdminRecentCbtCommissionRecord = Prisma.TransactionGetPayload<{
   };
 }>;
 
+const FUNDING_TRANSACTION_SELECT = {
+  id: true,
+  walletId: true,
+  userId: true,
+  type: true,
+  status: true,
+  amount: true,
+  reference: true,
+  gateway: true,
+  gatewayRef: true,
+  metadata: true,
+  createdAt: true,
+  wallet: {
+    select: {
+      id: true,
+      availableBalance: true,
+    },
+  },
+  user: {
+    select: {
+      id: true,
+      email: true,
+      firstName: true,
+      lastName: true,
+      role: true,
+      tenantId: true,
+    },
+  },
+} satisfies Prisma.TransactionSelect;
+
 type FundingTransactionRecord = Prisma.TransactionGetPayload<{
-  select: {
-    id: true;
-    walletId: true;
-    userId: true;
-    type: true;
-    status: true;
-    amount: true;
-    reference: true;
-    gateway: true;
-    gatewayRef: true;
-    metadata: true;
-    createdAt: true;
-    wallet: {
-      select: {
-        id: true;
-        availableBalance: true;
-      };
-    };
-    user: {
-      select: {
-        id: true;
-        email: true;
-        firstName: true;
-        lastName: true;
-        role: true;
-        tenantId: true;
-      };
-    };
-  };
+  select: typeof FUNDING_TRANSACTION_SELECT;
 }>;
+
+/**
+ * How long an unpaid funding attempt is kept before it is written off. The
+ * gateway checkout itself expires after 30 minutes, so a day is generous.
+ */
+const ABANDONED_FUNDING_CUTOFF_HOURS = 24;
+
+/** Rows per sweep. Small enough that one run cannot hold the event loop. */
+const ABANDONED_FUNDING_SWEEP_BATCH_SIZE = 50;
+
+/** Window for the admin "pending funding" count. See getAdminWalletOverview. */
+const PENDING_FUNDING_ATTENTION_HOURS = 48;
+
+/**
+ * Order states that still hold customer money in escrow but are not COMPLETED.
+ *
+ * Escrow is locked when an order is created, while every CBT payout bucket
+ * filters on COMPLETED — so money sitting against an order nobody has
+ * delivered belongs to no bucket and appears on no screen. It is only visible
+ * in the platform-wide escrow total, with nothing to explain it.
+ */
+const OPEN_ESCROW_ORDER_STATUSES = [
+  OrderStatus.PENDING,
+  OrderStatus.ASSIGNED,
+  OrderStatus.IN_PROGRESS,
+  OrderStatus.DISPUTED,
+  OrderStatus.RESOLVED,
+] as const;
+
+/** Oldest open-escrow orders surfaced to the admin finance page. */
+const OPEN_ESCROW_ORDER_SAMPLE_SIZE = 8;
 
 type FundingVerificationPreview = {
   success: boolean;
@@ -362,6 +396,19 @@ export class WalletService {
 
   async getAdminWalletOverview(tenantId: string | null) {
     const tf = tenantId ? { tenantId } : {};
+    // Counted over a window, not for all time. A funding row is written before
+    // the user reaches the gateway, so every abandoned checkout leaves one
+    // behind; an unbounded count reads as a queue of stuck payments when it is
+    // really a lifetime tally of people who changed their mind. Anything older
+    // than this is the abandoned-funding sweep's problem, not an operator's.
+    const pendingFundingSince = new Date(
+      Date.now() - PENDING_FUNDING_ATTENTION_HOURS * 60 * 60 * 1000,
+    );
+    const openEscrowWhere: Prisma.OrderWhereInput = {
+      ...tf,
+      escrowReleasedAt: null,
+      status: { in: [...OPEN_ESCROW_ORDER_STATUSES] },
+    };
     const walletTf = tenantId ? { user: { tenantId } } : {};
     const tenantSql = tenantId
       ? Prisma.sql`AND "tenantId" = ${tenantId}`
@@ -379,6 +426,8 @@ export class WalletService {
       refundAggregate,
       heldFundsByTenant,
       capturedFundingFeeAggregate,
+      openEscrowAggregate,
+      openEscrowOrders,
     ] = await this.prisma.$transaction([
       this.prisma.wallet.aggregate({
         where: walletTf,
@@ -405,6 +454,7 @@ export class WalletService {
           ...tf,
           type: TransactionType.WALLET_FUNDING,
           status: TransactionStatus.PENDING,
+          createdAt: { gte: pendingFundingSince },
         },
       }),
       this.prisma.transaction.aggregate({
@@ -508,6 +558,25 @@ export class WalletService {
           AND status = ${TransactionStatus.SUCCESS}::"TransactionStatus"
           ${tenantSql}
       `,
+      this.prisma.order.aggregate({
+        where: openEscrowWhere,
+        _sum: { totalAmount: true },
+        _count: { _all: true },
+      }),
+      this.prisma.order.findMany({
+        where: openEscrowWhere,
+        orderBy: { createdAt: 'asc' },
+        take: OPEN_ESCROW_ORDER_SAMPLE_SIZE,
+        select: {
+          id: true,
+          orderNumber: true,
+          status: true,
+          totalAmount: true,
+          createdAt: true,
+          service: { select: { name: true } },
+          assignedCbt: { select: { firstName: true, lastName: true } },
+        },
+      }),
     ]);
 
     const withdrawalSummary = withdrawalStatusSummary.reduce(
@@ -618,6 +687,20 @@ export class WalletService {
         payoutReviewCount,
         ...withdrawalSummary,
         heldFundsByTenant: heldFundsByBusiness,
+        openEscrowAmount:
+          openEscrowAggregate._sum.totalAmount?.toString() ?? '0',
+        openEscrowCount: openEscrowAggregate._count._all,
+        openEscrowOrders: openEscrowOrders.map((order) => ({
+          id: order.id,
+          orderNumber: order.orderNumber,
+          status: order.status,
+          amount: order.totalAmount.toString(),
+          createdAt: order.createdAt.toISOString(),
+          serviceName: order.service.name,
+          cbtName: order.assignedCbt
+            ? `${order.assignedCbt.firstName} ${order.assignedCbt.lastName}`
+            : null,
+        })),
       },
     };
   }
@@ -3542,6 +3625,167 @@ export class WalletService {
     return typeof callbackUrl === 'string' ? callbackUrl : null;
   }
 
+  /**
+   * Marks funding attempts that were never paid for as FAILED.
+   *
+   * `initiateFunding` writes a PENDING row before the user reaches the gateway,
+   * so every abandoned checkout leaves one behind. Nothing used to clear them:
+   * they accumulated for the life of the platform and made the admin "pending
+   * funding" count read as a queue of stuck payments when it was really a
+   * lifetime tally of people who changed their mind.
+   *
+   * A row is only touched once it is older than ABANDONED_FUNDING_CUTOFF_HOURS —
+   * comfortably past the 30-minute checkout expiry set in `initiateFunding`.
+   * Each one is verified with the gateway first, so a payment that did land but
+   * whose webhook never arrived is credited here rather than written off.
+   *
+   * Transient gateway trouble must not destroy a funding record, so a row is
+   * only failed when the gateway answers. An unreachable gateway leaves the row
+   * PENDING for the next run.
+   */
+  async sweepAbandonedFundings(): Promise<{
+    scannedCount: number;
+    creditedCount: number;
+    abandonedCount: number;
+    skippedCount: number;
+  }> {
+    const cutoff = new Date(
+      Date.now() - ABANDONED_FUNDING_CUTOFF_HOURS * 60 * 60 * 1000,
+    );
+
+    const stalePendingFundings = await this.prisma.transaction.findMany({
+      where: {
+        type: TransactionType.WALLET_FUNDING,
+        status: TransactionStatus.PENDING,
+        createdAt: { lt: cutoff },
+      },
+      orderBy: { createdAt: 'asc' },
+      take: ABANDONED_FUNDING_SWEEP_BATCH_SIZE,
+      select: FUNDING_TRANSACTION_SELECT,
+    });
+
+    let creditedCount = 0;
+    let abandonedCount = 0;
+    let skippedCount = 0;
+
+    for (const transaction of stalePendingFundings) {
+      let verification: VerifyPaymentResult | null = null;
+
+      try {
+        verification = await this.paymentService.verifyPayment(
+          transaction.reference,
+        );
+      } catch (error) {
+        // A gateway that does not recognise the reference has answered: there is
+        // no payment to wait for. Anything else may be a network blip, so the
+        // row is left alone and retried on the next sweep.
+        if (!this.isUnknownReferenceError(error)) {
+          skippedCount += 1;
+          this.logger.warn(
+            `Abandoned funding sweep skipped ${transaction.reference}: ${
+              error instanceof Error ? error.message : 'unknown error'
+            }`,
+          );
+          continue;
+        }
+      }
+
+      if (verification?.success) {
+        try {
+          await this.completeFundingTransaction({
+            transaction,
+            amountKobo: verification.amountKobo,
+            gatewayRef: verification.gatewayRef,
+            fundingFeeKobo: this.getStoredFundingFeeKobo(transaction),
+            source: 'gateway-verification',
+          });
+          creditedCount += 1;
+        } catch (error) {
+          skippedCount += 1;
+          this.logger.error(
+            `Abandoned funding sweep could not credit ${transaction.reference}: ${
+              error instanceof Error ? error.message : 'unknown error'
+            }`,
+          );
+        }
+        continue;
+      }
+
+      await this.markFundingAbandoned(transaction);
+      abandonedCount += 1;
+    }
+
+    if (stalePendingFundings.length) {
+      this.logger.log(
+        `Abandoned funding sweep: ${stalePendingFundings.length} scanned, ${creditedCount} credited, ${abandonedCount} failed, ${skippedCount} left pending.`,
+      );
+    }
+
+    return {
+      scannedCount: stalePendingFundings.length,
+      creditedCount,
+      abandonedCount,
+      skippedCount,
+    };
+  }
+
+  /** True when the gateway positively reports it has never seen the reference. */
+  private isUnknownReferenceError(error: unknown): boolean {
+    const status = (
+      error as { response?: { status?: number }; status?: number } | null
+    )?.response?.status;
+
+    if (status === 404) {
+      return true;
+    }
+
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+
+    return (
+      message.includes('404') ||
+      message.includes('not found') ||
+      message.includes('transaction reference not found')
+    );
+  }
+
+  /**
+   * Writes off one unpaid funding attempt. No wallet balance moves — the money
+   * never arrived — but the write is still audited, because a financial record
+   * changing state is an event somebody may have to explain later.
+   */
+  private async markFundingAbandoned(transaction: FundingTransactionRecord) {
+    const metadata = this.toMetadataRecord(transaction.metadata);
+
+    await this.prisma.$transaction([
+      this.prisma.transaction.update({
+        where: { id: transaction.id },
+        data: {
+          status: TransactionStatus.FAILED,
+          metadata: {
+            ...metadata,
+            abandonedAt: new Date().toISOString(),
+            failure: 'Funding abandoned — never confirmed by the gateway.',
+          },
+        },
+      }),
+      this.prisma.auditLog.create({
+        data: {
+          userId: transaction.userId,
+          action: 'WALLET_FUNDING_ABANDONED',
+          entity: 'Transaction',
+          entityId: transaction.reference,
+          newValues: {
+            reference: transaction.reference,
+            amountKobo: transaction.amount.toString(),
+            gateway: transaction.gateway,
+            initiatedAt: transaction.createdAt.toISOString(),
+            reason: 'No gateway confirmation before the abandonment cutoff.',
+          },
+        },
+      }),
+    ]);
+  }
+
   private async reconcileRecentPendingFundings(userId: string) {
     const recentPendingFundings = await this.prisma.transaction.findMany({
       where: {
@@ -3554,35 +3798,7 @@ export class WalletService {
       },
       orderBy: { createdAt: 'desc' },
       take: 5,
-      select: {
-        id: true,
-        walletId: true,
-        userId: true,
-        type: true,
-        status: true,
-        amount: true,
-        reference: true,
-        gateway: true,
-        gatewayRef: true,
-        metadata: true,
-        createdAt: true,
-        wallet: {
-          select: {
-            id: true,
-            availableBalance: true,
-          },
-        },
-        user: {
-          select: {
-            id: true,
-            email: true,
-            firstName: true,
-            lastName: true,
-            role: true,
-            tenantId: true,
-          },
-        },
-      },
+      select: FUNDING_TRANSACTION_SELECT,
     });
 
     for (const transaction of recentPendingFundings) {

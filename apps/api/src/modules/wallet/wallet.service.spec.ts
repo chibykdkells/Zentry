@@ -1,6 +1,11 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 
-import { PaymentGateway, TransactionStatus, TransactionType, UserRole } from '@prisma/client';
+import {
+  PaymentGateway,
+  TransactionStatus,
+  TransactionType,
+  UserRole,
+} from '@prisma/client';
 import { WalletService } from './wallet.service';
 
 describe('WalletService', () => {
@@ -19,6 +24,7 @@ describe('WalletService', () => {
       update: jest.Mock;
       findUnique: jest.Mock;
       updateMany: jest.Mock;
+      findMany: jest.Mock;
     };
     auditLog: {
       create: jest.Mock;
@@ -55,6 +61,7 @@ describe('WalletService', () => {
         update: jest.fn(),
         findUnique: jest.fn(),
         updateMany: jest.fn(),
+        findMany: jest.fn(),
       },
       auditLog: {
         create: jest.fn(),
@@ -161,11 +168,7 @@ describe('WalletService', () => {
       mode: 'live',
     });
 
-    await service.initiateFunding(
-      'user-1',
-      { amountNaira: 1000 },
-      'notaurl',
-    );
+    await service.initiateFunding('user-1', { amountNaira: 1000 }, 'notaurl');
 
     expect(paymentService.initiatePayment).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -391,11 +394,14 @@ describe('WalletService', () => {
       paidAt: new Date('2026-05-04T18:05:00.000Z'),
     });
 
-    const result = await service.getAdminFundingReconciliationPreview('ZDX-TXN-123');
+    const result =
+      await service.getAdminFundingReconciliationPreview('ZDX-TXN-123');
 
     expect(result.data.canApply).toBe(true);
     expect(result.data.reasons).toEqual([]);
-    expect(result.data.transaction.callbackUrl).toBe('https://zendocx.net/wallet');
+    expect(result.data.transaction.callbackUrl).toBe(
+      'https://zendocx.net/wallet',
+    );
     expect(result.data.verification.success).toBe(true);
     expect(result.data.verification.amountKobo).toBe('10000');
   });
@@ -437,11 +443,124 @@ describe('WalletService', () => {
       paidAt: new Date('2026-05-04T18:11:00.000Z'),
     });
 
-    const result = await service.getAdminFundingReconciliationPreview('ZDX-TXN-456');
+    const result =
+      await service.getAdminFundingReconciliationPreview('ZDX-TXN-456');
 
     expect(result.data.canApply).toBe(false);
     expect(result.data.reasons).toContain(
       'The provider confirmed a different amount than the pending wallet funding record.',
     );
+  });
+  describe('sweepAbandonedFundings', () => {
+    const stalePendingFunding = {
+      id: 'txn-1',
+      walletId: 'wallet-1',
+      userId: 'user-1',
+      type: TransactionType.WALLET_FUNDING,
+      status: TransactionStatus.PENDING,
+      amount: 500000n,
+      reference: 'ZDX-TXN-STALE',
+      gateway: PaymentGateway.FINTAVAPAY,
+      gatewayRef: null,
+      metadata: { initiatedVia: 'wallet-page' },
+      createdAt: new Date('2026-08-01T10:00:00.000Z'),
+      wallet: { id: 'wallet-1', availableBalance: 0n },
+      user: {
+        id: 'user-1',
+        email: 'user@example.com',
+        firstName: 'Ada',
+        lastName: 'Lovelace',
+        role: UserRole.INDIVIDUAL,
+        tenantId: 'tenant-1',
+      },
+    };
+
+    it('only considers funding attempts older than the cutoff', async () => {
+      prisma.transaction.findMany.mockResolvedValue([]);
+
+      await service.sweepAbandonedFundings();
+
+      const [[query]] = prisma.transaction.findMany.mock.calls as [
+        [
+          {
+            where: {
+              type: TransactionType;
+              status: TransactionStatus;
+              createdAt: { lt: Date };
+            };
+          },
+        ],
+      ];
+
+      expect(query.where.type).toBe(TransactionType.WALLET_FUNDING);
+      expect(query.where.status).toBe(TransactionStatus.PENDING);
+      expect(query.where.createdAt.lt.getTime()).toBeLessThanOrEqual(
+        Date.now() - 24 * 60 * 60 * 1000,
+      );
+    });
+
+    it('fails an unpaid attempt the gateway does not recognise, and audits it', async () => {
+      prisma.transaction.findMany.mockResolvedValue([stalePendingFunding]);
+      paymentService.verifyPayment.mockRejectedValue(
+        new Error('Request failed with status code 404'),
+      );
+
+      const result = await service.sweepAbandonedFundings();
+
+      expect(result).toMatchObject({
+        scannedCount: 1,
+        abandonedCount: 1,
+        creditedCount: 0,
+        skippedCount: 0,
+      });
+      expect(prisma.transaction.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'txn-1' },
+          data: expect.objectContaining({ status: TransactionStatus.FAILED }),
+        }),
+      );
+      expect(prisma.auditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ action: 'WALLET_FUNDING_ABANDONED' }),
+        }),
+      );
+    });
+
+    it('leaves the record alone when the gateway is unreachable', async () => {
+      prisma.transaction.findMany.mockResolvedValue([stalePendingFunding]);
+      paymentService.verifyPayment.mockRejectedValue(
+        new Error('connect ETIMEDOUT'),
+      );
+
+      const result = await service.sweepAbandonedFundings();
+
+      expect(result).toMatchObject({
+        scannedCount: 1,
+        abandonedCount: 0,
+        skippedCount: 1,
+      });
+      expect(prisma.transaction.update).not.toHaveBeenCalled();
+      expect(prisma.auditLog.create).not.toHaveBeenCalled();
+    });
+
+    it('never writes off an attempt the gateway confirms was paid', async () => {
+      prisma.transaction.findMany.mockResolvedValue([stalePendingFunding]);
+      paymentService.verifyPayment.mockResolvedValue({
+        success: true,
+        amountKobo: 500000n,
+        reference: 'ZDX-TXN-STALE',
+        gatewayRef: 'gateway-ref-late',
+        paidAt: new Date('2026-08-01T10:05:00.000Z'),
+      });
+
+      const result = await service.sweepAbandonedFundings();
+
+      expect(result.abandonedCount).toBe(0);
+      expect(prisma.auditLog.create).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ action: 'WALLET_FUNDING_ABANDONED' }),
+        }),
+      );
+    });
   });
 });

@@ -9,6 +9,7 @@ import {
   Building2,
   CheckCircle2,
   Clock,
+  Hourglass,
   Lock,
   Search,
   TrendingUp,
@@ -206,9 +207,16 @@ export default function AdminFinancePage() {
     }> = [
       {
         label: 'Funding attempts still pending',
-        detail: 'Payments the gateway has not confirmed into a wallet yet.',
+        detail: 'Started in the last 48 hours and not confirmed by the gateway.',
         count: overview.pendingFundingCount,
         tab: 'activity',
+        tone: 'warn',
+      },
+      {
+        label: 'Orders holding money undelivered',
+        detail: `${formatNaira(overview.openEscrowAmount)} locked on orders that have not been completed.`,
+        count: overview.openEscrowCount,
+        tab: 'overview',
         tone: 'warn',
       },
       {
@@ -412,6 +420,59 @@ export default function AdminFinancePage() {
                   )}
                 </AccountPanel>
               </div>
+
+              <AccountPanel
+                title="Orders holding money undelivered"
+                description="Escrow is locked when an order is created and released when it completes. These orders have done neither, so no CBT payout bucket accounts for them."
+                actions={
+                  <span className="text-sm font-semibold tabular-nums text-slate-900">
+                    {formatNaira(overview.openEscrowAmount)}
+                  </span>
+                }
+              >
+                {overview.openEscrowOrders.length ? (
+                  <div className="space-y-2">
+                    {overview.openEscrowOrders.map((order) => (
+                      <div
+                        key={order.id}
+                        className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3"
+                      >
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+                          <Hourglass size={16} />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-slate-900">
+                            {order.serviceName}
+                          </p>
+                          <p className="truncate text-xs text-slate-500">
+                            {`${order.orderNumber} · ${order.cbtName ?? 'Unclaimed'}`}
+                          </p>
+                          <p className="mt-0.5 truncate text-xs text-slate-400">
+                            {`Placed ${formatDate(order.createdAt)}`}
+                          </p>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
+                          {order.status.replace(/_/g, ' ').toLowerCase()}
+                        </span>
+                        <span className="w-28 shrink-0 text-right text-sm font-semibold tabular-nums text-slate-900">
+                          {formatNaira(order.amount)}
+                        </span>
+                      </div>
+                    ))}
+                    {overview.openEscrowCount > overview.openEscrowOrders.length ? (
+                      <p className="px-1 pt-1 text-xs text-slate-400">
+                        {`Showing the ${overview.openEscrowOrders.length} oldest of ${overview.openEscrowCount}.`}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : (
+                  <EmptyState
+                    title="No order is holding money undelivered"
+                    message="Every order with escrow locked against it has been completed or released."
+                    icon={CheckCircle2}
+                  />
+                )}
+              </AccountPanel>
 
               <AccountPanel
                 title="Money summary"
