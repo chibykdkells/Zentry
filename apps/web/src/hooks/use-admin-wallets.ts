@@ -410,3 +410,35 @@ export function useAdminFundingReconciliationApply() {
     },
   });
 }
+
+/**
+ * Runs the abandoned-funding sweep now.
+ *
+ * The scheduled sweep only fires when the API process happens to be awake, and
+ * the machine suspends when idle — so this is how an admin runs one on demand.
+ */
+export function useAdminAbandonedFundingSweep() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const response = await apiClient.post<{
+        message: string;
+        data: {
+          scannedCount: number;
+          creditedCount: number;
+          abandonedCount: number;
+          skippedCount: number;
+        };
+      }>('/wallet/admin/funding/sweep-abandoned');
+
+      return response.data;
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['wallet', 'admin', 'overview'] }),
+        queryClient.invalidateQueries({ queryKey: ['wallet', 'admin', 'transactions'] }),
+      ]);
+    },
+  });
+}

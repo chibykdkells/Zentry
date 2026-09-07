@@ -1,36 +1,26 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { WalletService } from './wallet.service';
 
 /**
- * Drives the abandoned-funding sweep on a timer.
+ * Scheduled trigger for the abandoned-funding sweep.
  *
- * Every six hours, not more often: when the app is otherwise idle this cron is
- * the only thing that wakes the database, and a Neon compute stays up for
- * minutes after any query. Nothing depends on a funding attempt being written
- * off promptly — it has already been unpaid for at least a day by the time the
- * sweep considers it.
+ * Treat this as a bonus rather than the mechanism. The API machine suspends when
+ * idle, so a six-hourly slot usually arrives while this process is not running,
+ * and @nestjs/schedule does not replay a slot it missed — on a quiet platform
+ * this cron may fire rarely or never. The sweep is kept honest by
+ * `maybeSweepAbandonedFundings`, which rides on wallet requests, and by the
+ * admin endpoint for running one on demand.
+ *
+ * It goes through the same throttle as those, so the three paths cannot overlap
+ * or double-run.
  */
 @Injectable()
 export class WalletFundingJanitorService {
-  private readonly logger = new Logger(WalletFundingJanitorService.name);
-
   constructor(private readonly walletService: WalletService) {}
 
   @Cron(CronExpression.EVERY_6_HOURS)
-  async sweepAbandonedFundings() {
-    try {
-      return await this.walletService.sweepAbandonedFundings();
-    } catch (error) {
-      // Never throw from a cron: an unhandled rejection would take the process
-      // down over housekeeping.
-      this.logger.error(
-        `Abandoned funding sweep failed: ${
-          error instanceof Error ? error.message : 'Unknown error'
-        }`,
-      );
-
-      return null;
-    }
+  sweepAbandonedFundings() {
+    this.walletService.maybeSweepAbandonedFundings();
   }
 }

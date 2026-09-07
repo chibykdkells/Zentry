@@ -8768,3 +8768,66 @@ Production build, `next start`, requests by `Host` header. Before → after:
   the pages are client-rendered shells and the API still rejects unauthenticated
   requests — but it is a deliberate trade, not an oversight.
 - Consider `api.ecafe.app` + `COOKIE_DOMAIN` to restore server-side gating.
+
+---
+
+## 2026-09-07 — Make the funding sweep actually run
+
+### Context
+
+The abandoned-funding sweep shipped on `@Cron(EVERY_6_HOURS)`. That was a mistake
+on my part, and I told the user the first production run would write off ~39 rows
+on deploy — it would not have.
+
+`EVERY_6_HOURS` fires at 00:00/06:00/12:00/18:00, never on boot. The API machine
+suspends after ~5 minutes idle (from the Neon cost work earlier), and
+`@nestjs/schedule` does not replay a slot it missed on resume. On a platform
+serving roughly one request an hour, the process is almost never awake at a
+six-hour boundary, so the sweep would have fired rarely or never.
+
+This is the same trap the KV sweep was moved off a timer to avoid. I avoided it
+there and then walked into it here and in the upload janitor.
+
+### What Changed
+
+**Piggybacked trigger** — `wallet.service.ts`
+- `maybeSweepAbandonedFundings()`: throttled to once per 6 hours, guarded against
+  overlap, fire-and-forget. Called from `getMyWalletOverview` alongside the
+  existing per-user reconciliation, so the sweep happens while the platform is
+  actually being used — which is when abandoned rows appear.
+- `lastAbandonedSweepAt` is seeded at construction, so a deploy does *not* trigger
+  a sweep off the first wallet load. The first run is a deliberate act.
+
+**Manual trigger** — `POST /wallet/admin/funding/sweep-abandoned` (SUPER_ADMIN)
+- `runAbandonedFundingSweep(triggeredByUserId)` returns what it did and writes a
+  `WALLET_FUNDING_SWEEP_RUN` audit entry for the run itself, on top of the
+  per-row `WALLET_FUNDING_ABANDONED` entries.
+- Finance → Activity gains a "Clear abandoned funding attempts" panel with a
+  two-step confirm and a summary of the result.
+
+**The cron stays**, but now calls `maybeSweepAbandonedFundings()` so all three
+paths share one throttle and cannot overlap. Its docstring says plainly that it
+is a bonus, not the mechanism.
+
+### Verification
+
+- `tsc --noEmit` clean both apps; ESLint clean on every touched file.
+- Two new specs: the throttle does not fire on a fresh service (no sweep on
+  deploy), fires once after the window and does not pile on; and a manual run
+  writes the `WALLET_FUNDING_SWEEP_RUN` audit entry. Wallet suite 14/14.
+- Full API suite: 11 failures, unchanged from baseline.
+- `next build apps/web` compiled successfully.
+
+### Decisions Made
+
+- On a scale-to-zero host, a cron is a best-effort bonus and never the mechanism.
+  Recurring work rides on a request path, with the schedule as a supplement.
+
+### Blockers / Notes for Next Session
+
+- **The upload janitor has the same defect.** `orders-upload-janitor.service.ts`
+  is `@Cron(EVERY_6_HOURS)` with no request-path trigger, so stale staged uploads
+  may never be cleared. Not fixed here; it deletes orphaned files rather than
+  touching money, so it is lower stakes, but it is the same bug.
+- The first sweep still has not run. Use the button, once the diagnostic queries
+  have been looked at.

@@ -543,6 +543,43 @@ describe('WalletService', () => {
       expect(prisma.auditLog.create).not.toHaveBeenCalled();
     });
 
+    it('throttles piggybacked sweeps and runs at most one at a time', async () => {
+      prisma.transaction.findMany.mockResolvedValue([]);
+
+      // Freshly constructed, the service is inside its throttle window: a deploy
+      // must not trigger a sweep off the first wallet load.
+      service.maybeSweepAbandonedFundings();
+      expect(prisma.transaction.findMany).not.toHaveBeenCalled();
+
+      // Once the window has passed, one request triggers exactly one sweep and
+      // further requests during the new window do not pile on.
+      (
+        service as unknown as { lastAbandonedSweepAt: number }
+      ).lastAbandonedSweepAt = Date.now() - 7 * 60 * 60 * 1000;
+
+      service.maybeSweepAbandonedFundings();
+      service.maybeSweepAbandonedFundings();
+      await Promise.resolve();
+
+      expect(prisma.transaction.findMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('audits the run itself when an admin triggers it by hand', async () => {
+      prisma.transaction.findMany.mockResolvedValue([]);
+
+      const result = await service.runAbandonedFundingSweep('admin-1');
+
+      expect(result.data.scannedCount).toBe(0);
+      expect(prisma.auditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            userId: 'admin-1',
+            action: 'WALLET_FUNDING_SWEEP_RUN',
+          }),
+        }),
+      );
+    });
+
     it('never writes off an attempt the gateway confirms was paid', async () => {
       prisma.transaction.findMany.mockResolvedValue([stalePendingFunding]);
       paymentService.verifyPayment.mockResolvedValue({

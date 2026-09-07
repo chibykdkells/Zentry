@@ -218,6 +218,9 @@ const ABANDONED_FUNDING_SWEEP_BATCH_SIZE = 50;
 /** Window for the admin "pending funding" count. See getAdminWalletOverview. */
 const PENDING_FUNDING_ATTENTION_HOURS = 48;
 
+/** Shortest gap between sweeps that ride on a request. */
+const ABANDONED_FUNDING_SWEEP_MIN_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
 /**
  * Order states that still hold customer money in escrow but are not COMPLETED.
  *
@@ -303,12 +306,55 @@ type AdminWithdrawalRequestRecord = Prisma.WithdrawalRequestGetPayload<{
 export class WalletService {
   private readonly logger = new Logger(WalletService.name);
 
+  /**
+   * Seeded at construction so a deploy does not immediately trigger a sweep on
+   * the first wallet load. Use the admin endpoint to run one on demand.
+   */
+  private lastAbandonedSweepAt = Date.now();
+  private abandonedSweepRunning = false;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly paymentService: PaymentService,
     private readonly notificationsService: NotificationsService,
     private readonly emailService: EmailService,
   ) {}
+
+  /**
+   * Runs the abandoned-funding sweep off a real request, at most once per
+   * {@link ABANDONED_FUNDING_SWEEP_MIN_INTERVAL_MS}.
+   *
+   * The @Cron alone cannot be relied on. The API machine suspends when idle, so
+   * a six-hourly slot usually arrives while the process is not running, and
+   * @nestjs/schedule does not replay a slot it missed. Riding on a request means
+   * the sweep happens while the platform is actually being used — which is
+   * exactly when new abandoned rows appear. The cron still fires on the rare
+   * occasion the process is awake at the right moment; the two are idempotent.
+   */
+  maybeSweepAbandonedFundings(): void {
+    if (this.abandonedSweepRunning) return;
+    if (
+      Date.now() - this.lastAbandonedSweepAt <
+      ABANDONED_FUNDING_SWEEP_MIN_INTERVAL_MS
+    ) {
+      return;
+    }
+
+    this.abandonedSweepRunning = true;
+    this.lastAbandonedSweepAt = Date.now();
+
+    void this.sweepAbandonedFundings()
+      .catch((error: unknown) => {
+        this.logger.error(
+          `Piggybacked abandoned funding sweep failed: ${
+            error instanceof Error ? error.message : 'Unknown error'
+          }`,
+        );
+      })
+      .finally(() => {
+        this.abandonedSweepRunning = false;
+      });
+  }
 
   private async resolveTenantSender(
     tenantId: string | null,
@@ -342,6 +388,8 @@ export class WalletService {
     // Fire-and-forget — reconciliation makes external gateway API calls and must
     // never block the wallet page load. Any errors are caught inside the method.
     void this.reconcileRecentPendingFundings(userId);
+    // Platform-wide housekeeping, throttled and detached for the same reason.
+    this.maybeSweepAbandonedFundings();
 
     const wallet = await this.prisma.wallet.findFirst({
       where: {
@@ -3643,7 +3691,10 @@ export class WalletService {
    * only failed when the gateway answers. An unreachable gateway leaves the row
    * PENDING for the next run.
    */
-  async sweepAbandonedFundings(): Promise<{
+  async sweepAbandonedFundings(options?: {
+    /** Set when an admin ran the sweep by hand, so the run itself is audited. */
+    triggeredByUserId?: string;
+  }): Promise<{
     scannedCount: number;
     creditedCount: number;
     abandonedCount: number;
@@ -3721,11 +3772,42 @@ export class WalletService {
       );
     }
 
+    if (options?.triggeredByUserId) {
+      await this.prisma.auditLog.create({
+        data: {
+          userId: options.triggeredByUserId,
+          action: 'WALLET_FUNDING_SWEEP_RUN',
+          entity: 'Transaction',
+          entityId: 'abandoned-funding-sweep',
+          newValues: {
+            scannedCount: stalePendingFundings.length,
+            creditedCount,
+            abandonedCount,
+            skippedCount,
+            cutoffHours: ABANDONED_FUNDING_CUTOFF_HOURS,
+          },
+        },
+      });
+    }
+
     return {
       scannedCount: stalePendingFundings.length,
       creditedCount,
       abandonedCount,
       skippedCount,
+    };
+  }
+
+  /** Runs the sweep on demand for an admin, and reports what it did. */
+  async runAbandonedFundingSweep(triggeredByUserId: string) {
+    const result = await this.sweepAbandonedFundings({ triggeredByUserId });
+
+    return {
+      message:
+        result.scannedCount === 0
+          ? 'No funding attempts were old enough to sweep.'
+          : `Swept ${result.scannedCount} funding attempt(s): ${result.creditedCount} credited, ${result.abandonedCount} written off, ${result.skippedCount} left pending.`,
+      data: result,
     };
   }
 

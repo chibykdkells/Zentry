@@ -88,6 +88,20 @@ export class WalletController {
     );
   }
 
+  /**
+   * Runs the abandoned-funding sweep now.
+   *
+   * The scheduled sweep only fires when the API process happens to be awake, and
+   * the machine suspends when idle — so this is the reliable way to run one, and
+   * the way to take the first write-off as a deliberate act rather than
+   * discovering it happened overnight.
+   */
+  @Roles(UserRole.SUPER_ADMIN)
+  @Post('admin/funding/sweep-abandoned')
+  runAbandonedFundingSweep(@CurrentUser() user: JwtUser) {
+    return this.walletService.runAbandonedFundingSweep(user.sub);
+  }
+
   @Roles(UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN)
   @Get('admin/withdrawals')
   getAdminWithdrawals(

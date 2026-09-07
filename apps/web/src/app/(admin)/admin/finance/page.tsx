@@ -28,6 +28,7 @@ import { StatCard } from '@/components/shared/stat-card';
 import { useAdminWalletTransactions } from '@/hooks/use-admin-wallet-transactions';
 import {
   type AdminFundingReconciliationPreview,
+  useAdminAbandonedFundingSweep,
   useAdminFundingReconciliationApply,
   useAdminFundingReconciliationPreview,
   useAdminCbtEarningsOverview,
@@ -119,6 +120,8 @@ export default function AdminFinancePage() {
     endDate: '',
   });
   const [reconciliationReference, setReconciliationReference] = useState('');
+  const [confirmingSweep, setConfirmingSweep] = useState(false);
+  const [sweepSummary, setSweepSummary] = useState<string | null>(null);
   const [previewResult, setPreviewResult] =
     useState<AdminFundingReconciliationPreview | null>(null);
   const { overview, loading, error, reload } = useAdminWalletOverview();
@@ -161,6 +164,7 @@ export default function AdminFinancePage() {
   });
   const previewFunding = useAdminFundingReconciliationPreview();
   const applyFunding = useAdminFundingReconciliationApply();
+  const sweepAbandoned = useAdminAbandonedFundingSweep();
 
   // The four headline numbers answer "how much can move, how much is stuck,
   // what have we earned, what is queued". Everything else lives inside a tab.
@@ -1170,6 +1174,70 @@ export default function AdminFinancePage() {
                 ) : null}
               </>
             )}
+          </AccountPanel>
+
+          <AccountPanel
+            title="Clear abandoned funding attempts"
+            description="Funding rows are created before the customer reaches the gateway, so an abandoned checkout leaves one behind for good. This verifies every attempt older than 24 hours with the gateway, credits any that were really paid, and writes off the rest."
+            contentClassName="space-y-3"
+          >
+            <div className="flex flex-wrap items-center gap-3">
+              {confirmingSweep ? (
+                <>
+                  <p className="text-sm font-medium text-slate-700">
+                    This writes off unpaid attempts older than 24 hours. Anything
+                    the gateway confirms was paid is credited, not written off.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConfirmingSweep(false);
+                      sweepAbandoned.mutate(undefined, {
+                        onSuccess: (response) => {
+                          setSweepSummary(response.message);
+                          toast.success(response.message);
+                        },
+                        onError: (mutationError: unknown) => {
+                          toast.error(
+                            getApiErrorMessage(
+                              mutationError,
+                              'Could not run the sweep right now.',
+                            ),
+                          );
+                        },
+                      });
+                    }}
+                    disabled={sweepAbandoned.isPending}
+                    className="rounded-2xl bg-brand-button px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-button-strong disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Confirm sweep
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingSweep(false)}
+                    className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmingSweep(true)}
+                  disabled={sweepAbandoned.isPending}
+                  className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {sweepAbandoned.isPending ? 'Sweeping…' : 'Run sweep now'}
+                </button>
+              )}
+            </div>
+
+            {sweepSummary ? (
+              <div className="flex gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-emerald-600" />
+                <p className="text-sm text-slate-700">{sweepSummary}</p>
+              </div>
+            ) : null}
           </AccountPanel>
 
           <AccountPanel
