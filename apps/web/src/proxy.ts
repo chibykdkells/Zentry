@@ -56,7 +56,7 @@ function isCustomTenantDomain(host: string): boolean {
 }
 
 export function proxy(request: NextRequest) {
-  const { pathname, search } = request.nextUrl;
+  const { pathname } = request.nextUrl;
   const host = request.headers.get('host') ?? '';
   const hostname = host.split(':')[0].trim().toLowerCase();
 
@@ -123,6 +123,9 @@ export function proxy(request: NextRequest) {
   const hasTenantContext = Boolean(tenantSlug) || isCustomTenantDomain(host);
   const isCustomDomainRequest = isCustomTenantDomain(host);
   const refreshToken = request.cookies.get('refresh_token')?.value;
+  // Best-effort only: this is non-null just when the refresh cookie happens to be
+  // first-party to the web host. It is used below to *skip* work for a user who is
+  // plainly signed in, never to deny access — see the note on protected routes.
   const role = getRoleFromJwt(refreshToken);
   const returningTenants =
     request.cookies
@@ -244,32 +247,36 @@ export function proxy(request: NextRequest) {
     );
   }
 
-  if (isProtectedRoute(pathname) && !role) {
-    if (isCustomDomainRequest) {
-      return persistTenantCookie(NextResponse.next());
-    }
-
-    const redirectTarget = `${pathname}${search}`;
-
-    if (pathname.startsWith('/admin')) {
-      return persistTenantCookie(NextResponse.next());
-    }
-
-    if (!hasTenantContext) {
-      return persistTenantCookie(
-        NextResponse.redirect(
-          new URL('/access-required?reason=tenant-link', request.url),
-        ),
-      );
-    }
-
-    const loginUrl = new URL('/login', request.url);
-    if (tenantSlug) loginUrl.searchParams.set('tenant', tenantSlug);
-    if (redirectTarget !== '/login') {
-      loginUrl.searchParams.set('next', redirectTarget);
-    }
-
-    return persistTenantCookie(NextResponse.redirect(loginUrl));
+  // Tenant context is decided here. The session is not.
+  //
+  // The API sets `refresh_token` on its own hostname with no Domain attribute
+  // (see getRefreshCookieDomain in auth.controller.ts — deriving a domain from a
+  // different apex would make browsers reject the cookie outright). The API and
+  // the web app are on separate apex domains in production, so a middleware
+  // running on the web host can never read that cookie: `role` is null on every
+  // request, signed in or not.
+  //
+  // Redirecting to /login on a null role therefore bounced *authenticated* users
+  // back to the sign-in page the moment they were sent to their dashboard —
+  // sign-in succeeded, the welcome toast fired, and the redirect landed them
+  // right back where they started, in a loop.
+  //
+  // RouteGuard makes this decision on the client, where the session is actually
+  // observable, and AuthBootstrap restores it on a cold load via /auth/refresh
+  // (cross-origin with credentials, which does work). /admin, custom domains and
+  // dash.ecafe.app already relied on exactly that, for exactly this reason; the
+  // apex was the last path still pretending it could see a session.
+  if (
+    isProtectedRoute(pathname) &&
+    !hasTenantContext &&
+    !isCustomDomainRequest &&
+    !pathname.startsWith('/admin')
+  ) {
+    return persistTenantCookie(
+      NextResponse.redirect(
+        new URL('/access-required?reason=tenant-link', request.url),
+      ),
+    );
   }
 
   if (role && !canAccessPath(role, pathname)) {

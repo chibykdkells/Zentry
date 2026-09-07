@@ -8680,3 +8680,91 @@ so the runtime select and `FundingTransactionRecord` cannot drift apart.
   distribution of pending fundings.
 - The two 404 references predate the current provider; confirm before the sweep
   writes them off.
+
+---
+
+## 2026-09-07 — Sign-in succeeded, then bounced straight back to the login page
+
+### Context
+
+A screen recording showed a user on the mobile PWA signing in successfully — the
+"Welcome back, Yushau!" toast fired and the form cleared — and then sitting on
+the sign-in page. Five seconds later they were still there, with a spinner. They
+never got in.
+
+### Cause
+
+`proxy.ts` gated every protected route on a `refresh_token` cookie it cannot read.
+
+The API sets that cookie on its own hostname with no `Domain` attribute — which
+is correct and deliberate (`getRefreshCookieDomain` in `auth.controller.ts`
+explains that deriving a domain from a different apex makes browsers reject the
+Set-Cookie outright). In production the web app is `www.ecafe.app` and the API is
+`zentry-api-prod.fly.dev` — separate apex domains — so the cookie is host-only to
+the API and the middleware on the web host can never see it. `role` was therefore
+null on every request, signed in or not, and `isProtectedRoute(pathname) && !role`
+redirected to `/login`.
+
+So: login succeeded, `router.replace('/home?tenant=a')` fired, middleware bounced
+it back to `/login`, the login page's own effect saw a session and redirected
+again, and round it went.
+
+Three other paths had already been given exemptions for exactly this reason —
+`/admin`, custom tenant domains, and the early return for `dash.ecafe.app`. The
+apex was the last path still pretending it could see a session.
+
+### Evidence
+
+- Live production: `www.ecafe.app/home` → `307 → /login?tenant=a&next=%2Fhome`,
+  while `dash.ecafe.app/home` → `200`.
+- The deployed client bundle calls `https://zentry-api-prod.fly.dev/api/v1`
+  (grepped out of the live `_next` chunks), confirming the cross-apex split.
+- `COOKIE_DOMAIN` is not set on `zentry-api-prod` (`fly secrets list`), so
+  `getRefreshCookieDomain()` returns undefined and no Domain attribute is sent.
+- Reproduced locally against a production build: same host, same path, with a
+  first-party `refresh_token` cookie → `200`; without → `307 → /login`.
+
+### What Changed
+
+`apps/web/src/proxy.ts` — the protected-route check no longer consults `role`. It
+now only enforces *tenant context*, redirecting to `/access-required` when there
+is none. `RouteGuard` owns the session decision on the client, where the session
+is observable, and `AuthBootstrap` restores it on a cold load via `/auth/refresh`
+(cross-origin with credentials, which does work).
+
+### Verification
+
+Production build, `next start`, requests by `Host` header. Before → after:
+
+| Host | Path | Before | After |
+|---|---|---|---|
+| www.ecafe.app | /home | 307 → /login | **200** |
+| www.ecafe.app | /wallet | 307 → /login | **200** |
+| www.ecafe.app | /tenant/dashboard | 307 → /login | **200** |
+| www.ecafe.app | /home (+cookie) | 200 | 200 |
+| dash.ecafe.app | /home | 200 | 200 |
+| platform.ecafe.app | /admin/finance | 200 | 200 |
+| localhost (no tenant) | /home | → /access-required | → /access-required |
+
+`tsc --noEmit` clean, ESLint clean on `proxy.ts`, `next build` compiled.
+
+### Decisions Made
+
+- The middleware does not make auth decisions. It cannot observe the session on
+  this domain layout, and pretending otherwise is what caused the outage. Auth
+  belongs to `RouteGuard`, which can see it.
+- Serving the API from `api.ecafe.app` with `COOKIE_DOMAIN=ecafe.app` would make
+  the cookie first-party and let the middleware guard properly again. That is the
+  better long-term shape but needs DNS and a Fly certificate, so it was not done
+  here.
+
+### Blockers / Notes for Next Session
+
+- **Not verified end to end.** Signing in as a real user needs credentials this
+  session does not have. The middleware bounce is proven fixed; the full
+  login → dashboard journey should be walked through once after deploy.
+- Protected pages are now client-guarded only on the apex, matching what
+  `/admin`, custom domains and `dash.ecafe.app` already did. No data is exposed —
+  the pages are client-rendered shells and the API still rejects unauthenticated
+  requests — but it is a deliberate trade, not an oversight.
+- Consider `api.ecafe.app` + `COOKIE_DOMAIN` to restore server-side gating.

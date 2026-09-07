@@ -739,6 +739,9 @@ optimized. Production deployed.
 - [x] Admin pending-funding metric bounded to a 48h window (was an unbounded lifetime tally of abandoned checkouts)
 - [x] Escrow on undelivered orders surfaced — openEscrowAmount/Count/Orders on the admin wallet overview + Finance overview panel
 - [ ] Deploy the funding sweep deliberately: first production run writes off ~39 abandoned funding rows
+- [x] Login bounce on ecafe.app apex fixed — middleware no longer gates protected routes on a refresh_token cookie the web host cannot read (API is on a different apex, so role was always null)
+- [ ] Walk through login → dashboard as a real user on www.ecafe.app after deploy (middleware bounce proven fixed; full journey unverified)
+- [ ] Consider serving the API from api.ecafe.app with COOKIE_DOMAIN=ecafe.app to make the refresh cookie first-party and restore server-side route gating
 - [ ] Confirm password reset email delivery in production (run fly logs --app zentry-api-prod)
 - [ ] Sentry Vercel env vars still needed: NEXT_PUBLIC_SENTRY_DSN, SENTRY_ORG=zendocx, SENTRY_PROJECT=zendocx-web
 - [ ] app.zendocx.net CNAME record in Cloudflare (add app → cname.vercel-dns.com)
