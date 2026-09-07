@@ -214,8 +214,8 @@ export default function AdminFinancePage() {
       },
       {
         label: 'Orders holding money undelivered',
-        detail: `${formatNaira(overview.openEscrowAmount)} locked on orders that have not been completed.`,
-        count: overview.openEscrowCount,
+        detail: `${formatNaira(overview.openEscrowAmount ?? '0')} locked on orders that have not been completed.`,
+        count: overview.openEscrowCount ?? 0,
         tab: 'overview',
         tone: 'warn',
       },
@@ -251,6 +251,7 @@ export default function AdminFinancePage() {
   }, [overview, cbtEarningsOverview]);
 
   const openItems = attentionItems.filter((item) => item.count > 0);
+  const openEscrowOrders = overview?.openEscrowOrders ?? [];
 
   const reloadAll = () => {
     reload();
@@ -426,13 +427,13 @@ export default function AdminFinancePage() {
                 description="Escrow is locked when an order is created and released when it completes. These orders have done neither, so no CBT payout bucket accounts for them."
                 actions={
                   <span className="text-sm font-semibold tabular-nums text-slate-900">
-                    {formatNaira(overview.openEscrowAmount)}
+                    {formatNaira(overview.openEscrowAmount ?? '0')}
                   </span>
                 }
               >
-                {overview.openEscrowOrders.length ? (
+                {openEscrowOrders.length ? (
                   <div className="space-y-2">
-                    {overview.openEscrowOrders.map((order) => (
+                    {openEscrowOrders.map((order) => (
                       <div
                         key={order.id}
                         className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3"
@@ -459,9 +460,9 @@ export default function AdminFinancePage() {
                         </span>
                       </div>
                     ))}
-                    {overview.openEscrowCount > overview.openEscrowOrders.length ? (
+                    {(overview.openEscrowCount ?? 0) > openEscrowOrders.length ? (
                       <p className="px-1 pt-1 text-xs text-slate-400">
-                        {`Showing the ${overview.openEscrowOrders.length} oldest of ${overview.openEscrowCount}.`}
+                        {`Showing the ${openEscrowOrders.length} oldest of ${overview.openEscrowCount ?? 0}.`}
                       </p>
                     ) : null}
                   </div>

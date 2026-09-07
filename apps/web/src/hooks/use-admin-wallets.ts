@@ -32,10 +32,16 @@ export interface AdminWalletOverview {
   completedWithdrawalCount: number;
   rejectedWithdrawalAmount: string;
   rejectedWithdrawalCount: number;
-  /** Escrow on orders that are not COMPLETED, so no CBT payout bucket covers it. */
-  openEscrowAmount: string;
-  openEscrowCount: number;
-  openEscrowOrders: Array<{
+  /**
+   * Escrow on orders that are not COMPLETED, so no CBT payout bucket covers it.
+   *
+   * Optional because web and API deploy independently: Vercel ships on push while
+   * the API is a manual `fly deploy`, so a live web build can be talking to an API
+   * that predates these fields.
+   */
+  openEscrowAmount?: string;
+  openEscrowCount?: number;
+  openEscrowOrders?: Array<{
     id: string;
     orderNumber: string;
     status: string;
