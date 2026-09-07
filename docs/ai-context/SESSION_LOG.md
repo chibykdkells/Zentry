@@ -8876,3 +8876,46 @@ deliberately.
 ### Blockers / Notes for Next Session
 
 - The first abandoned-funding sweep still has not been run.
+
+---
+
+## 2026-09-07 — Automatic funding sweep disarmed until a deliberate first run
+
+### Context
+
+The piggybacked sweep's throttle was seeded at process start, so the first
+automatic write-off would have happened roughly six hours after deploy on the
+next wallet request — around 17:04 UTC — whether or not anyone had looked at the
+data first. The user asked to push that out.
+
+### What Changed
+
+Rather than a longer countdown, the invariant is now explicit and has no
+deadline attached to it: the automatic sweep is **disarmed until an admin runs
+one by hand**.
+
+- `ABANDONED_FUNDING_SWEEP_ARMED_KEY` in the KV store is set by
+  `runAbandonedFundingSweep`. `maybeSweepAbandonedFundings` checks it (cached in
+  memory after the first read) and does nothing while it is unset.
+- Persisted rather than in-memory on purpose: the API restarts on every deploy,
+  and an in-memory flag would silently disarm the automatic sweep each time —
+  the opposite of the self-maintaining property it exists to protect.
+- `WalletService` gains `RedisService` (the Postgres-backed KV store).
+  `RedisModule` is `@Global()`, so no module wiring changed.
+
+So the first write-off is always somebody's decision; every one after that is
+automatic, and stays automatic across deploys.
+
+### Verification
+
+- `tsc --noEmit` clean; ESLint clean on every touched file.
+- Two new specs: the sweep does nothing while disarmed, and a manual run writes
+  the armed key. Wallet suite 16/16; full API suite 11 failures, unchanged from
+  baseline (64 passing).
+- Booted the built API locally to exercise the new `WalletService` →
+  `RedisService` edge: no DI error, `/health` 200.
+
+### Blockers / Notes for Next Session
+
+- The first sweep still has not been run, and now nothing will run it but a
+  person. Finance → Activity → Clear abandoned funding attempts.

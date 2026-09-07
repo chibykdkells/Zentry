@@ -43,6 +43,7 @@ describe('WalletService', () => {
     broadcastWalletUpdated: jest.Mock;
   };
   let emailService: Record<string, never>;
+  let redisService: { get: jest.Mock; set: jest.Mock };
   let service: WalletService;
 
   beforeEach(() => {
@@ -82,12 +83,19 @@ describe('WalletService', () => {
       broadcastWalletUpdated: jest.fn(),
     };
     emailService = {};
+    // Armed by default so the sweep tests exercise the sweep itself; the
+    // disarmed path has its own test below.
+    redisService = {
+      get: jest.fn().mockResolvedValue('1'),
+      set: jest.fn().mockResolvedValue(undefined),
+    };
 
     service = new WalletService(
       prisma as never,
       paymentService as never,
       notificationsService as never,
       emailService as never,
+      redisService as never,
     );
   });
 
@@ -559,9 +567,34 @@ describe('WalletService', () => {
 
       service.maybeSweepAbandonedFundings();
       service.maybeSweepAbandonedFundings();
-      await Promise.resolve();
+      await new Promise((resolve) => setImmediate(resolve));
 
       expect(prisma.transaction.findMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('stays disarmed until an admin has run one by hand', async () => {
+      redisService.get.mockResolvedValue(null);
+      prisma.transaction.findMany.mockResolvedValue([]);
+      (
+        service as unknown as { lastAbandonedSweepAt: number }
+      ).lastAbandonedSweepAt = Date.now() - 7 * 60 * 60 * 1000;
+
+      service.maybeSweepAbandonedFundings();
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(prisma.transaction.findMany).not.toHaveBeenCalled();
+    });
+
+    it('arms the automatic sweep once an admin has run one', async () => {
+      redisService.get.mockResolvedValue(null);
+      prisma.transaction.findMany.mockResolvedValue([]);
+
+      await service.runAbandonedFundingSweep('admin-1');
+
+      expect(redisService.set).toHaveBeenCalledWith(
+        'wallet:abandoned-funding-sweep:armed',
+        '1',
+      );
     });
 
     it('audits the run itself when an admin triggers it by hand', async () => {

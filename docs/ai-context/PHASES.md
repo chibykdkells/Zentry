@@ -739,7 +739,8 @@ optimized. Production deployed.
 - [x] Admin pending-funding metric bounded to a 48h window (was an unbounded lifetime tally of abandoned checkouts)
 - [x] Escrow on undelivered orders surfaced — openEscrowAmount/Count/Orders on the admin wallet overview + Finance overview panel
 - [x] Funding sweep made reliable — rides on wallet requests (throttled 6h) plus an admin-triggered POST /wallet/admin/funding/sweep-abandoned; the cron is a bonus, since a suspended machine misses its slots
-- [ ] Run the first abandoned-funding sweep from the Finance → Activity button (writes off ~39 rows; check the diagnostic queries first)
+- [x] Automatic funding sweep disarmed until a deliberate first run (armed flag persisted in the KV store, survives deploys)
+- [ ] Run the first abandoned-funding sweep from the Finance → Activity button (check the diagnostic queries first; nothing else will run it)
 - [x] Upload janitor given a request-path trigger (throttled 6h, fired when an upload is staged); cron routed through the same throttle
 - [x] Login bounce on ecafe.app apex fixed — middleware no longer gates protected routes on a refresh_token cookie the web host cannot read (API is on a different apex, so role was always null)
 - [ ] Walk through login → dashboard as a real user on www.ecafe.app after deploy (middleware bounce proven fixed; full journey unverified)

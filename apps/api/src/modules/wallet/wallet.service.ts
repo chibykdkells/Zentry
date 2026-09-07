@@ -22,6 +22,7 @@ import {
 import type { Request } from 'express';
 import type { VerifyPaymentResult } from '../../providers/interfaces';
 import { PaymentService } from '../../providers/payment/payment.service';
+import { RedisService } from '../redis/redis.service';
 import { EmailService } from '../../providers/email/email.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import {
@@ -222,6 +223,18 @@ const PENDING_FUNDING_ATTENTION_HOURS = 48;
 const ABANDONED_FUNDING_SWEEP_MIN_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 /**
+ * Set once an admin has run the sweep by hand. Until then the automatic sweep
+ * stays off, so the first write-off of real funding records is always somebody's
+ * decision rather than something discovered afterwards in the audit log.
+ *
+ * Persisted rather than held in memory: the API restarts on every deploy, and an
+ * in-memory flag would silently disarm the automatic sweep each time, which is
+ * the opposite of the "it maintains itself" property this is meant to protect.
+ */
+const ABANDONED_FUNDING_SWEEP_ARMED_KEY =
+  'wallet:abandoned-funding-sweep:armed';
+
+/**
  * Order states that still hold customer money in escrow but are not COMPLETED.
  *
  * Escrow is locked when an order is created, while every CBT payout bucket
@@ -312,13 +325,29 @@ export class WalletService {
    */
   private lastAbandonedSweepAt = Date.now();
   private abandonedSweepRunning = false;
+  /** null until read from the store; cached thereafter. */
+  private abandonedSweepArmed: boolean | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly paymentService: PaymentService,
     private readonly notificationsService: NotificationsService,
     private readonly emailService: EmailService,
+    private readonly redisService: RedisService,
   ) {}
+
+  private async isAbandonedSweepArmed(): Promise<boolean> {
+    if (this.abandonedSweepArmed !== null) {
+      return this.abandonedSweepArmed;
+    }
+
+    const stored = await this.redisService.get(
+      ABANDONED_FUNDING_SWEEP_ARMED_KEY,
+    );
+    this.abandonedSweepArmed = stored === '1';
+
+    return this.abandonedSweepArmed;
+  }
 
   /**
    * Runs the abandoned-funding sweep off a real request, at most once per
@@ -341,19 +370,26 @@ export class WalletService {
     }
 
     this.abandonedSweepRunning = true;
-    this.lastAbandonedSweepAt = Date.now();
 
-    void this.sweepAbandonedFundings()
-      .catch((error: unknown) => {
+    void (async () => {
+      try {
+        // Disarmed until an admin has run one by hand — see the key's comment.
+        if (!(await this.isAbandonedSweepArmed())) {
+          return;
+        }
+
+        this.lastAbandonedSweepAt = Date.now();
+        await this.sweepAbandonedFundings();
+      } catch (error: unknown) {
         this.logger.error(
           `Piggybacked abandoned funding sweep failed: ${
             error instanceof Error ? error.message : 'Unknown error'
           }`,
         );
-      })
-      .finally(() => {
+      } finally {
         this.abandonedSweepRunning = false;
-      });
+      }
+    })();
   }
 
   private async resolveTenantSender(
@@ -3801,6 +3837,11 @@ export class WalletService {
   /** Runs the sweep on demand for an admin, and reports what it did. */
   async runAbandonedFundingSweep(triggeredByUserId: string) {
     const result = await this.sweepAbandonedFundings({ triggeredByUserId });
+
+    // A deliberate run arms the automatic one from here on.
+    await this.redisService.set(ABANDONED_FUNDING_SWEEP_ARMED_KEY, '1');
+    this.abandonedSweepArmed = true;
+    this.lastAbandonedSweepAt = Date.now();
 
     return {
       message:
