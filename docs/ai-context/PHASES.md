@@ -740,7 +740,7 @@ optimized. Production deployed.
 - [x] Escrow on undelivered orders surfaced — openEscrowAmount/Count/Orders on the admin wallet overview + Finance overview panel
 - [x] Funding sweep made reliable — rides on wallet requests (throttled 6h) plus an admin-triggered POST /wallet/admin/funding/sweep-abandoned; the cron is a bonus, since a suspended machine misses its slots
 - [ ] Run the first abandoned-funding sweep from the Finance → Activity button (writes off ~39 rows; check the diagnostic queries first)
-- [ ] Upload janitor has the same cron-on-a-suspending-machine defect — give it a request-path trigger too
+- [x] Upload janitor given a request-path trigger (throttled 6h, fired when an upload is staged); cron routed through the same throttle
 - [x] Login bounce on ecafe.app apex fixed — middleware no longer gates protected routes on a refresh_token cookie the web host cannot read (API is on a different apex, so role was always null)
 - [ ] Walk through login → dashboard as a real user on www.ecafe.app after deploy (middleware bounce proven fixed; full journey unverified)
 - [ ] Consider serving the API from api.ecafe.app with COOKIE_DOMAIN=ecafe.app to make the refresh cookie first-party and restore server-side route gating

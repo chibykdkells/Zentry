@@ -310,6 +310,7 @@ describe('OrdersService', () => {
       notificationsService as never,
       emailService as never,
       smsService as never,
+      { maybeCleanupStaleUploads: jest.fn() } as never,
     );
   });
 

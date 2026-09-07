@@ -8831,3 +8831,48 @@ is a bonus, not the mechanism.
   touching money, so it is lower stakes, but it is the same bug.
 - The first sweep still has not run. Use the button, once the diagnostic queries
   have been looked at.
+
+---
+
+## 2026-09-07 — Upload janitor given the same request-path trigger
+
+### Context
+
+`orders-upload-janitor.service.ts` had the identical defect the funding sweep was
+just fixed for: `@Cron(EVERY_6_HOURS)` on a machine that suspends when idle, so
+the slot usually arrives while the process is not running and
+`@nestjs/schedule` does not replay it. Stale staged uploads could have gone
+uncleared indefinitely.
+
+### What Changed
+
+- `maybeCleanupStaleUploads()` — throttled to once per 6 hours, overlap-guarded,
+  fire-and-forget, seeded at construction so a deploy does not trigger a run off
+  the first request.
+- `OrdersService` calls it right after staging uploads (`uploadedOrderFile.createMany`).
+  That is the moment new expiring rows are created, and the only time there is
+  anything to clean.
+- The `@Cron` now calls the same throttled entry point, so the two paths cannot
+  overlap. Renamed to `scheduledCleanup` and documented as a bonus, not the
+  mechanism.
+
+No admin endpoint here, unlike the funding sweep: this deletes orphaned files
+rather than writing off financial records, so there is nothing to take
+deliberately.
+
+### Verification
+
+- `tsc --noEmit` clean; ESLint clean on all touched files.
+- Full API suite: 11 failures, unchanged from baseline (62 passing).
+- **Booted the built API locally** to exercise the new DI edge
+  (`OrdersService` → `OrdersUploadJanitorService`) — no circular dependency, no
+  unresolved provider, `/health` 200, and the routes registered
+  (sweep endpoint 401, bogus sibling 404).
+  Note: `node dist/main.js` crashes on this machine before Nest starts, on a
+  `@sentry/profiling-node` native binding built for a different Node version.
+  Stubbed that module via a `--require` preload for the test; it is an
+  environment problem, not a code one, and does not affect the Fly image.
+
+### Blockers / Notes for Next Session
+
+- The first abandoned-funding sweep still has not been run.

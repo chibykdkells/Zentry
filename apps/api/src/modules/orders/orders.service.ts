@@ -28,6 +28,7 @@ import { EmailService } from '../../providers/email/email.service';
 import { SmsService } from '../../providers/sms/sms.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { OrdersReleaseQueueService } from './orders-release-queue.service';
+import { OrdersUploadJanitorService } from './orders-upload-janitor.service';
 import { OrdersDeadlineQueueService } from './orders-deadline-queue.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -638,6 +639,7 @@ export class OrdersService {
     private readonly notificationsService: NotificationsService,
     private readonly emailService: EmailService,
     private readonly smsService: SmsService,
+    private readonly ordersUploadJanitorService: OrdersUploadJanitorService,
   ) {}
 
   private readonly maxUploadSizeBytes = 5 * 1024 * 1024;
@@ -5107,6 +5109,11 @@ export class OrdersService {
           expiresAt: new Date(Date.now() + ORDER_UPLOAD_STAGING_TTL_MS),
         })),
       });
+
+      // Fire-and-forget housekeeping, throttled inside the janitor. Staging a new
+      // upload is the moment expired ones are worth clearing, and it must never
+      // slow this request down.
+      this.ordersUploadJanitorService.maybeCleanupStaleUploads();
     } catch (error) {
       await Promise.all(
         uploads.map((upload) =>
