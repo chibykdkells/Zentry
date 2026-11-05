@@ -1,0 +1,116 @@
+name: Deploy
+
+# Backend → Hostinger VPS (slug zendocx), https://api.ecafe.app.
+#
+# Runs after the CI workflow (lint, typecheck, build) passes on main, so a
+# broken commit is never deployed. Commits with [skip ci] skip CI and therefore
+# skip this too. Commits that do not touch the API (web-only, docs) are skipped:
+# the frontend is deployed by Vercel, and every API deploy restarts the API.
+#
+# Needs repo secrets VPS_SSH_KEY and VPS_KNOWN_HOSTS (see deploy/vps/README.md).
+# Without them the job skips with a notice instead of failing.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: false
+
+jobs:
+  deploy-vps:
+    name: Backend → Hostinger VPS
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    env:
+      VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      HEALTH_URL: https://api.ecafe.app/health
+    steps:
+      - name: Check deploy credentials
+        id: creds
+        run: |
+          if [ -z "$VPS_SSH_KEY" ] || [ -z "$VPS_KNOWN_HOSTS" ]; then
+            echo "::notice::VPS deploy skipped: VPS_SSH_KEY / VPS_KNOWN_HOSTS not set."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.creds.outputs.ready == 'true'
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+          fetch-depth: 0
+
+      # Compare with the commit the server is serving now. Unknown live commit
+      # (first deploy, API down) or a manual run → always deploy.
+      - name: Decide whether the API changed
+        id: changes
+        if: steps.creds.outputs.ready == 'true'
+        run: |
+          live=$(curl -fsS --max-time 10 "$HEALTH_URL" | sed -n 's/.*"gitSha":"\([0-9a-f]\{40\}\)".*/\1/p' || true)
+          echo "live: ${live:-unknown}  new: $DEPLOY_SHA"
+          if [ "${{ github.event_name }}" = workflow_dispatch ] || [ -z "$live" ] || ! git cat-file -e "$live^{commit}" 2>/dev/null; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if [ "$live" = "$DEPLOY_SHA" ]; then
+            echo "::notice::VPS already serves $DEPLOY_SHA."; echo "deploy=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          changed=$(git diff --name-only "$live" "$DEPLOY_SHA" -- apps/api packages deploy/vps/compose.yml deploy/vps/postgresql.conf deploy/vps/postgres package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json .npmrc .dockerignore)
+          if [ -n "$changed" ]; then
+            echo "API-relevant changes:"; echo "$changed" | head -30; echo "deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::No API changes since $live; VPS deploy skipped."; echo "deploy=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up SSH
+        if: steps.changes.outputs.deploy == 'true'
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          # Pinned host key: an unknown or changed server fingerprint fails the job.
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf 'Host vps\n  HostName 46.202.195.86\n  User root\n  IdentityFile ~/.ssh/deploy\n  IdentitiesOnly yes\n  StrictHostKeyChecking yes\n' > ~/.ssh/config
+
+      - name: Upload code
+        if: steps.changes.outputs.deploy == 'true'
+        run: |
+          rsync -azR --delete \
+            --exclude node_modules --exclude dist --exclude .env --exclude '.env.*' --exclude uploads \
+            apps/api packages deploy package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json .npmrc .dockerignore \
+            vps:/opt/zendocx/repo/
+
+      # Build, migrate, then swap. Migrations run before the new API starts, the
+      # same order as Fly's release_command; a failed migration stops the deploy
+      # with the old API still serving (pipefail: the mask filter must not hide it).
+      - name: Build, migrate and start
+        if: steps.changes.outputs.deploy == 'true'
+        run: |
+          ssh vps "bash -c 'set -euo pipefail
+            sed -i \"/^GIT_SHA=/d\" /opt/zendocx/secrets/compose.env
+            echo GIT_SHA=$DEPLOY_SHA >> /opt/zendocx/secrets/compose.env
+            zendocx build api postgres
+            zendocx run --rm --no-deps api node_modules/.bin/prisma migrate deploy --schema=apps/api/prisma/schema.prisma 2>&1 | mask-db-urls
+            zendocx up -d --remove-orphans
+            docker image prune -f >/dev/null'"
+
+      - name: Verify the deployed commit is live
+        if: steps.changes.outputs.deploy == 'true'
+        run: |
+          for attempt in $(seq 1 20); do
+            h=$(curl -fsS --max-time 10 "$HEALTH_URL" || true)
+            live=$(echo "$h" | sed -n 's/.*"gitSha":"\([^"]*\)".*/\1/p')
+            echo "attempt $attempt: serving '${live:-<no response>}'"
+            if [ "$live" = "$DEPLOY_SHA" ]; then
+              case "$h" in *'"db":"ok"'*) echo "✓ VPS is serving $DEPLOY_SHA with the database ok"; exit 0;; esac
+              echo "::error::New code is live but the database check is not ok: $h"; exit 1
+            fi
+            sleep 6
+          done
+          echo "::error::VPS is not serving $DEPLOY_SHA after 2 minutes. On the server: zendocx logs --tail 100 api"
+          exit 1
