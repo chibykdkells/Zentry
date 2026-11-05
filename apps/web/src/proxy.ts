@@ -249,12 +249,13 @@ export function proxy(request: NextRequest) {
 
   // Tenant context is decided here. The session is not.
   //
-  // The API sets `refresh_token` on its own hostname with no Domain attribute
-  // (see getRefreshCookieDomain in auth.controller.ts — deriving a domain from a
-  // different apex would make browsers reject the cookie outright). The API and
-  // the web app are on separate apex domains in production, so a middleware
-  // running on the web host can never read that cookie: `role` is null on every
-  // request, signed in or not.
+  // Whether this middleware can see `refresh_token` depends on where the API
+  // lives (see getRefreshCookieDomain in auth.controller.ts). Since 2026-11-05
+  // the API is api.ecafe.app and COOKIE_DOMAIN=ecafe.app, so ecafe.app hosts
+  // usually see it; custom tenant domains never do, and before that the API was
+  // on fly.dev and no web host could. A visible cookie may also be stale (the
+  // API clears it on a failed refresh, but only once the client tries). So
+  // `role` is a hint for skipping work, never proof of a session.
   //
   // Redirecting to /login on a null role therefore bounced *authenticated* users
   // back to the sign-in page the moment they were sent to their dashboard —

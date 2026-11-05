@@ -1,0 +1,6 @@
+[Unit]
+Description=Email a Zendocx alert that %i failed
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'journalctl -u %i -n 40 --no-pager | /usr/local/bin/zendocx-alert "ALERT: Zendocx %i failed"'

@@ -16,11 +16,11 @@ arch=$(docker exec zendocx-postgres-1 psql -U zendocx -d zendocx -Atc "select (f
 [ "$arch" = 1 ] && add "database backup archiving is FAILING (changes are not reaching R2)"
 prev=$(cat $STATE/status 2>/dev/null || echo ok); streak=$(cat $STATE/streak 2>/dev/null || echo 0)
 if [ -z "$problems" ]; then
-  [ "$prev" = alerted ] && printf "All checks pass again at %s UTC.\n" "$(date -u +%F\ %T)" | /usr/local/bin/vps-alert "RECOVERED: Zendocx (zendocx)"
+  [ "$prev" = alerted ] && printf "All checks pass again at %s UTC.\n" "$(date -u +%F\ %T)" | /usr/local/bin/zendocx-alert "RECOVERED: Zendocx (zendocx)"
   echo ok > $STATE/status; echo 0 > $STATE/streak; echo "ok"
 else
   streak=$((streak + 1)); echo $streak > $STATE/streak; printf "%s" "$problems"
   if [ "$streak" -ge 2 ] && [ "$prev" != alerted ]; then
-    printf "Problems found at %s UTC:\n%s" "$(date -u +%F\ %T)" "$problems" | /usr/local/bin/vps-alert "ALERT: Zendocx (zendocx) problem" && echo alerted > $STATE/status
+    printf "Problems found at %s UTC:\n%s" "$(date -u +%F\ %T)" "$problems" | /usr/local/bin/zendocx-alert "ALERT: Zendocx (zendocx) problem" && echo alerted > $STATE/status
   fi
 fi

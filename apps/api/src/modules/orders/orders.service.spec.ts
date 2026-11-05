@@ -1,6 +1,10 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   CbtApprovalStatus,
   DisputeStatus,
@@ -56,6 +60,7 @@ const buildOrderDetailRecord = (overrides: Record<string, unknown> = {}) => {
     adminNotes: null,
     createdAt: new Date('2026-05-01T08:00:00.000Z'),
     updatedAt: new Date('2026-05-01T10:00:00.000Z'),
+    jobBlocks: [],
     service: {
       id: 'service-1',
       name: 'Identity Validation',
@@ -1512,7 +1517,10 @@ describe('OrdersService', () => {
       );
 
       const tx = {
-        order: { update: jest.fn().mockResolvedValue(undefined) },
+        order: {
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+          update: jest.fn().mockResolvedValue(undefined),
+        },
         cbtJobBlock: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
         notification: { create: jest.fn().mockResolvedValue(undefined) },
         auditLog: { create: jest.fn().mockResolvedValue(undefined) },
@@ -1530,6 +1538,19 @@ describe('OrdersService', () => {
         'tenant-1',
       );
 
+      // The reassignment trigger forbids a direct CBT-to-CBT switch, so the
+      // current owner is released first, conditional on the order being unchanged.
+      expect(tx.order.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'order-1',
+          assignedCbtId: 'cbt-old',
+          status: OrderStatus.ASSIGNED,
+        },
+        data: { assignedCbtId: null },
+      });
+      expect(tx.order.updateMany.mock.invocationCallOrder[0]).toBeLessThan(
+        tx.order.update.mock.invocationCallOrder[0],
+      );
       expect(tx.order.update).toHaveBeenCalledWith({
         where: { id: 'order-1' },
         data: expect.objectContaining({
@@ -1555,6 +1576,53 @@ describe('OrdersService', () => {
           assignedCbtId: 'cbt-1',
         }),
       );
+    });
+
+    it('rejects reassignment when the order changed after it was read', async () => {
+      prisma.order.findFirst.mockResolvedValue({
+        id: 'order-1',
+        orderNumber: 'ORD-1001',
+        status: OrderStatus.ASSIGNED,
+        fulfillmentType: FulfillmentType.MANUAL,
+        assignedCbtId: 'cbt-old',
+        tenantId: 'tenant-1',
+        requesterId: 'user-1',
+        service: {
+          id: 'service-1',
+          name: 'Identity Validation',
+          category: { slug: 'identity-services' },
+        },
+      });
+      prisma.user.findFirst.mockResolvedValue(
+        buildApprovedCbtUser(['identity-services']),
+      );
+
+      const tx = {
+        order: {
+          updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+          update: jest.fn().mockResolvedValue(undefined),
+        },
+        cbtJobBlock: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+        notification: { create: jest.fn().mockResolvedValue(undefined) },
+        auditLog: { create: jest.fn().mockResolvedValue(undefined) },
+      };
+      prisma.$transaction.mockImplementation(
+        async (callback: (client: typeof tx) => Promise<unknown>) =>
+          callback(tx),
+      );
+
+      await expect(
+        service.reassignJob(
+          'admin-1',
+          'order-1',
+          { cbtId: 'cbt-1' },
+          'tenant-1',
+        ),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(tx.order.update).not.toHaveBeenCalled();
+      expect(
+        ordersDeadlineQueueService.scheduleDeadline,
+      ).not.toHaveBeenCalled();
     });
 
     it('rejects reassignment when the order falls outside the target CBT categories', async () => {
