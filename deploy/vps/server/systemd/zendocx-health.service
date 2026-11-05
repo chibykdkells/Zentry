@@ -1,0 +1,7 @@
+[Unit]
+Description=Zendocx (zendocx): health check every 5 minutes
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/zendocx-health

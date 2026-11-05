@@ -1,0 +1,8 @@
+[Unit]
+Description=Zendocx (zendocx): daily differential backup
+After=docker.service
+OnFailure=vps-alert-unit@%n.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/zendocx-backup diff

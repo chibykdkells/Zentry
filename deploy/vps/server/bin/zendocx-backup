@@ -1,0 +1,5 @@
+#!/bin/sh
+# Usage: zendocx-backup full|diff. Runs pgBackRest inside Zendocx's database container.
+set -e
+TYPE="${1:-diff}"
+exec flock -n /run/zendocx-backup.lock docker exec -u postgres zendocx-postgres-1 pgbackrest --stanza=zendocx --type="$TYPE" backup
