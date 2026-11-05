@@ -1,0 +1,26 @@
+#!/bin/sh
+# Zendocx health, every 5 minutes. Emails only on change: after 2 failing runs in a row, and on recovery.
+STATE=/var/lib/zendocx-health; mkdir -p $STATE
+problems=""
+add() { problems="${problems}- $1
+"; }
+h=$(curl -fsS --max-time 15 https://api.ecafe.app/health 2>&1) || add "API not answering over HTTPS: $(echo "$h" | head -c 200)"
+case "$h" in *'"status":"ok"'*'"db":"ok"'*) ;; *) [ -n "$h" ] && add "API health not ok: $(echo "$h" | head -c 200)";; esac
+for c in zendocx-postgres-1 zendocx-api-1 zendocx-redis-1 edge-caddy-1; do
+  s=$(docker inspect -f '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' $c 2>/dev/null) || s="missing"
+  case "$s" in "running healthy"|"running ") ;; *) add "container $c: $s";; esac
+done
+disk=$(df --output=pcent / | tail -1 | tr -dc 0-9); [ "$disk" -ge 85 ] && add "disk ${disk}% full"
+mem=$(awk '/MemAvailable/{print int($2/1024)}' /proc/meminfo); [ "$mem" -lt 400 ] && add "only ${mem} MB memory available"
+arch=$(docker exec zendocx-postgres-1 psql -U zendocx -d zendocx -Atc "select (failed_count > 0 and last_failed_time > coalesce(last_archived_time, 'epoch'))::int from pg_stat_archiver" 2>/dev/null)
+[ "$arch" = 1 ] && add "database backup archiving is FAILING (changes are not reaching R2)"
+prev=$(cat $STATE/status 2>/dev/null || echo ok); streak=$(cat $STATE/streak 2>/dev/null || echo 0)
+if [ -z "$problems" ]; then
+  [ "$prev" = alerted ] && printf "All checks pass again at %s UTC.\n" "$(date -u +%F\ %T)" | /usr/local/bin/vps-alert "RECOVERED: Zendocx (zendocx)"
+  echo ok > $STATE/status; echo 0 > $STATE/streak; echo "ok"
+else
+  streak=$((streak + 1)); echo $streak > $STATE/streak; printf "%s" "$problems"
+  if [ "$streak" -ge 2 ] && [ "$prev" != alerted ]; then
+    printf "Problems found at %s UTC:\n%s" "$(date -u +%F\ %T)" "$problems" | /usr/local/bin/vps-alert "ALERT: Zendocx (zendocx) problem" && echo alerted > $STATE/status
+  fi
+fi

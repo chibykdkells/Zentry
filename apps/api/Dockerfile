@@ -44,5 +44,9 @@ RUN cd apps/api && ../../node_modules/.bin/nest build
 RUN test -f apps/api/dist/main.js && echo "dist/main.js OK" || (echo "MISSING dist/main.js" && exit 1)
 
 ENV NODE_ENV=production
+# Commit this image was built from; /health reports it so a deploy can check
+# that the new code is the code answering. Set last to keep the layers above cached.
+ARG GIT_SHA=unknown
+ENV GIT_SHA=$GIT_SHA
 EXPOSE 4000
 CMD ["node", "apps/api/dist/main"]

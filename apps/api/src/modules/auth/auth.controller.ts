@@ -91,7 +91,7 @@ export class AuthController {
   private getRefreshCookieDomain(): string | undefined {
     // Only honour an explicit COOKIE_DOMAIN env var. Deriving a domain from
     // FRONTEND_URL / API_URL is unsafe: when the API lives on a different apex
-    // domain (e.g. fly.dev vs zendocx.net) browsers silently reject the
+    // domain (e.g. fly.dev vs ecafe.app) browsers silently reject the
     // Set-Cookie, so no refresh-token is ever stored and every session restore
     // fails with a bounce back to login. Without a domain attribute the browser
     // scopes the cookie to the API server's exact hostname — always valid for

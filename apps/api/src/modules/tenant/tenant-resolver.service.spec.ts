@@ -76,7 +76,7 @@ describe('TenantResolverService', () => {
     prisma.tenant.findFirst.mockResolvedValue(tenant);
 
     const result = await service.resolveFromRequestContext({
-      hostname: 'www.zendocx.net',
+      hostname: 'www.ecafe.app',
       explicitSlug: 'testbiz',
     });
 
@@ -90,7 +90,7 @@ describe('TenantResolverService', () => {
     prisma.tenant.findFirst.mockResolvedValue(tenant);
 
     const result = await service.resolveFromRequestContext({
-      hostname: 'api.zendocx.net',
+      hostname: 'api.ecafe.app',
       explicitSlug: 'testbiz',
     });
 
@@ -101,7 +101,7 @@ describe('TenantResolverService', () => {
   });
 
   it('returns null for the platform root hostname', async () => {
-    const result = await service.resolveFromHostname('zendocx.net');
+    const result = await service.resolveFromHostname('ecafe.app');
 
     expect(result).toBeNull();
     expect(redis.getJson).not.toHaveBeenCalled();
@@ -110,7 +110,7 @@ describe('TenantResolverService', () => {
 
   it('returns null for reserved platform subdomains', async () => {
     for (const sub of ['www', 'api', 'app', 'platform', 'admin']) {
-      const result = await service.resolveFromHostname(`${sub}.zendocx.net`);
+      const result = await service.resolveFromHostname(`${sub}.ecafe.app`);
       expect(result).toBeNull();
     }
     expect(prisma.tenant.findFirst).not.toHaveBeenCalled();
@@ -120,11 +120,11 @@ describe('TenantResolverService', () => {
     redis.getJson.mockResolvedValue(null);
     prisma.tenant.findFirst.mockResolvedValue(tenant);
 
-    const result = await service.resolveFromHostname('testbiz.zendocx.net');
+    const result = await service.resolveFromHostname('testbiz.ecafe.app');
 
     expect(result).toEqual(tenant);
     expect(redis.getJson).toHaveBeenCalledWith(
-      'tenant:host:testbiz.zendocx.net',
+      'tenant:host:testbiz.ecafe.app',
     );
     expect(prisma.tenant.findFirst).toHaveBeenCalledWith({
       where: {
@@ -133,7 +133,7 @@ describe('TenantResolverService', () => {
       },
     });
     expect(redis.setJson).toHaveBeenCalledWith(
-      'tenant:host:testbiz.zendocx.net',
+      'tenant:host:testbiz.ecafe.app',
       tenant,
       60,
     );

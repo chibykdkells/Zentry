@@ -47,7 +47,7 @@ describe('WalletService', () => {
   let service: WalletService;
 
   beforeEach(() => {
-    process.env.FRONTEND_URL = 'https://app.zendocx.net';
+    process.env.FRONTEND_URL = 'https://app.ecafe.app';
 
     prisma = {
       user: {
@@ -127,19 +127,19 @@ describe('WalletService', () => {
     await service.initiateFunding(
       'user-1',
       { amountNaira: 2500 },
-      'https://zendocx.net',
+      'https://ecafe.app',
     );
 
     expect(paymentService.initiatePayment).toHaveBeenCalledWith(
       expect.objectContaining({
-        callbackUrl: 'https://zendocx.net/wallet',
+        callbackUrl: 'https://ecafe.app/wallet',
       }),
     );
     expect(prisma.transaction.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           metadata: expect.objectContaining({
-            callbackUrl: 'https://zendocx.net/wallet',
+            callbackUrl: 'https://ecafe.app/wallet',
           }),
         }),
       }),
@@ -148,7 +148,7 @@ describe('WalletService', () => {
       expect.objectContaining({
         data: expect.objectContaining({
           metadata: expect.objectContaining({
-            callbackUrl: 'https://zendocx.net/wallet',
+            callbackUrl: 'https://ecafe.app/wallet',
           }),
         }),
       }),
@@ -180,7 +180,7 @@ describe('WalletService', () => {
 
     expect(paymentService.initiatePayment).toHaveBeenCalledWith(
       expect.objectContaining({
-        callbackUrl: 'https://app.zendocx.net/wallet',
+        callbackUrl: 'https://app.ecafe.app/wallet',
       }),
     );
   });
@@ -209,7 +209,7 @@ describe('WalletService', () => {
     const result = await service.initiateFunding(
       'user-1',
       { amountNaira: 1000 },
-      'https://zendocx.net',
+      'https://ecafe.app',
     );
 
     expect(prisma.transaction.update).toHaveBeenCalledWith(
@@ -257,7 +257,7 @@ describe('WalletService', () => {
     const result = await service.initiateFunding(
       'user-1',
       { amountNaira: 1000 },
-      'https://zendocx.net',
+      'https://ecafe.app',
     );
 
     expect(paymentService.initiatePayment).toHaveBeenCalledWith(
@@ -305,7 +305,7 @@ describe('WalletService', () => {
     const result = await service.initiateFunding(
       'user-1',
       { amountNaira: 100 },
-      'https://zendocx.net',
+      'https://ecafe.app',
     );
 
     expect(paymentService.initiatePayment).toHaveBeenCalledWith(
@@ -353,7 +353,7 @@ describe('WalletService', () => {
     const result = await service.initiateFunding(
       'user-1',
       { amountNaira: 50000 },
-      'https://zendocx.net',
+      'https://ecafe.app',
     );
 
     expect(paymentService.initiatePayment).toHaveBeenCalledWith(
@@ -377,7 +377,7 @@ describe('WalletService', () => {
       gateway: PaymentGateway.FINTAVAPAY,
       gatewayRef: 'gateway-ref-1',
       metadata: {
-        callbackUrl: 'https://zendocx.net/wallet',
+        callbackUrl: 'https://ecafe.app/wallet',
         checkoutMode: 'live',
       },
       createdAt: new Date('2026-05-04T18:00:00.000Z'),
@@ -408,7 +408,7 @@ describe('WalletService', () => {
     expect(result.data.canApply).toBe(true);
     expect(result.data.reasons).toEqual([]);
     expect(result.data.transaction.callbackUrl).toBe(
-      'https://zendocx.net/wallet',
+      'https://ecafe.app/wallet',
     );
     expect(result.data.verification.success).toBe(true);
     expect(result.data.verification.amountKobo).toBe('10000');
@@ -426,7 +426,7 @@ describe('WalletService', () => {
       gateway: PaymentGateway.FINTAVAPAY,
       gatewayRef: 'gateway-ref-2',
       metadata: {
-        callbackUrl: 'https://zendocx.net/wallet',
+        callbackUrl: 'https://ecafe.app/wallet',
         checkoutMode: 'live',
       },
       createdAt: new Date('2026-05-04T18:10:00.000Z'),

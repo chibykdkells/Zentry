@@ -1,0 +1,45 @@
+#!/bin/bash
+# Zendocx restore drill: marker after the full backup -> restore from R2 only
+# into a scratch container (archiving off) -> marker + every figure must match.
+set -euo pipefail
+PG=zendocx-postgres-1; IMG=zendocx-postgres:17-pgbackrest; C=zendocx-restoretest; V=zendocx_restoretest
+Q=/opt/zendocx/repo/deploy/vps/verify.sql; T=$(mktemp -d /tmp/zendocx-drill.XXXXXX)
+MARK="restore-drill-$(date -u +%Y%m%dT%H%M%SZ)"
+log() { echo "[$(date -u +%T)] $*"; }
+cleanup() { docker rm -f $C >/dev/null 2>&1 || true; docker volume rm $V >/dev/null 2>&1 || true; rm -rf "$T"; }
+trap cleanup EXIT
+
+log "1/6 marker written to the live copy AFTER the full backup: $MARK"
+docker exec $PG psql -U zendocx -d zendocx -v ON_ERROR_STOP=1 -qc "insert into kv_store(key, value, \"expiresAt\") values ('$MARK', 'zendocx restore drill', now() + interval '1 day')"
+
+log "2/6 force the WAL holding the marker out to R2 (pgbackrest check waits for it)"
+docker exec -u postgres $PG pgbackrest --stanza=zendocx check 2>&1 | grep -E "command end|ERROR" | sed 's/^/    /'
+docker exec -i $PG psql -U zendocx -d zendocx -X -q -f - < $Q | grep -v '^$' | sort > "$T/live.txt"
+
+log "3/6 restore from R2 into scratch container $C (archive-mode=off)"
+t0=$(date +%s)
+docker run -d --name $C --label vps.project=zendocx --label vps.project.name=Zendocx --label vps.role=db \
+  --memory 512m --shm-size 128m -v $V:/var/lib/postgresql/data \
+  -v /opt/zendocx/secrets/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro --entrypoint sleep $IMG infinity >/dev/null
+docker exec -u postgres $C pgbackrest --stanza=zendocx --archive-mode=off restore 2>&1 | grep -E "command end|ERROR|WARN" | sed 's/^/    /'
+log "    restored in $(( $(date +%s) - t0 ))s"
+
+log "4/6 start PostgreSQL on the restored files and replay WAL to the end"
+docker exec -d -u postgres $C postgres -D /var/lib/postgresql/data -c listen_addresses=''
+for i in $(seq 1 60); do
+  r=$(docker exec $C psql -U zendocx -d zendocx -Atc "select pg_is_in_recovery()" 2>/dev/null || true)
+  [ "$r" = f ] && break; sleep 2
+done
+[ "$r" = f ] || { log "    restored database did not finish recovery"; exit 1; }
+log "    recovered and promoted; archive_mode=$(docker exec $C psql -U zendocx -d zendocx -Atc 'show archive_mode')"
+
+log "5/6 marker and every figure"
+m=$(docker exec $C psql -U zendocx -d zendocx -Atc "select count(*) from kv_store where key = '$MARK'")
+log "    marker found: $m (must be 1)"
+docker exec -i $C psql -U zendocx -d zendocx -X -q -f - < $Q | grep -v '^$' | sort > "$T/restored.txt"
+log "    $(grep -c '^money|' "$T/restored.txt") money totals, $(grep -c '^rows|' "$T/restored.txt") tables, $(grep -c '^migration|' "$T/restored.txt") ledger rows"
+if diff "$T/live.txt" "$T/restored.txt" > "$T/diff.txt"; then log "    restored copy identical to live"; d=0; else log "    DIFFERENCES:"; cat "$T/diff.txt"; d=1; fi
+
+log "6/6 clean up: scratch container and volume removed; marker deleted from live"
+docker exec $PG psql -U zendocx -d zendocx -qc "delete from kv_store where key = '$MARK'"
+[ "$m" = 1 ] && [ "$d" = 0 ] && log "RESTORE DRILL PASSED" || { log "RESTORE DRILL FAILED"; exit 1; }

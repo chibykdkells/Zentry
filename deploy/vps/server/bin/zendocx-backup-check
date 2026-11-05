@@ -1,0 +1,18 @@
+#!/bin/sh
+# Fails (and says why) when Zendocx's newest backup is over 26 h old, pgBackRest
+# reports a problem, or WAL archiving has started failing.
+st=0
+T=$(mktemp -d /tmp/zendocx-backup-check.XXXXXX); trap 'rm -rf "$T"' EXIT
+docker exec -u postgres zendocx-postgres-1 pgbackrest --stanza=zendocx --output=json info > "$T/info.json" || { echo "BACKUP CHECK FAILED: pgbackrest info"; exit 1; }
+python3 - "$T/info.json" <<'PY' || st=1
+import json, sys, time
+s = json.load(open(sys.argv[1]))[0]
+last = max((b["timestamp"]["stop"] for b in s.get("backup", [])), default=0)
+age_h = (time.time() - last) / 3600
+ok = s["status"]["code"] == 0 and age_h < 26
+print(("OK" if ok else "BACKUP CHECK FAILED") + ": pgbackrest status=%s, newest backup %.1f h ago" % (s["status"]["message"], age_h))
+sys.exit(0 if ok else 1)
+PY
+out=$(docker exec zendocx-postgres-1 psql -U zendocx -d zendocx -At -c "select case when failed_count > 0 and last_failed_time > coalesce(last_archived_time, 'epoch') then 'ARCHIVING FAILING since ' || last_failed_time else 'OK: archiving, last segment ' || coalesce(last_archived_time::text, 'never') end from pg_stat_archiver") || st=1
+echo "$out"; case "$out" in ARCHIVING*) st=1;; esac
+exit $st

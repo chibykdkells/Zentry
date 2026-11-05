@@ -94,7 +94,7 @@ async function main() {
   // Super Admin — platform-level, no tenantId
   const existingAdmin = await prisma.user.findFirst({
     where: {
-      email: 'admin@zendocx.net',
+      email: 'admin@ecafe.app',
       tenantId: null,
     },
     select: { id: true },
@@ -119,7 +119,7 @@ async function main() {
         data: {
           firstName: 'ZenDocx',
           lastName: 'Admin',
-          email: 'admin@zendocx.net',
+          email: 'admin@ecafe.app',
           phone: '+2348000000001',
           passwordHash: adminPassword,
           walletPin: testPin,
@@ -969,7 +969,7 @@ async function main() {
   console.log('✅ Seed complete!');
   console.log('');
   console.log('Test accounts:');
-  console.log('  Super Admin   : admin@zendocx.net   / Admin@ZenDocx2024!  PIN: 123456  (platform-level)');
+  console.log('  Super Admin   : admin@ecafe.app   / Admin@ZenDocx2024!  PIN: 123456  (platform-level)');
   console.log('  Tenant Admin  : tenant@test.com   / Test@1234!         PIN: 123456  (tenant: testbiz)');
   console.log('  Individual    : user@test.com     / Test@1234!         PIN: 123456  (tenant: testbiz)');
   console.log('  CBT Center    : cbt@test.com      / Test@1234!         PIN: 123456  (tenant: testbiz)');
