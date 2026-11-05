@@ -2237,6 +2237,27 @@ export class OrdersService {
     );
 
     await this.prisma.$transaction(async (tx) => {
+      // Release the current owner first, then hand the job to the target. The
+      // database trigger `order_prevent_reassignment` (migration
+      // 20260522120000_enforce_single_job_claim) rejects any direct switch from
+      // one CBT to another, which is what protects concurrent pool claims; going
+      // through NULL inside this transaction is the sanctioned admin path. The
+      // conditional update also proves nobody claimed, released or progressed
+      // the order since it was read above.
+      const released = await tx.order.updateMany({
+        where: {
+          id: orderId,
+          assignedCbtId: previousCbtId,
+          status: order.status,
+        },
+        data: { assignedCbtId: null },
+      });
+      if (released.count !== 1) {
+        throw new ConflictException(
+          'This job changed while you were reassigning it. Refresh and try again.',
+        );
+      }
+
       await tx.order.update({
         where: { id: orderId },
         data: {

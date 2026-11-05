@@ -1,0 +1,27 @@
+#!/usr/bin/env python3
+"""zendocx-alert "Subject" < body  — email Zendocx's alert address through Resend.
+
+Zendocx's own copy of the shared /usr/local/bin/vps-alert, so Zendocx alerts
+come from an ecafe.app sender with Zendocx's own Resend key (assistnghq account,
+sending restricted to ecafe.app) instead of FEP Assist's. Settings live in
+/opt/zendocx/secrets/alert.env (root, 600):
+  RESEND_KEY=re_...                      send-only key, ecafe.app domain
+  ALERT_FROM=Zendocx alerts <alerts@ecafe.app>
+  ALERT_EMAIL=owner@example.com          where alerts go
+"""
+import json, re, sys, socket, urllib.request
+cfg = {}
+for l in open("/opt/zendocx/secrets/alert.env"):
+    m = re.match(r"^([A-Z_]+)=(.*)$", l.strip())
+    if m: cfg[m.group(1)] = m.group(2).strip().strip("'\"")
+subject = sys.argv[1] if len(sys.argv) > 1 else "Zendocx server alert"
+body = sys.stdin.read() if not sys.stdin.isatty() else ""
+text = (f"{body}\n\n-- Zendocx (zendocx) on {socket.gethostname()} (46.202.195.86)\n"
+        "On the server: journalctl -u 'zendocx-*' --since -1h ; zendocx logs --tail 100 api")
+req = urllib.request.Request("https://api.resend.com/emails", method="POST",
+    headers={"Authorization": "Bearer " + cfg["RESEND_KEY"], "Content-Type": "application/json", "User-Agent": "zendocx-alert"},
+    data=json.dumps({"from": cfg["ALERT_FROM"], "to": [cfg["ALERT_EMAIL"]], "subject": subject, "text": text}).encode())
+try:
+    with urllib.request.urlopen(req, timeout=20) as r: print("alert sent:", r.status)
+except Exception as e:
+    print("ALERT NOT SENT:", e, file=sys.stderr); sys.exit(1)

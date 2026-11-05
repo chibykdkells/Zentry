@@ -100,13 +100,20 @@ export class AuthController {
       .get<string>('COOKIE_DOMAIN')
       ?.trim();
     if (!explicitDomain) return undefined;
-    return explicitDomain.startsWith('.') ? explicitDomain : `.${explicitDomain}`;
+    return explicitDomain.startsWith('.')
+      ? explicitDomain
+      : `.${explicitDomain}`;
   }
 
   private setRefreshTokenCookie(
     response: Response,
     refreshToken: string,
   ): void {
+    // When the cookie moves to a shared domain, a host-only copy set earlier
+    // (scoped to the API hostname alone) would still be sent alongside it. Only
+    // one refresh token per user is valid, so a stale duplicate could win the
+    // parse and sign the user out. Expire it while setting the new one.
+    this.clearHostOnlyRefreshCookie(response);
     response.cookie('refresh_token', refreshToken, {
       domain: this.getRefreshCookieDomain(),
       httpOnly: true,
@@ -120,14 +127,25 @@ export class AuthController {
   }
 
   private getRefreshCookieSameSite(): CookieOptions['sameSite'] {
-    return this.configService.get('NODE_ENV') === 'production'
-      ? 'none'
-      : 'lax';
+    return this.configService.get('NODE_ENV') === 'production' ? 'none' : 'lax';
   }
 
   private clearRefreshTokenCookie(response: Response): void {
+    this.clearHostOnlyRefreshCookie(response);
     response.clearCookie('refresh_token', {
       domain: this.getRefreshCookieDomain(),
+      httpOnly: true,
+      secure: this.configService.get('NODE_ENV') === 'production',
+      sameSite: this.getRefreshCookieSameSite(),
+      path: '/',
+    });
+  }
+
+  // Expires a refresh cookie without a Domain attribute. Only needed when
+  // COOKIE_DOMAIN is set; otherwise the main cookie *is* the host-only one.
+  private clearHostOnlyRefreshCookie(response: Response): void {
+    if (!this.getRefreshCookieDomain()) return;
+    response.clearCookie('refresh_token', {
       httpOnly: true,
       secure: this.configService.get('NODE_ENV') === 'production',
       sameSite: this.getRefreshCookieSameSite(),
@@ -278,7 +296,15 @@ export class AuthController {
   ) {
     const cookies = this.parseCookieHeader(req.headers.cookie);
     const token = cookies['refresh_token'] ?? '';
-    const result = await this.authService.refreshTokens(token);
+    let result: Awaited<ReturnType<AuthService['refreshTokens']>>;
+    try {
+      result = await this.authService.refreshTokens(token);
+    } catch (error) {
+      // A refresh cookie that no longer works (signed in elsewhere, expired,
+      // revoked) is removed, so the web app stops treating it as a session.
+      this.clearRefreshTokenCookie(response);
+      throw error;
+    }
     this.setRefreshTokenCookie(response, result.data.refreshToken);
 
     return {
