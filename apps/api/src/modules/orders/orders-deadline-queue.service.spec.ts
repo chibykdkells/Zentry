@@ -42,7 +42,7 @@ describe('OrdersDeadlineQueueService', () => {
     ]);
 
     await expect(service.schedulePendingDeadlines()).resolves.toEqual({ checked: 1, overdue: 1 });
-    const opts = deadlineQueue.add.mock.calls[0][2] as { delay: number };
+    const [, , opts] = deadlineQueue.add.mock.calls[0] as [string, unknown, { delay: number }];
     expect(opts.delay).toBe(0);
   });
 
