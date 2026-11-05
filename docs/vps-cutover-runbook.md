@@ -23,8 +23,17 @@ the Zentry folder on the Mac.
   logs, tenants, prices and provider settings are copied and verified to the kobo.
 
 ## What users notice
-- Everyone signs in once more (the login cookie belonged to `api.zendocx.net`).
+- The website calls the API at `https://zentry-api-prod.fly.dev` today
+  (Vercel `NEXT_PUBLIC_API_URL`, confirmed 2026-11-05 in the live code). After
+  cutover it calls `https://api.ecafe.app`.
+- Everyone signs in once more (the login cookie belonged to the fly.dev address).
+- Tabs left open, and installed apps not yet updated, keep calling fly.dev and
+  show errors until they **reload / reopen once** (the service worker uses
+  skipWaiting + clientsClaim, so one reload picks up the new code). Fly's
+  address cannot be pointed at the VPS, so there is no bridge for it.
 - Email comes from `noreply@ecafe.app` instead of `noreply@zendocx.net`.
+- The `api.zendocx.net` bridge only keeps older links working (signed file
+  links from the last 7 days were built with `API_URL=https://api.zendocx.net`).
 
 ## Before the night
 
@@ -32,7 +41,7 @@ the Zentry folder on the Mac.
 |---|---|---|
 | 2 days before | You | Tell users (message below). Ask CBT centers to finish claimed jobs and not to request withdrawals in the window. |
 | 2 days before | You | Confirm you can log in to **Vercel, Cloudflare (zendocx.net DNS), Resend (assistnghq) and Fly**. |
-| 2 days before | You | Vercel → project serving ecafe.app → Settings → Environment Variables: note the Production value of `NEXT_PUBLIC_API_URL`. It changes to `https://api.ecafe.app` on the night. |
+| 2 days before | You | Vercel → project serving ecafe.app → Settings → Environment Variables: `NEXT_PUBLIC_API_URL` (Production) is `https://zentry-api-prod.fly.dev` (checked 2026-11-05). It changes to `https://api.ecafe.app` on the night. |
 | Day before | You | Cloudflare → zendocx.net → DNS → `api` record: lower its TTL to 1 min (Auto is 5 min). Leave it pointing at Fly. |
 | Day before | Claude | `ssh fepvps /opt/zendocx/repo/deploy/vps/cutover.sh --rehearsal` ends with "money totals identical" and "differences: none". |
 | Day before | Claude | `zendocx-backup-check` passes; `zendocx-health` is ok; the latest `main` is deployed (Deploy workflow green). |
@@ -41,8 +50,8 @@ Message to users:
 
 > Ecafe will be unavailable on **[day] from [time] to [time] (Lagos time)**
 > while we move to a new server. Please don't request withdrawals during that
-> window. Nothing you have saved will change. You will need to sign in again
-> afterwards. We'll confirm here when it's back.
+> window. Nothing you have saved will change. Afterwards, close and reopen the
+> app (or reload the page) and sign in again. We'll confirm here when it's back.
 
 ## On the night
 
@@ -64,7 +73,7 @@ Message to users:
 **Before step 9 (nobody has used the new server yet):** Neon has not changed
 since step 2, so going back is safe.
 1. Claude: uncordon and start the Fly machine.
-2. You: set Vercel's `NEXT_PUBLIC_API_URL` back to the value noted before the night; redeploy.
+2. You: set Vercel's `NEXT_PUBLIC_API_URL` back to `https://zentry-api-prod.fly.dev`; redeploy.
 3. You: put the zendocx.net `api` record back to the CNAME `zentry-api-prod.fly.dev`.
 4. Claude: switch the VPS back to rehearsal settings:
    `cp -p /opt/zendocx/secrets/api.env.rehearsal /opt/zendocx/secrets/api.env && zendocx up -d --force-recreate api`.

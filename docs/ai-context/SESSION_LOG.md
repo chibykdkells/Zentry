@@ -8919,3 +8919,89 @@ automatic, and stays automatic across deploys.
 
 - The first sweep still has not been run, and now nothing will run it but a
   person. Finance → Activity → Clear abandoned funding attempts.
+
+---
+
+## 2026-11-05 — Moved off Fly + Neon + Upstash to the Hostinger VPS (api.ecafe.app)
+
+### Context
+
+Fly, Neon and Upstash bills could not be paid. The backend was moved to the
+Hostinger VPS that already runs FEP Assist (moved 2026-11-04), using the same
+procedure. Server slug `zendocx`. The owner also retired zendocx.net: the
+product now uses ecafe.app only.
+
+### What Changed
+
+- **Server**: `/opt/zendocx` (repo, secrets, backups), compose project
+  `zendocx` (PostgreSQL 17 + pgBackRest, Redis, API on the shared `edge`
+  network as `zendocx-api`), shortcut `zendocx`, site file
+  `/opt/edge/sites/zendocx.caddy` for `api.ecafe.app` (+ temporary
+  `api.zendocx.net` bridge). No published ports.
+- **Backups**: pgBackRest → R2 `zendocx-db-backups` (FEP's Cloudflare account,
+  bucket-scoped key; FEP buckets verified 403), AES-256 with a new passphrase,
+  WAL ≤ 60 s. Timers `zendocx-backup-full/diff/check`, `zendocx-health`; alerts
+  through the shared `vps-alert`. Restore drill from R2 passed (marker + every
+  figure identical).
+- **Deploys**: `.github/workflows/deploy.yml` runs after CI on `main`: rsync,
+  build on the server, `prisma migrate deploy` (pipefail) before the swap, then
+  waits for `/health` to report the commit with `db: ok`. Skips non-API commits.
+  Deploy key `zendocx-github-actions-deploy`; first run green on `1d34c0e`.
+- **Code**:
+  - `/health` returns `gitSha` and `db`, 503 when the database is down;
+    Dockerfile records `GIT_SHA`.
+  - Delivery-deadline timers rebuilt from `Order.deliveryDeadline` on startup
+    (escrow release already was), so a new Redis cannot strand claimed orders.
+  - Migration `20260522120000_enforce_single_job_claim` (order reassignment
+    trigger) recovered verbatim from Neon; it had been applied in May but never
+    committed. Repo and database now both have 23 migrations.
+  - zendocx.net → ecafe.app in code defaults, seed, tests, CI placeholders and
+    `.env.example`.
+- **Email**: new Resend key (account assistnghq, scoped to ecafe.app); sender
+  `noreply@ecafe.app`.
+- **Cutover** (~12:02–12:04 UTC): Fly machine `82edd0f7d3dd68` cordoned and
+  stopped; `cutover.sh --for-real` in 39 s, 14 money totals, 28 tables and the
+  migration ledger identical; production settings on. Vercel
+  `NEXT_PUBLIC_API_URL` changed from `https://zentry-api-prod.fly.dev` to
+  `https://api.ecafe.app`; zendocx.net `api` record pointed at the VPS.
+
+### Files
+
+- New: `deploy/vps/` (compose.yml, postgresql.conf, postgres/Dockerfile,
+  verify.sql, cutover.sh, README.md, server/bin/*, server/systemd/*),
+  `.github/workflows/deploy.yml`, `docs/vps-cutover-runbook.md`,
+  `apps/api/prisma/migrations/20260522120000_enforce_single_job_claim/`,
+  `apps/api/src/modules/orders/orders-deadline-queue.service.spec.ts`.
+- Modified: `apps/api/src/app.controller.ts` (+spec), `orders-deadline-queue.service.ts`,
+  `apps/api/Dockerfile`, tenant/wallet specs, `tenant-resolver.service.ts`,
+  `push-delivery.service.ts`, `auth.controller.ts`, `prisma/seed.ts`,
+  `.env.example`, `.github/workflows/ci.yml`, `CLAUDE.md`, `DECISIONS.md` (ADR-012),
+  `PHASES.md`.
+
+### Problems Hit
+
+- Docker Compose `env_file` interpolates `$`: the Fintava secret key was cut from
+  65 to 41 characters after the switch. Single-quoted; all 44 settings verified
+  identical inside the container; Fintava `/banks` answered 200 from the VPS.
+- `pgbackrest.conf` must be owned 999:999 or the container cannot read it.
+- First CI run failed on type-aware lint in a new spec; fixed.
+
+### Verification
+
+- Rehearsal and real cutover: every money total, row count and ledger row identical.
+- Live site bundle calls `api.ecafe.app`; CORS preflight from `www.ecafe.app` 204.
+- Password-reset email accepted (no send errors). Only log errors since cutover:
+  CORS refusals for a Vercel preview URL (also refused on Fly).
+- API tests: new/changed specs pass; 8 pre-existing failures in
+  `orders.service.spec.ts` unchanged from `main`.
+
+### Blockers / Notes for Next Session
+
+- Watch week until ~2026-11-12: daily `zendocx-backup-check`, health, `zendocx logs api`.
+- Then, **with the owner's OK**: final row-count check; delete Fly app, Upstash
+  `fly-zentry-redis-prod` and the Neon project; remove the `api.zendocx.net`
+  bridge and `fly.toml`; revoke the Fly token and old Resend key.
+- Admin "reassign to a chosen CBT" on an ASSIGNED order is probably blocked in
+  production by the recovered trigger (direct CBT→CBT change). Pre-existing since
+  May; fix by unassigning first if wanted.
+- Owner to verify the app end to end on www.ecafe.app (sign-in as each role).

@@ -332,3 +332,35 @@ considered later for VTU and NIN services.
   the expansion, not cleanup work added later
 - Current Phase 1 work must not quietly introduce partial multi-tenancy without
   following the roadmap
+
+
+---
+
+## ADR-012: Self-host the API, database and Redis on a shared Hostinger VPS
+
+**Date:** 2026-11-05
+**Status:** ACCEPTED
+
+**Decision:** Run the API, PostgreSQL 17 and Redis in Docker on the Hostinger
+VPS shared with FEP Assist (server slug `zendocx`), behind the shared Caddy front
+door, at `https://api.ecafe.app`. Replaces Fly.io (API), Neon (database) and
+Upstash (Redis). Frontend stays on Vercel, storage on Cloudinary.
+
+**Reason:** Cost. The managed services could not be paid for without revenue.
+FEP Assist had already moved to the same server successfully on 2026-11-04.
+
+**Alternatives considered:**
+- Stay on Fly + Neon + Upstash — rejected (cost)
+- Share FEP Assist's database — rejected (one project's failure or restore
+  must never touch the other's data)
+
+**Consequences:**
+- We own backups: pgBackRest to R2 with continuous WAL, a weekly restore drill
+  is available (`zendocx-restore-drill`), and the passphrase must live in the
+  owner's password manager.
+- One server is a single point of failure; it must stay rebuildable from the
+  repo (`deploy/vps/`) plus R2.
+- Deploys go through GitHub Actions (`deploy.yml`), not `fly deploy`.
+- Projects on the server follow `/opt/PROJECTS.md` naming rules and never touch
+  each other's resources.
+- zendocx.net is retired; the product uses ecafe.app only.
