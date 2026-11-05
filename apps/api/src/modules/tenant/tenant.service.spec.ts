@@ -296,7 +296,7 @@ describe('TenantService', () => {
 
     await expect(
       service.updateOwnTenantSettings('tenant-admin-1', {
-        customDomain: 'zendocx.net',
+        customDomain: 'ecafe.app',
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
 
@@ -313,7 +313,7 @@ describe('TenantService', () => {
 
     await expect(
       service.updateOwnTenantSettings('tenant-admin-1', {
-        customDomain: 'app.zendocx.net',
+        customDomain: 'app.ecafe.app',
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
 
@@ -332,7 +332,7 @@ describe('TenantService', () => {
     );
     jest
       .spyOn(service as never, 'resolveTxtRecords')
-      .mockResolvedValue(['zendocx-site-verification=other-token'] as never);
+      .mockResolvedValue(['ecafe-site-verification=other-token'] as never);
 
     const result =
       await service.getOwnTenantDomainVerification('tenant-admin-1');
@@ -345,8 +345,8 @@ describe('TenantService', () => {
         customDomain: 'portal.testbiz.com',
         customDomainVerified: true,
         recordType: 'TXT',
-        recordHost: '_zendocx-verify.portal.testbiz.com',
-        recordValue: expect.stringMatching(/^zendocx-site-verification=/),
+        recordHost: '_ecafe-verify.portal.testbiz.com',
+        recordValue: expect.stringMatching(/^ecafe-site-verification=/),
         verificationStatus: 'VERIFIED',
         verificationService: {
           secretSource: 'DOMAIN_VERIFICATION_SECRET',
@@ -358,7 +358,7 @@ describe('TenantService', () => {
         dnsLookup: expect.objectContaining({
           checkedAt: expect.any(String),
           expectedValueFound: false,
-          recordsFound: ['zendocx-site-verification=other-token'],
+          recordsFound: ['ecafe-site-verification=other-token'],
           errorCode: null,
           errorMessage: null,
         }),
@@ -429,7 +429,7 @@ describe('TenantService', () => {
 
     jest
       .spyOn(service as never, 'resolveTxtRecords')
-      .mockResolvedValue(['zendocx-site-verification=wrong-token'] as never);
+      .mockResolvedValue(['ecafe-site-verification=wrong-token'] as never);
 
     await expect(
       service.verifyOwnTenantCustomDomain('tenant-admin-1'),

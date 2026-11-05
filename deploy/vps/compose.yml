@@ -1,7 +1,7 @@
 # Zendocx (slug: zendocx) on the Hostinger VPS (46.202.195.86), shared with
 # other projects. Naming rules for every project on the server: /opt/PROJECTS.md.
 #
-# Nothing here publishes a port. HTTPS for api.zendocx.net is served by the
+# Nothing here publishes a port. HTTPS for api.ecafe.app is served by the
 # shared front door (project `edge`, /opt/edge), whose Caddy reaches the API
 # over the external `edge` network as `zendocx-api`.
 #

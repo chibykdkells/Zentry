@@ -34,7 +34,7 @@ export class PushDeliveryService {
   private getSubject() {
     return this.configService.get<string>(
       'WEB_PUSH_VAPID_SUBJECT',
-      'mailto:support@zendocx.net',
+      'mailto:support@ecafe.app',
     );
   }
 
