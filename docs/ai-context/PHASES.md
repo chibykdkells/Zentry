@@ -12,8 +12,8 @@
 
 ```
 Active Phase  : Phase 10 — Admin Analytics, Security Audit & Launch (IN PROGRESS)
-Last Session  : 2026-05-15 (Wallet funding race condition fix, full mobile responsiveness overhaul, desktop browser scrollbar fix)
-Next Action   : Close out remaining production-truth items: Sentry Vercel env vars, app.zendocx.net CNAME, silent refresh browser test, and PWA install flow
+Last Session  : 2026-11-05 (Moved API, database and Redis off Fly + Neon + Upstash to the Hostinger VPS; API now https://api.ecafe.app)
+Next Action   : VPS watch week (to ~2026-11-12), then delete Fly/Neon/Upstash with the owner's OK; remaining production-truth items: Sentry Vercel env vars, silent refresh browser test, PWA install flow
 ```
 
 ---
@@ -740,14 +740,17 @@ optimized. Production deployed.
 - [x] Escrow on undelivered orders surfaced — openEscrowAmount/Count/Orders on the admin wallet overview + Finance overview panel
 - [x] Funding sweep made reliable — rides on wallet requests (throttled 6h) plus an admin-triggered POST /wallet/admin/funding/sweep-abandoned; the cron is a bonus, since a suspended machine misses its slots
 - [x] Automatic funding sweep disarmed until a deliberate first run (armed flag persisted in the KV store, survives deploys)
+- [x] Moved off Fly + Neon + Upstash to the Hostinger VPS (2026-11-05): self-hosted PostgreSQL + Redis, encrypted R2 backups with restore drill, GitHub Actions deploy, all money totals verified identical
+- [ ] VPS watch week, then delete Fly app, Upstash and Neon (owner's OK) and remove the api.zendocx.net bridge
 - [ ] Run the first abandoned-funding sweep from the Finance → Activity button (check the diagnostic queries first; nothing else will run it)
 - [x] Upload janitor given a request-path trigger (throttled 6h, fired when an upload is staged); cron routed through the same throttle
 - [x] Login bounce on ecafe.app apex fixed — middleware no longer gates protected routes on a refresh_token cookie the web host cannot read (API is on a different apex, so role was always null)
 - [ ] Walk through login → dashboard as a real user on www.ecafe.app after deploy (middleware bounce proven fixed; full journey unverified)
-- [ ] Consider serving the API from api.ecafe.app with COOKIE_DOMAIN=ecafe.app to make the refresh cookie first-party and restore server-side route gating
-- [ ] Confirm password reset email delivery in production (run fly logs --app zentry-api-prod)
+- [x] API served from api.ecafe.app (2026-11-05, VPS move)
+- [ ] Consider COOKIE_DOMAIN=ecafe.app to make the refresh cookie first-party and restore server-side route gating (now possible: API and web share the ecafe.app apex)
+- [ ] Confirm password reset email delivery in production (2026-11-05: send accepted from noreply@ecafe.app via the VPS; owner to confirm arrival)
 - [ ] Sentry Vercel env vars still needed: NEXT_PUBLIC_SENTRY_DSN, SENTRY_ORG=zendocx, SENTRY_PROJECT=zendocx-web
-- [ ] app.zendocx.net CNAME record in Cloudflare (add app → cname.vercel-dns.com)
+- [~] ~~app.zendocx.net CNAME record in Cloudflare~~ — obsolete: zendocx.net retired 2026-11-05, product uses ecafe.app only
 - [ ] Manual browser verification: silent refresh on 401 and PWA install flow
 - [ ] Load testing: simulate 500 concurrent users
 - [ ] Launch checklist signed off

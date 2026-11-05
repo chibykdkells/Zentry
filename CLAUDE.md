@@ -12,46 +12,63 @@
 
 ---
 
-## Database: Neon. The old Fly cluster is gone.
+## Where the API and database live: the Hostinger VPS (since 2026-11-05)
 
-Zentry migrated to Neon on **2026-08-17**. The Fly MPG cluster
-`kyzl60x1vgyopj9g` that previously held the `zentry` database was **destroyed on
-2026-08-21**, once FEP Assist had also migrated off it and both products were
-confirmed healthy on Neon.
+**Zentry runs on a shared Hostinger VPS.** Moved from Fly.io + Neon + Upstash on
+**2026-11-05** (cutover ~12:04 UTC, data move 39 s; 14 money totals, 28 tables
+and the migration ledger verified identical). The move was forced by cost.
+Procedure, rollback and after-care: `docs/vps-cutover-runbook.md`. Server
+layout, backups and deploys: `deploy/vps/README.md`.
 
-There is no longer any Fly Postgres cluster on this account. Fly still runs the
-API (`zentry-api-prod`); the database is Neon only.
-
-Earlier revisions of this section carried a DO-NOT-DESTROY warning about that
-cluster, and at one point stated that dropping the `zentry` database inside it
-was safe. Both are now moot, and the second was wrong at the time it was written
-— that database still held all 95 users, 95 wallets and 182 transactions.
-
-### Neon migration — verified 2026-08-17
-
-Zentry's database was migrated from Fly MPG to Neon via `pg_dump` / `pg_restore`.
-All data confirmed on Neon after migration:
-
-| Table | Neon (live) |
+| | |
 |---|---|
-| `User` | 95 |
-| `Wallet` | 95 |
-| `Transaction` | 182 |
-| `AuditLog` | 1103 |
-| `Order` | 22 |
+| Server | Hostinger KVM 2 (2 vCPU, 8 GB), Ubuntu 26.04, `46.202.195.86`, shared with FEP Assist |
+| Server slug | `zendocx` (display name "Zendocx"). Everything Zentry owns on the server is named after it: `/opt/zendocx`, containers `zendocx-*-1`, timers `zendocx-*`, R2 bucket `zendocx-db-backups`, `/opt/edge/sites/zendocx.caddy`. Rules: `/opt/PROJECTS.md`. |
+| API | `https://api.ecafe.app` via the shared front door (`edge` Caddy) → `zendocx-api` (`deploy/vps/compose.yml`) |
+| Database | PostgreSQL 17 in Docker on the same server, private network only |
+| Redis | Container `zendocx-redis-1`, Bull queues only (the KV cache is Postgres `kv_store`). Timers are rebuilt from the database on API start. |
+| Access | `ssh fepvps` (root, key only); `zendocx` = docker compose with the server secrets |
+| Secrets | `/opt/zendocx/secrets/` on the server, never in the repo |
+| Backups | pgBackRest → R2 `zendocx-db-backups`, AES-256, WAL every ≤ 60 s, weekly full + daily diff; restore drill `zendocx-restore-drill` |
+| Deploy | push to `main` → CI → `Deploy` workflow (build on server, migrate, swap, verify `gitSha` from `/health`) |
+| Frontend | unchanged: Vercel (`www.ecafe.app`), `NEXT_PUBLIC_API_URL=https://api.ecafe.app` |
+| Domain | **ecafe.app only.** zendocx.net is retired; `api.zendocx.net` is a temporary bridge for the watch week only. |
 
-`DATABASE_URL` on `zentry-api-prod` now points to Neon (`neon.tech`). All 25
-migrations applied. API health check passing.
+Fly (`zentry-api-prod`) is cordoned and stopped; Neon is frozen at the cutover
+copy; Upstash (`fly-zentry-redis-prod`) is unused. All three are kept for a
+watch week, then deleted. **Do not delete any of them before the row-count
+check in the runbook's "After the night" section, and ask the owner first.**
 
-**Lesson learned:** `pg_stat_user_tables.n_live_tup` is unreliable on a fresh
-cluster — always verify with exact `COUNT(*)` before declaring a migration done.
+### Rules for the VPS
 
-Verify before acting on any shared Fly resource — this account has one MPG
-cluster serving two products:
+- **Never touch another project's resources.** FEP Assist (`fepassist`) runs on
+  the same server: never stop, restart, rebuild or reconfigure anything labelled
+  `vps.project=fepassist` or under `/opt/fepassist`. Never run
+  `docker compose down`, `docker system prune` or `docker volume prune`.
+- **Only the shared front door publishes ports.** Reload it, never restart it:
+  `docker exec edge-caddy-1 caddy reload --config /etc/caddy/Caddyfile`.
+- **Never print secrets.** Pipe database output through `mask-db-urls`.
+  `docker run --env-file` keeps quotes literally; **docker compose `env_file`
+  interpolates `$`** — single-quote any value containing `$` (this cut the
+  Fintava key from 65 to 41 characters on cutover day until fixed).
+- **`pgbackrest.conf` must be owned 999:999** (the container's postgres user).
+- **The Fintava merchant account is shared with FEP Assist.** Its only webhook
+  points at FEP Assist. Never change it; Zentry does not use Fintava webhooks.
+- **Treat the server as replaceable.** Everything must be rebuildable from the
+  repo plus the R2 backups. The backup passphrase is in the owner's password
+  manager, not on the server alone.
 
-```
-fly mpg databases list kyzl60x1vgyopj9g
-```
+### History and lessons
+
+- Zentry moved from the Fly MPG cluster `kyzl60x1vgyopj9g` to Neon on
+  2026-08-17; that cluster was destroyed on 2026-08-21.
+- Migration `20260522120000_enforce_single_job_claim` was applied to production
+  in May but never committed; it was recovered from the database into the repo
+  on 2026-11-05. Never run migrations against production by hand.
+- **Never judge a database empty from `pg_stat_user_tables`.** Use exact
+  `COUNT(*)` (see `deploy/vps/verify.sql`).
+- **A product having migrated and its old database being disposable are
+  separate claims.** Verify the second with row counts on both sides.
 
 ---
 
@@ -142,7 +159,7 @@ zendocx/
 | State | Zustand (global) + TanStack Query (server state) |
 | Backend | NestJS, TypeScript, Prisma |
 | Database | PostgreSQL (all money in KOBO as BigInt) |
-| Queue | Bull + Redis |
+| Queue | Bull + Redis (self-hosted container on the VPS) |
 | Real-time | Socket.io |
 | Auth | JWT (15min) + Refresh Token rotation (7d, httpOnly cookie) |
 | Payments | Paystack (primary), FintavaPay, Flutterwave (backups) |
