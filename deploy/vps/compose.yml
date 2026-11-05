@@ -1,0 +1,123 @@
+# Zendocx (slug: zendocx) on the Hostinger VPS (46.202.195.86), shared with
+# other projects. Naming rules for every project on the server: /opt/PROJECTS.md.
+#
+# Nothing here publishes a port. HTTPS for api.zendocx.net is served by the
+# shared front door (project `edge`, /opt/edge), whose Caddy reaches the API
+# over the external `edge` network as `zendocx-api`.
+#
+# Secrets are not in this repo. They live on the server in /opt/zendocx/secrets/:
+#   compose.env      POSTGRES_PASSWORD, GIT_SHA (read by the `zendocx` shortcut)
+#   api.env          the app's settings (production or rehearsal set)
+#   pgbackrest.conf  R2 key and backup encryption passphrase
+# Run it with the shortcut: `zendocx ps`, `zendocx logs api`, `zendocx up -d`.
+name: zendocx
+
+services:
+  postgres:
+    build: ./postgres
+    image: zendocx-postgres:17-pgbackrest
+    restart: unless-stopped
+    labels:
+      vps.project: zendocx
+      vps.project.name: "Zendocx"
+      vps.role: db
+    shm_size: 128mb
+    environment:
+      POSTGRES_DB: zendocx
+      POSTGRES_USER: zendocx
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in /opt/zendocx/secrets/compose.env}
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      # Holds the R2 key and encryption passphrase, so it lives with the secrets.
+      - /opt/zendocx/secrets/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zendocx -d zendocx"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 1536m }
+
+  # Bull queues only (escrow release, delivery deadlines). The app's key/value
+  # cache lives in Postgres (kv_store). Bull needs noeviction: an evicted
+  # delayed job is a timer that silently never fires.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    labels:
+      vps.project: zendocx
+      vps.project.name: "Zendocx"
+      vps.role: cache
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "200mb", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redisdata:/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    deploy:
+      resources:
+        limits: { cpus: "0.25", memory: 256m }
+
+  api:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
+    image: zendocx-api:${GIT_SHA:-local}
+    restart: unless-stopped
+    labels:
+      vps.project: zendocx
+      vps.project.name: "Zendocx"
+      vps.role: api
+    env_file:
+      - /opt/zendocx/secrets/api.env
+    # These override api.env: the database and Redis are on this machine's
+    # private network, so no TLS and no credentials leave the server.
+    environment:
+      NODE_ENV: production
+      PORT: "4000"
+      DATABASE_URL: postgresql://zendocx:${POSTGRES_PASSWORD}@postgres:5432/zendocx
+      REDIS_URL: redis://redis:6379
+      GIT_SHA: ${GIT_SHA:-unknown}
+    volumes:
+      # Only used when Cloudinary is not configured (e.g. rehearsal mode).
+      - uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      internal:
+      edge:
+        aliases: [zendocx-api]
+    healthcheck:
+      # The image is node:20-slim (no curl/wget), so ask Node.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 1g }
+
+networks:
+  internal:
+  # Shared front door (project `edge`, /opt/edge). Its Caddy reaches the API here.
+  edge:
+    external: true
+    name: edge
+
+volumes:
+  pgdata:
+  redisdata:
+  uploads:
